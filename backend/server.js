@@ -1,0 +1,219 @@
+'use strict';
+
+require('dotenv').config();
+const http = require('http');
+const app = require('./src/app');
+const { connectDB } = require('./src/config/database');
+const logger = require('./src/shared/utils/logger');
+const mongoose = require('mongoose');
+
+const PORT = process.env.PORT || 5000;
+
+// Drop legacy overly-restrictive unique index on timesheets (one-time migration)
+async function dropLegacyIndexes() {
+  try {
+    const timesheetCol = mongoose.connection.collection('timesheets');
+    await timesheetCol.dropIndex('userId_1_weekStartDate_1');
+    logger.info('Dropped core legacy unique index: userId_1_weekStartDate_1');
+  } catch (err) {
+    if (err.code !== 27 && !err.message?.includes('index not found')) {
+      logger.warn(`Timesheet index drop skipped: ${err.message}`);
+    }
+  }
+
+  try {
+    const structureCol = mongoose.connection.collection('rolesalarystructures');
+    // We try to drop any index that might be on roleName, most likely roleName_1
+    await structureCol.dropIndex('roleName_1');
+    logger.info('Dropped legacy unique index on payroll: roleName_1');
+  } catch (err) {
+    if (err.code !== 27 && !err.message?.includes('index not found')) {
+      logger.warn(`Structure index drop skipped: ${err.message}`);
+    }
+  }
+}
+
+// Auto-backfill: create timesheet entries for any approved leave that doesn't have one yet
+// Also repairs orphaned leave timesheets pointing to non-existent projects
+async function autoBackfillLeaveTimesheets() {
+  try {
+    const leaveService = require('./src/modules/leaves/leave.service');
+    const User = require('./src/modules/users/user.model');
+    const Timesheet = require('./src/modules/timesheets/timesheet.model');
+    const Project = require('./src/modules/projects/project.model');
+
+    const admin = await User.findOne({ role: { $in: ['admin', 'manager'] }, isActive: true }).select('_id');
+    if (!admin) return;
+
+    // 1. Repair orphaned leave timesheets (fixes the "() Sick" issue)
+    const leaveProject = await Project.findOne({ code: 'LEAVE-SYS' });
+    if (leaveProject) {
+      const orphans = await Timesheet.find({
+        $or: [{ isLeave: true }, { category: { $in: ['Annual', 'Sick', 'Casual', 'Unpaid', 'Maternity', 'Paternity'] } }],
+        projectId: { $ne: leaveProject._id }
+      });
+      if (orphans.length > 0) {
+        await Timesheet.updateMany(
+          { _id: { $in: orphans.map(o => o._id) } },
+          { $set: { projectId: leaveProject._id } }
+        );
+        logger.info(`[AutoBackfill] Repaired ${orphans.length} orphaned leave timesheets`);
+      }
+    }
+
+    // 2. Perform regular backfill
+    const result = await leaveService.backfillTimesheets(admin._id);
+    if (result.synced > 0) {
+      logger.info(`[AutoBackfill] Created timesheets for ${result.synced} approved leave(s)`);
+    }
+  } catch (err) {
+    logger.warn(`[AutoBackfill] Leave timesheet backfill failed: ${err.message}`);
+  }
+}
+
+// One-time migration to unlock all users previously restricted by the trial system
+async function unlockAllUsers() {
+  try {
+    const User = require('./src/modules/users/user.model');
+    const result = await User.updateMany(
+      { $or: [{ isLocked: true }, { isTrialUser: true }] },
+      { $set: { isLocked: false, isTrialUser: false, trialExpiresAt: null } }
+    );
+    if (result.modifiedCount > 0) {
+      logger.info(`[Migration] Unlocked ${result.modifiedCount} users and disabled trial flags`);
+    }
+  } catch (err) {
+    logger.warn(`[Migration] Failed to unlock users: ${err.message}`);
+  }
+}
+
+// Ensure Super Admin exists
+async function ensureSuperAdmin() {
+  try {
+    const User = require('./src/modules/users/user.model');
+    const Organization = require('./src/modules/organizations/organization.model');
+    const Subscription = require('./src/modules/subscriptions/subscription.model');
+    
+    const adminEmail = 'superadmin@timesheetpro.com';
+    const adminPassword = 'SuperAdmin@1234';
+
+    let superAdmin = await User.findOne({ email: adminEmail });
+    
+    if (!superAdmin) {
+      logger.info('[Seed] Super Admin not found. Creating...');
+      
+      // 1. Ensure a System Organization exists
+      let org = await Organization.findOne({ name: 'CALTIMS System' });
+      if (!org) {
+        org = await Organization.create({
+          name: 'CALTIMS System',
+          taxId: 'SYSTEM',
+          address: 'System Cloud'
+        });
+      }
+
+      // 2. Create User
+      superAdmin = await User.create({
+        name: 'Super Admin',
+        email: adminEmail,
+        password: adminPassword,
+        role: 'super_admin',
+        organizationId: org._id,
+        isActive: true,
+        isLocked: false,
+        employeeId: 'SA-0001'
+      });
+      
+      // 3. Ensure a Subscription exists for the system organization
+      let sub = await Subscription.findOne({ organizationId: org._id });
+      if (!sub) {
+        await Subscription.create({
+          organizationId: org._id,
+          planType: 'PRO',
+          status: 'ACTIVE',
+          trialStartDate: new Date(),
+          trialEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year for system org
+        });
+        logger.info(`[Seed] System Subscription created for ${org.name}`);
+      }
+      
+      logger.info(`[Seed] Super Admin created successfully: ${adminEmail}`);
+    } else {
+      // Ensure role is correct even if user exists
+      if (superAdmin.role !== 'super_admin') {
+        superAdmin.role = 'super_admin';
+        await superAdmin.save();
+        logger.info('[Seed] Updated existing service user to super_admin role');
+      }
+
+      // Check if system org needs a subscription even if admin existed
+      if (superAdmin.organizationId) {
+        let sub = await Subscription.findOne({ organizationId: superAdmin.organizationId });
+        if (!sub) {
+          await Subscription.create({
+            organizationId: superAdmin.organizationId,
+            planType: 'PRO',
+            status: 'ACTIVE',
+            trialStartDate: new Date(),
+            trialEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          });
+          logger.info('[Seed] System Subscription created for existing organization');
+        }
+      }
+    }
+  } catch (err) {
+    logger.error(`[Seed] Error ensuring Super Admin: ${err.message}`);
+  }
+}
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    await ensureSuperAdmin();
+    await unlockAllUsers();
+    await dropLegacyIndexes();
+
+    // Auto-sync any approved leaves that are missing timesheet entries
+    await autoBackfillLeaveTimesheets();
+
+    // Seed Payslip Templates
+    const templateService = require('./src/modules/payroll/payslipTemplate.service');
+    await templateService.seedTemplates();
+
+    // BANK-GRADE: Start the Background Payroll Worker
+    const payrollWorker = require('./src/modules/payroll/payroll.worker');
+    payrollWorker.startWorker();
+
+    const server = http.createServer(app);
+    const socketService = require('./src/shared/services/socket.service');
+    socketService.init(server);
+
+    server.listen(PORT, () => {
+
+      logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+    });
+
+    // Graceful shutdown
+    const shutdown = (signal) => {
+      logger.info(`${signal} received. Shutting down gracefully...`);
+      server.close(() => {
+        logger.info('HTTP server closed.');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+
+    process.on('unhandledRejection', (err) => {
+      logger.error(`Unhandled Rejection: ${err.message}`);
+      server.close(() => process.exit(1));
+    });
+
+  } catch (err) {
+    logger.error(`Failed to start server: ${err.message}`);
+    process.exit(1);
+  }
+};
+
+startServer();
