@@ -15,6 +15,7 @@ const notifier = require('../../shared/services/notifier');
 const Settings = require('../settings/settings.model');
 const { logAction } = require('../audit/audit.routes');
 const policyService = require('../policyEngine/policy.service');
+const { Parser } = require('json2csv');
 const PERMISSION_MARKER = '__PERMISSION__';
 
 function calculateWeeklyHours(rows) {
@@ -1578,6 +1579,32 @@ const timesheetService = {
     };
   },
 
+  async getManageTimesheetsSummary(organizationId) {
+    const totalTimesheets = await Timesheet.countDocuments({ organizationId });
+    const pendingTimesheets = await Timesheet.countDocuments({ organizationId, status: TIMESHEET_STATUS.SUBMITTED });
+    const approvedTimesheets = await Timesheet.countDocuments({ organizationId, status: TIMESHEET_STATUS.APPROVED });
+    const rejectedTimesheets = await Timesheet.countDocuments({ organizationId, status: TIMESHEET_STATUS.REJECTED });
+    const totalUsers = await User.countDocuments({ organizationId, isActive: true, role: ROLES.EMPLOYEE });
+
+    const totalHoursResult = await Timesheet.aggregate([
+      { $match: { organizationId: new mongoose.Types.ObjectId(organizationId), status: { $in: [TIMESHEET_STATUS.APPROVED, TIMESHEET_STATUS.SUBMITTED] } } },
+      { $unwind: '$rows' },
+      { $unwind: '$rows.entries' },
+      { $group: { _id: null, totalHours: { $sum: '$rows.entries.hoursWorked' } } }
+    ]);
+    const totalHours = totalHoursResult.length > 0 ? totalHoursResult[0].totalHours : 0;
+
+    return {
+      totalTimesheets,
+      pendingTimesheets,
+      approvedTimesheets,
+      rejectedTimesheets,
+      totalUsers,
+      totalHours,
+    };
+  },
+
+
   async getAdminTimesheets(query, organizationId) {
     const { page, limit, skip } = parsePagination(query);
     const filter = { organizationId };
@@ -1663,6 +1690,83 @@ const timesheetService = {
     const weeks = timeframes.map(d => d.toISOString()).sort().reverse();
 
     return { projects, employees, locations, divisions, years, weeks };
+  },
+
+  async exportAdminTimesheets(query, organizationId) {
+    // 1. Fetch filtered timesheets (same logic as getAdminTimesheets but without pagination)
+    const filter = { organizationId };
+    if (query.userId) filter.userId = query.userId;
+    if (query.status) {
+      filter.status = query.status;
+    } else {
+      filter.status = { $nin: [TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.FROZEN] };
+    }
+    if (query.projectId) filter['rows.projectId'] = query.projectId;
+
+    if (query.search && query.search.trim().length >= 2) {
+      const searchRegex = new RegExp(query.search.trim(), 'i');
+      const [userIds, projectIds] = await Promise.all([
+        User.find({ organizationId, $or: [{ name: searchRegex }, { employeeId: searchRegex }] }).distinct('_id'),
+        Project.find({ organizationId, $or: [{ name: searchRegex }, { code: searchRegex }] }).distinct('_id')
+      ]);
+      filter.$or = [
+        { status: searchRegex },
+        { rejectionReason: searchRegex },
+        { userId: { $in: userIds } },
+        { 'rows.projectId': { $in: projectIds } }
+      ];
+    }
+
+    const timesheets = await Timesheet.find(filter)
+      .populate('userId', 'name employeeId department')
+      .populate('rows.projectId', 'name code')
+      .sort({ weekStartDate: -1 })
+      .lean();
+
+    // 2. Format for CSV
+    const fields = [
+      { label: 'Employee Name', value: 'userId.name' },
+      { label: 'Employee ID', value: 'userId.employeeId' },
+      { label: 'Department', value: 'userId.department' },
+      { label: 'Week Start Date', value: (row) => new Date(row.weekStartDate).toLocaleDateString() },
+      { label: 'Total Hours', value: 'totalHours' },
+      { label: 'Status', value: 'status' },
+      { label: 'Projects', value: (row) => row.rows.map(r => r.projectId?.name || 'Unknown').join(', ') },
+    ];
+
+    const parser = new Parser({ fields });
+    return parser.parse(timesheets);
+  },
+
+  async exportComplianceTimesheets(query, organizationId) {
+    const { data } = await this.getCompliance({ ...query, limit: 10000 }, organizationId);
+    
+    const fields = [
+      { label: 'Employee Name', value: 'user.name' },
+      { label: 'Employee ID', value: 'user.employeeId' },
+      { label: 'Department', value: 'user.department' },
+      { label: 'Status', value: 'status' },
+      { label: 'Total Hours', value: 'totalHours' },
+    ];
+
+    const parser = new Parser({ fields });
+    return parser.parse(data);
+  },
+
+  async exportHistoryTimesheets(query, requestor, organizationId) {
+    const { data } = await this.getHistory({ ...query, limit: 10000 }, requestor, organizationId);
+
+    const fields = [
+      { label: 'Week Start Date', value: (row) => new Date(row.weekStartDate).toLocaleDateString() },
+      { label: 'Week End Date', value: (row) => new Date(row.weekEndDate).toLocaleDateString() },
+      { label: 'Projects', value: (row) => row.projects.join(', ') },
+      { label: 'Total Hours', value: 'totalHours' },
+      { label: 'Status', value: (row) => row.statuses.join(', ') },
+      { label: 'Last Updated', value: (row) => new Date(row.lastUpdated).toLocaleString() },
+    ];
+
+    const parser = new Parser({ fields });
+    return parser.parse(data);
   }
 };
 

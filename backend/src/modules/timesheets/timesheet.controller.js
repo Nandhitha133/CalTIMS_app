@@ -81,6 +81,11 @@ const timesheetController = {
     ApiResponse.success(res, { data: summary });
   }),
 
+  getManageTimesheetsSummary: asyncHandler(async (req, res) => {
+    const summary = await timesheetService.getManageTimesheetsSummary(req.organizationId);
+    ApiResponse.success(res, { data: summary });
+  }),
+
   getAdminKpiSummary: asyncHandler(async (req, res) => {
     const summary = await timesheetService.getAdminKpiSummary(req.query.kpi || 'project-hours', req.organizationId);
     ApiResponse.success(res, { data: summary });
@@ -94,6 +99,36 @@ const timesheetController = {
   getAdminFilterOptions: asyncHandler(async (req, res) => {
     const options = await timesheetService.getAdminFilterOptions(req.organizationId);
     ApiResponse.success(res, { data: options });
+  }),
+
+  getDetails: asyncHandler(async (req, res) => {
+    const { userId, weekStartDate } = req.query;
+    const ts = await timesheetService.getDetailsByUserAndWeek(userId, weekStartDate, req.organizationId);
+    ApiResponse.success(res, { data: ts });
+  }),
+
+  exportAdminList: asyncHandler(async (req, res) => {
+    const csvData = await timesheetService.exportAdminTimesheets(req.query, req.organizationId);
+    const now = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="admin-timesheets-${now}.csv"`);
+    res.send(csvData);
+  }),
+
+  exportCompliance: asyncHandler(async (req, res) => {
+    const csvData = await timesheetService.exportComplianceTimesheets(req.query, req.organizationId);
+    const now = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="compliance-report-${now}.csv"`);
+    res.send(csvData);
+  }),
+
+  exportHistory: asyncHandler(async (req, res) => {
+    const csvData = await timesheetService.exportHistoryTimesheets(req.query, req.user, req.organizationId);
+    const now = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="my-timesheets-${now}.csv"`);
+    res.send(csvData);
   }),
 };
 

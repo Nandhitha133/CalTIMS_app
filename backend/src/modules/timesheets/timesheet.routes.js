@@ -12,13 +12,18 @@ router.use(checkSubscription);
 
 // Dashboard summary for timesheets
 router.get('/summary', timesheetController.getDashboardSummary);
+router.get('/history/export', timesheetController.exportHistory);
 router.get('/history', timesheetController.getHistory);
-router.get('/admin-summary', checkPermission('viewReports'), timesheetController.getAdminSummary);
-router.get('/admin-list', checkPermission('viewReports'), timesheetController.getAdminTimesheets);
-router.get('/admin-filters', checkPermission('viewReports'), timesheetController.getAdminFilterOptions);
-router.get('/admin-kpi', checkPermission('viewReports'), timesheetController.getAdminKpiSummary);
+router.get('/admin/export', checkPermission('viewReports'), timesheetController.exportAdminList);
+router.get('/admin/list', checkPermission('viewReports'), timesheetController.getAdminTimesheets);
+router.get('/admin/filters', checkPermission('viewReports'), timesheetController.getAdminFilterOptions);
+router.get('/admin/kpi', checkPermission('viewReports'), timesheetController.getAdminKpiSummary);
+router.get('/admin/stats', checkPermission('viewReports'), timesheetController.getAdminSummary);
+router.get('/admin/summary', checkPermission('viewReports'), timesheetController.getAdminSummary);
+router.get('/manage-summary', checkPermission('viewReports'), timesheetController.getManageTimesheetsSummary);
 
 // CRUD
+router.get('/compliance/export', checkPermission('viewReports'), requireFeature('audit_logs'), timesheetController.exportCompliance);
 router.get('/compliance', checkPermission('viewReports'), requireFeature('audit_logs'), timesheetController.getCompliance);
 router.post('/bulk', timesheetController.bulkUpsert);
 router.post('/bulk-submit', timesheetController.bulkSubmit);
