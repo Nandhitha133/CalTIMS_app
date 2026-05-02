@@ -1,0 +1,1149 @@
+// screens/timesheets/TimesheetComplianceScreen.tsx
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  TextInput,
+  StyleSheet,
+  Platform,
+  FlatList,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format, startOfWeek, subDays, addDays, isAfter, isBefore } from 'date-fns';
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Edit3,
+  X,
+  Save,
+  AlertTriangle,
+  Search,
+  ShieldCheck,
+  Plus,
+  Trash2,
+  Filter,
+  Download,
+  CheckCircle,
+  Clock,
+} from 'lucide-react-native';
+import { timesheetAPI, projectAPI, settingsAPI, taskAPI } from '../../services/endpoints';
+import Layout from '../../components/common/Layout';
+import PageHeader from '../../components/common/PageHeader';
+import ProGuard from '../../components/common/ProGuard';
+import { timesheetService } from '../../services/timesheet.service';
+
+interface User {
+  _id: string;
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  employeeId?: string;
+  department?: string;
+  organizationId?: string;
+}
+
+interface ComplianceItem {
+  user: User;
+  status: 'missing' | 'frozen' | 'admin_filled' | 'draft' | 'submitted' | 'approved' | 'rejected';
+  totalHours: number;
+}
+
+interface Project {
+  _id: string;
+  id: string;
+  name: string;
+  code: string;
+  startDate?: string;
+  onlyProjectTasks?: boolean;
+}
+
+interface Task {
+  _id: string;
+  id: string;
+  name: string;
+  projectId?: string;
+}
+
+interface Row {
+  id: string;
+  projectId: string;
+  taskType: string;
+  dayHours: string[];
+}
+
+const DEFAULT_TASK_TYPES = ['Development', 'Bug Fixing', 'Design', 'Meeting', 'Documentation', 'Testing', 'Code Review', 'Deployment'];
+
+// Status Badge Component
+const StatusBadge = ({ status }: { status: string }) => {
+  const getStatusConfig = () => {
+    switch (status) {
+      case 'missing':
+        return { bg: '#f1f5f9', text: '#64748b', label: 'Missing', icon: null };
+      case 'frozen':
+        return { bg: '#fef2f2', text: '#ef4444', label: 'Frozen', icon: <AlertTriangle size={10} color="#ef4444" /> };
+      case 'admin_filled':
+        return { bg: '#eff6ff', text: '#3b82f6', label: 'Admin Filled', icon: <CheckCircle size={10} color="#3b82f6" /> };
+      case 'submitted':
+        return { bg: '#fef3c7', text: '#d97706', label: 'Submitted', icon: <Clock size={10} color="#d97706" /> };
+      case 'approved':
+        return { bg: '#ecfdf5', text: '#10b981', label: 'Approved', icon: <CheckCircle size={10} color="#10b981" /> };
+      case 'rejected':
+        return { bg: '#fef2f2', text: '#ef4444', label: 'Rejected', icon: <AlertTriangle size={10} color="#ef4444" /> };
+      default:
+        return { bg: '#f1f5f9', text: '#64748b', label: status, icon: null };
+    }
+  };
+
+  const config = getStatusConfig();
+  return (
+    <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
+      {config.icon}
+      <Text style={[styles.statusText, { color: config.text }]}>{config.label}</Text>
+    </View>
+  );
+};
+
+// Compliance Card Component
+const ComplianceCard = ({
+  item,
+  onFill,
+  theme
+}: {
+  item: ComplianceItem;
+  onFill: () => void;
+  theme: 'light' | 'dark';
+}) => {
+  const canFill = item.status === 'missing' || item.status === 'frozen';
+
+  return (
+    <View style={[styles.card, {
+      backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+      borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
+    }]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.userInfo}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{(item.user.name || '?').charAt(0)}</Text>
+          </View>
+          <View>
+            <Text style={[styles.employeeName, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+              {item.user.name}
+            </Text>
+            <Text style={styles.employeeId}>ID: {item.user.employeeId || '—'}</Text>
+            <Text style={styles.department}>{item.user.department || '—'}</Text>
+          </View>
+        </View>
+        <StatusBadge status={item.status} />
+      </View>
+
+      <View style={styles.cardFooter}>
+        <View style={styles.hoursContainer}>
+          <Clock size={14} color={theme === 'dark' ? '#94a3b8' : '#64748b'} />
+          <Text style={[styles.hoursText, { color: theme === 'dark' ? '#cbd5e1' : '#475569' }]}>
+            Total: {item.totalHours?.toFixed(2) || 0}h
+          </Text>
+        </View>
+
+        {canFill && (
+          <TouchableOpacity style={styles.fillButton} onPress={onFill}>
+            <Edit3 size={14} color="#3b82f6" />
+            <Text style={styles.fillButtonText}>Fill Timesheet</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.status === 'admin_filled' && (
+          <Text style={styles.resolvedText}>✓ Resolved by Admin</Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+// Fill Timesheet Modal Component
+const FillModal = ({
+  visible,
+  onClose,
+  user: selectedUser,
+  weekStart,
+  weekDays,
+  projects,
+  tasks,
+  taskCategories,
+  onSave,
+  isSaving,
+  theme
+}: {
+  visible: boolean;
+  onClose: () => void;
+  user: User | null;
+  weekStart: Date;
+  weekDays: Date[];
+  projects: Project[];
+  tasks: Task[];
+  taskCategories: string[];
+  onSave: (rows: Row[]) => Promise<void>;
+  isSaving: boolean;
+  theme: 'light' | 'dark';
+}) => {
+  const [rows, setRows] = useState<Row[]>([{
+    id: Date.now().toString(),
+    projectId: '',
+    taskType: 'Development',
+    dayHours: Array(7).fill('00:00')
+  }]);
+
+  useEffect(() => {
+    if (visible) {
+      setRows([{
+        id: Date.now().toString(),
+        projectId: '',
+        taskType: 'Development',
+        dayHours: Array(7).fill('00:00')
+      }]);
+    }
+  }, [visible]);
+
+  const handleAddRow = () => {
+    setRows([...rows, {
+      id: Date.now().toString(),
+      projectId: '',
+      taskType: 'Development',
+      dayHours: Array(7).fill('00:00')
+    }]);
+  };
+
+  const handleRemoveRow = (id: string) => {
+    if (rows.length === 1) {
+      Alert.alert('Error', 'Cannot remove the last row');
+      return;
+    }
+    setRows(rows.filter(r => r.id !== id));
+  };
+
+  const handleUpdateRow = (id: string, field: keyof Row, value: string) => {
+    setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const handleUpdateHour = (rowId: string, dayIndex: number, value: string) => {
+    const hours = value.replace(/\D/g, '').slice(0, 2);
+    setRows(rows.map(r => {
+      if (r.id !== rowId) return r;
+      const newHours = [...r.dayHours];
+      const currentM = r.dayHours[dayIndex].split(':')[1] || '00';
+      newHours[dayIndex] = `${hours.padStart(2, '0')}:${currentM}`;
+      return { ...r, dayHours: newHours };
+    }));
+  };
+
+  const handleSave = () => {
+    const validRows = rows.filter(r => r.projectId);
+    if (validRows.length === 0) {
+      Alert.alert('Error', 'Please add at least one valid project row');
+      return;
+    }
+    onSave(rows);
+  };
+
+  const getFilteredTasks = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId || p._id === projectId);
+    const projectTasks = tasks.filter(t => t.projectId === projectId);
+
+    if (project?.onlyProjectTasks && projectTasks.length > 0) {
+      return projectTasks;
+    }
+    return taskCategories;
+  };
+
+  const isDayBeforeProjectStart = (day: Date, projectId: string) => {
+    const project = projects.find(p => p.id === projectId || p._id === projectId);
+    if (!project?.startDate) return false;
+    const projectStart = new Date(project.startDate);
+    projectStart.setHours(0, 0, 0, 0);
+    return isBefore(day, projectStart);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent={true}>
+      <View style={modalStyles.overlay}>
+        <View style={[modalStyles.container, { backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff' }]}>
+          <View style={modalStyles.header}>
+            <View>
+              <Text style={[modalStyles.title, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+                Fill Timesheet
+              </Text>
+              <Text style={modalStyles.subtitle}>
+                {selectedUser?.name} • {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={modalStyles.content}>
+              {/* Header Row */}
+              <View style={modalStyles.tableHeader}>
+                <Text style={[modalStyles.headerCell, modalStyles.projectCell]}>Project</Text>
+                <Text style={[modalStyles.headerCell, modalStyles.taskCell]}>Task</Text>
+                {weekDays.map((day, i) => (
+                  <View key={i} style={[modalStyles.headerCell, modalStyles.dayCell]}>
+                    <Text style={modalStyles.dayName}>{format(day, 'EEE')}</Text>
+                    <Text style={modalStyles.dayNumber}>{format(day, 'dd')}</Text>
+                  </View>
+                ))}
+                <Text style={[modalStyles.headerCell, modalStyles.actionCell]}>⚡</Text>
+              </View>
+
+              {/* Rows */}
+              {rows.map((row, idx) => {
+                const filteredTasks = getFilteredTasks(row.projectId);
+                return (
+                  <View key={row.id} style={modalStyles.tableRow}>
+                    <View style={[modalStyles.cell, modalStyles.projectCell]}>
+                      <View style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc' }]}>
+                        <TextInput
+                          style={[modalStyles.selectInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
+                          placeholder="Select Project"
+                          placeholderTextColor="#94a3b8"
+                          value={row.projectId}
+                          onChangeText={(text) => handleUpdateRow(row.id, 'projectId', text)}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={[modalStyles.cell, modalStyles.taskCell]}>
+                      <View style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc' }]}>
+                        <TextInput
+                          style={[modalStyles.selectInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
+                          placeholder="Task"
+                          placeholderTextColor="#94a3b8"
+                          value={row.taskType}
+                          onChangeText={(text) => handleUpdateRow(row.id, 'taskType', text)}
+                        />
+                      </View>
+                    </View>
+
+                    {weekDays.map((day, dayIdx) => {
+                      const isDisabled = isDayBeforeProjectStart(day, row.projectId);
+                      return (
+                        <View key={dayIdx} style={[modalStyles.cell, modalStyles.dayCell]}>
+                          <TextInput
+                            style={[
+                              modalStyles.hourInput,
+                              isDisabled && modalStyles.hourInputDisabled,
+                              { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc' }
+                            ]}
+                            value={row.dayHours[dayIdx].split(':')[0]}
+                            onChangeText={(text) => handleUpdateHour(row.id, dayIdx, text)}
+                            keyboardType="numeric"
+                            maxLength={2}
+                            placeholder="00"
+                            placeholderTextColor="#94a3b8"
+                            editable={!isDisabled}
+                          />
+                        </View>
+                      );
+                    })}
+
+                    <View style={[modalStyles.cell, modalStyles.actionCell]}>
+                      <TouchableOpacity onPress={() => handleRemoveRow(row.id)}>
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+
+              <TouchableOpacity style={modalStyles.addButton} onPress={handleAddRow}>
+                <Plus size={16} color="#3b82f6" />
+                <Text style={modalStyles.addButtonText}>Add Another Row</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          <View style={modalStyles.footer}>
+            <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+              <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[modalStyles.saveButton, isSaving && modalStyles.disabledButton]}
+              onPress={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Save size={16} color="white" />
+                  <Text style={modalStyles.saveButtonText}>Save as Admin Fill</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+export default function TimesheetComplianceScreen({ navigation }: { navigation: any }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [complianceData, setComplianceData] = useState<ComplianceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentDate, setCurrentDate] = useState(() => subDays(new Date(), 7));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [taskCategories, setTaskCategories] = useState<string[]>(DEFAULT_TASK_TYPES);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [userProjects, setUserProjects] = useState<Project[]>([]);
+  const [userTasks, setUserTasks] = useState<Task[]>([]);
+  const limit = 10;
+
+  const weekStartsOn = 1; // Monday
+  const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn }), [currentDate]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+      loadPreferences();
+      fetchProjects();
+      fetchTasks();
+      fetchTaskCategories();
+      fetchComplianceData();
+    }, [weekStart, searchQuery, page])
+  );
+
+  const loadUserData = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
+
+  const loadPreferences = async () => {
+    try {
+      const savedPrefs = await AsyncStorage.getItem('dashboard_preferences');
+      if (savedPrefs) {
+        const prefs = JSON.parse(savedPrefs);
+        setTheme(prefs.theme || 'light');
+      }
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const response = await projectAPI.getAll({ status: 'active' });
+      setProjects((response as any)?.data?.data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    }
+  };
+
+  const fetchTasks = async () => {
+    try {
+      const response = await taskAPI.getAll({ isActive: true });
+      setTasks((response as any)?.data?.data || []);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    }
+  };
+
+  const fetchTaskCategories = async () => {
+    try {
+      const response = await settingsAPI.getTimesheetSettings();
+      const categories = (response as any)?.data?.data?.taskCategories;
+      if (categories && categories.length > 0) {
+        setTaskCategories(categories);
+      }
+    } catch (error) {
+      console.error('Error fetching task categories:', error);
+    }
+  };
+
+  const fetchUserProjects = async (userId: string) => {
+    try {
+      const response = await projectAPI.getAll({ status: 'active', assignedOnly: true, userId });
+      setUserProjects((response as any)?.data?.data || []);
+    } catch (error) {
+      console.error('Error fetching user projects:', error);
+    }
+  };
+
+  const fetchUserTasks = async (userId: string, orgId?: string) => {
+    try {
+      const response = await taskAPI.getAll({ isActive: true, assignedOnly: false, organizationId: orgId });
+      const data = (response as any)?.data;
+      setUserTasks(Array.isArray(data) ? data : data?.data || []);
+    } catch (error) {
+      console.error('Error fetching user tasks:', error);
+    }
+  };
+
+  const fetchComplianceData = async () => {
+    try {
+      setLoading(true);
+      const response = await timesheetAPI.getCompliance({
+        weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+        search: searchQuery,
+        page,
+        limit,
+      });
+      const data = (response as any)?.data;
+      const pagination = (response as any)?.pagination;
+
+      setComplianceData(Array.isArray(data) ? data : data?.data || []);
+      setTotalPages(pagination?.totalPages || 1);
+      setTotalResults(pagination?.total || 0);
+    } catch (error) {
+      console.error('Error fetching compliance data:', error);
+      Alert.alert('Error', 'Failed to load compliance data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchComplianceData(), fetchProjects(), fetchTasks()]);
+    setRefreshing(false);
+  };
+
+  const handleWeekChange = (offset: number) => {
+    const newDate = addDays(currentDate, offset * 7);
+    const today = new Date();
+    const currentWeekStart = startOfWeek(today, { weekStartsOn });
+
+    if (offset > 0 && startOfWeek(newDate, { weekStartsOn }) > currentWeekStart) {
+      Alert.alert('Info', 'Cannot navigate to future weeks');
+      return;
+    }
+    setCurrentDate(newDate);
+    setPage(1);
+  };
+
+  const handleOpenModal = async (item: ComplianceItem) => {
+    setSelectedUser(item.user);
+    await Promise.all([
+      fetchUserProjects(item.user._id || item.user.id),
+      fetchUserTasks(item.user._id || item.user.id, item.user.organizationId)
+    ]);
+    setShowModal(true);
+  };
+
+  const handleSaveAdminFill = async (rows: Row[]) => {
+    if (!selectedUser) return;
+
+    setIsSaving(true);
+    try {
+      const validRows = rows.filter(r => r.projectId);
+      const payloadRows = validRows.map(row => ({
+        projectId: row.projectId,
+        category: row.taskType,
+        weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+        entries: weekDays.map((day, i) => {
+          const [h, m] = row.dayHours[i].split(':').map(Number);
+          return {
+            date: format(day, 'yyyy-MM-dd'),
+            hoursWorked: (h || 0) + ((m || 0) / 60),
+          };
+        }),
+      }));
+
+      await timesheetAPI.adminFill({
+        targetUserId: selectedUser._id || selectedUser.id,
+        rows: payloadRows
+      });
+
+      Alert.alert('Success', 'Timesheet filled successfully');
+      setShowModal(false);
+      fetchComplianceData();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to fill timesheet');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const csvData = await timesheetService.exportCompliance({
+        weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+        search: searchQuery,
+      });
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csvData], { type: 'text/csv' } as any);
+        const url = URL.createObjectURL(blob);
+        const link = (globalThis as any).document.createElement('a');
+        link.href = url;
+        link.download = `compliance_report_${format(weekStart, 'yyyyMMdd')}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        Alert.alert('Export', 'Export feature is available on web platform');
+      }
+
+      Alert.alert('Success', 'Compliance report exported!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      Alert.alert('Error', 'Failed to export CSV');
+    }
+  };
+
+  const isCurrentWeekDisabled = () => {
+    const nextWeekStart = startOfWeek(addDays(currentDate, 7), { weekStartsOn });
+    const currentWeekStart = startOfWeek(new Date(), { weekStartsOn });
+    return isAfter(nextWeekStart, currentWeekStart);
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc' }]}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
+
+  return (
+    <ProGuard
+      title="Compliance & Locks"
+      subtitle="Timesheet compliance monitoring, automated locks, and advanced audit logs are part of the Enterprise Pro tier."
+      icon={ShieldCheck}
+    >
+      <Layout
+        title="Timesheet Compliance"
+        user={user}
+        sidebarVisible={sidebarVisible}
+        setSidebarVisible={setSidebarVisible}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      >
+        <View style={styles.container}>
+          <View style={styles.content}>
+          
+
+            {/* Week Navigation */}
+            <View style={[styles.navContainer, {
+              backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+              borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
+            }]}>
+              <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.navButton}>
+                <ChevronLeft size={20} color="#64748b" />
+              </TouchableOpacity>
+
+              <View style={styles.weekInfo}>
+                <Calendar size={16} color="#3b82f6" />
+                <Text style={[styles.weekDate, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+                  {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => handleWeekChange(1)}
+                style={[styles.navButton, isCurrentWeekDisabled() && styles.navButtonDisabled]}
+                disabled={isCurrentWeekDisabled()}
+              >
+                <ChevronRight size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search and Export Bar */}
+            <View style={styles.searchBar}>
+              <View style={[styles.searchContainer, {
+                backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+                borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
+              }]}>
+                <Search size={16} color="#94a3b8" />
+                <TextInput
+                  style={[styles.searchInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
+                  placeholder="Search by name or emp id..."
+                  placeholderTextColor="#94a3b8"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  onSubmitEditing={fetchComplianceData}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.exportButton, { backgroundColor: '#3b82f6' }]}
+                onPress={handleExportCSV}
+              >
+                <Download size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Results Header */}
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsText}>{totalResults} EMPLOYEES</Text>
+            </View>
+
+            {/* Compliance List */}
+            {complianceData.length === 0 ? (
+              <View style={[styles.emptyContainer, {
+                backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+                borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
+              }]}>
+                <ShieldCheck size={48} color="#cbd5e1" />
+                <Text style={[styles.emptyTitle, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+                  No employees found
+                </Text>
+                <Text style={styles.emptyText}>Try adjusting your search or week</Text>
+              </View>
+            ) : (
+              <>
+                {complianceData.map((item, idx) => (
+                  <ComplianceCard
+                    key={item.user._id || idx}
+                    item={item}
+                    onFill={() => handleOpenModal(item)}
+                    theme={theme}
+                  />
+                ))}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <View style={styles.pagination}>
+                    <TouchableOpacity
+                      style={[styles.pageButton, page === 1 && styles.pageButtonDisabled]}
+                      onPress={() => { if (page > 1) { setPage(page - 1); } }}
+                      disabled={page === 1}
+                    >
+                      <ChevronLeft size={16} color="#3b82f6" />
+                      <Text style={styles.pageButtonText}>Previous</Text>
+                    </TouchableOpacity>
+
+                    <Text style={[styles.pageInfo, { color: theme === 'dark' ? '#cbd5e1' : '#64748b' }]}>
+                      {page} / {totalPages}
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[styles.pageButton, page === totalPages && styles.pageButtonDisabled]}
+                      onPress={() => { if (page < totalPages) { setPage(page + 1); } }}
+                      disabled={page === totalPages}
+                    >
+                      <Text style={styles.pageButtonText}>Next</Text>
+                      <ChevronRight size={16} color="#3b82f6" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+
+        {/* Fill Modal */}
+        <FillModal
+          visible={showModal}
+          onClose={() => setShowModal(false)}
+          user={selectedUser}
+          weekStart={weekStart}
+          weekDays={weekDays}
+          projects={userProjects.length > 0 ? userProjects : projects}
+          tasks={userTasks.length > 0 ? userTasks : tasks}
+          taskCategories={taskCategories}
+          onSave={handleSaveAdminFill}
+          isSaving={isSaving}
+          theme={theme}
+        />
+      </Layout>
+    </ProGuard>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  content: {
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  navButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  navButtonDisabled: {
+    opacity: 0.5,
+  },
+  weekInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  weekDate: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  exportButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultsHeader: {
+    marginBottom: 12,
+  },
+  resultsText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+    letterSpacing: 1,
+  },
+  card: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    gap: 12,
+    flex: 1,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  employeeName: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  employeeId: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  department: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  hoursContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  hoursText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  fillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  fillButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  resolvedText: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 8,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 20,
+  },
+  pageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  pageButtonDisabled: {
+    opacity: 0.5,
+  },
+  pageButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  pageInfo: {
+    fontSize: 13,
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  container: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 4,
+  },
+  content: {
+    padding: 16,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  headerCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  projectCell: {
+    width: 100,
+  },
+  taskCell: {
+    width: 90,
+  },
+  dayCell: {
+    width: 45,
+    alignItems: 'center',
+  },
+  actionCell: {
+    width: 40,
+    alignItems: 'center',
+  },
+  dayName: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  dayNumber: {
+    fontSize: 8,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cell: {
+    paddingHorizontal: 4,
+  },
+  selectWrapper: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  selectInput: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    fontSize: 12,
+    height: 40,
+  },
+  hourInput: {
+    width: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    fontSize: 12,
+    textAlign: 'center',
+    height: 40,
+  },
+  hourInputDisabled: {
+    opacity: 0.5,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  addButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  saveButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#3b82f6',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+});

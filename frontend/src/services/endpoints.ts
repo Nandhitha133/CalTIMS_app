@@ -1,0 +1,376 @@
+// services/endpoints.ts
+import apiService from './api';
+
+// ==================== AUTH API ====================
+export const authAPI = {
+  login: (data: { email: string; password: string }) => 
+    apiService.post('/auth/login', data, { skipToast: true }),
+  register: (data: any) => 
+    apiService.post('/auth/register', data, { skipToast: true }),
+  logout: () => 
+    apiService.post('/auth/logout'),
+  forgotPassword: (data: { email: string }) => 
+    apiService.post('/auth/forgot-password', data),
+  resetPassword: (token: string, data: { password: string; confirmPassword: string }) => 
+    apiService.post(`/auth/reset-password/${token}`, data),
+  socialLogin: (data: any) => 
+    apiService.post('/auth/social-login', data, { skipToast: true }),
+  getMe: () => 
+    apiService.get('/users/me'),
+};
+
+// ==================== TIMESHEET API ====================
+export const timesheetAPI = {
+  // Dashboard
+  getDashboardSummary: (params: { projectId?: string; weekStartDate?: string }) => 
+    apiService.get('/timesheets/summary', params),
+  
+  // User History
+  getHistory: (params: any) => 
+    apiService.get('/timesheets/history', params),
+  getDetails: (weekStartDate: string, userId: string) => 
+    apiService.get('/timesheets/details', { weekStartDate, userId }),
+  delete: (id: string) => 
+    apiService.delete(`/timesheets/${id}`),
+  
+  // Admin Manage
+  getAdminStats: () => 
+    apiService.get('/timesheets/admin/stats'),
+  getAdminFilters: () => 
+    apiService.get('/timesheets/admin/filters'),
+  getAdminList: (params: any) => 
+    apiService.get('/timesheets/admin/list', params),
+  approve: (id: string) => 
+    apiService.patch(`/timesheets/${id}/approve`),
+  reject: (id: string, reason: string) => 
+    apiService.patch(`/timesheets/${id}/reject`, { reason }),
+  submit: (id: string) => 
+    apiService.patch(`/timesheets/${id}/submit`),
+  adminFill: (payload: any) => 
+    apiService.post('/timesheets/admin-fill', payload),
+  exportAdminList: (params: any) => 
+    apiService.get('/timesheets/admin/export', params, { headers: { 'Accept': 'text/csv' } }),
+  
+  // Compliance
+  getCompliance: (params: any) => 
+    apiService.get('/timesheets/compliance', params),
+  exportCompliance: (params: any) => 
+    apiService.get('/timesheets/compliance/export', params, { headers: { 'Accept': 'text/csv' } }),
+  
+  // Export
+  exportHistory: (params: any) => 
+    apiService.get('/timesheets/history/export', params, { headers: { 'Accept': 'text/csv' } }),
+  
+  // Legacy/Additional
+  getAll: (params?: any) => 
+    apiService.get('/timesheets', params),
+  getAdminSummary: (params?: any) => 
+    apiService.get('/timesheets/admin/summary', params),
+  getManageTimesheetsSummary: () =>
+    apiService.get('/timesheets/manage-summary'),
+  bulkUpsert: (data: any) => 
+    apiService.post('/timesheets/bulk', data),
+  bulkSubmit: (data: any) => 
+    apiService.post('/timesheets/bulk-submit', data),
+  getById: (id: string) => 
+    apiService.get(`/timesheets/${id}`),
+};
+
+// ==================== TASK API ====================
+export const taskAPI = {
+  getAll: (params?: any) => 
+    apiService.get('/tasks', params),
+  getById: (id: string) => 
+    apiService.get(`/tasks/${id}`),
+  create: (data: any) => 
+    apiService.post('/tasks', data),
+  bulkCreate: (data: any) => 
+    apiService.post('/tasks/bulk-create', data),
+  update: (id: string, data: any) => 
+    apiService.put(`/tasks/${id}`, data),
+  delete: (id: string) => 
+    apiService.delete(`/tasks/${id}`),
+};
+
+// ==================== PROJECT API ====================
+export const projectAPI = {
+  getAll: (params?: any) => 
+    apiService.get('/projects', params),
+  getById: (id: string) => 
+    apiService.get(`/projects/${id}`),
+  create: (data: any) => 
+    apiService.post('/projects', data),
+  update: (id: string, data: any) => 
+    apiService.put(`/projects/${id}`, data),
+  delete: (id: string) => 
+    apiService.delete(`/projects/${id}`),
+};
+
+// ==================== LEAVE API ====================
+export const leaveAPI = {
+  getAll: (params?: any) => 
+    apiService.get('/leaves', params),
+  getBalance: (userId: string) => 
+    apiService.get(`/leaves/balance/${userId}`),
+  apply: (data: any) => 
+    apiService.post('/leaves', data),
+  approve: (id: string) => 
+    apiService.patch(`/leaves/${id}/approve`),
+  reject: (id: string, reason: string) => 
+    apiService.patch(`/leaves/${id}/reject`, { reason }),
+  cancel: (id: string, reason: string) => 
+    apiService.patch(`/leaves/${id}/cancel`, { reason }),
+};
+
+// ==================== ANNOUNCEMENT API ====================
+export const announcementAPI = {
+  getAll: (params?: { limit?: number }) => 
+    apiService.get('/announcements', params),
+  getAllAdmin: (params?: any) => 
+    apiService.get('/announcements/admin', params),
+  getById: (id: string) => 
+    apiService.get(`/announcements/${id}`),
+  create: (data: any) => 
+    apiService.post('/announcements', data),
+  update: (id: string, data: any) => 
+    apiService.put(`/announcements/${id}`, data),
+  delete: (id: string) => 
+    apiService.delete(`/announcements/${id}`),
+};
+
+// ==================== NOTIFICATION API ====================
+export const notificationAPI = {
+  getAll: (params?: { limit?: number }) => 
+    apiService.get('/notifications', params),
+  getUnreadCount: () => 
+    apiService.get('/notifications/unread-count'),
+  markRead: (id: string) => 
+    apiService.patch(`/notifications/${id}/read`),
+  markAllRead: () => 
+    apiService.patch('/notifications/mark-all-read'),
+};
+
+// ==================== CALENDAR API ====================
+export const calendarAPI = {
+  getAll: (params?: { month?: string; from?: string; to?: string; eventType?: string }) => 
+    apiService.get('/calendar', params),
+  getById: (id: string) => 
+    apiService.get(`/calendar/${id}`),
+  create: (data: any) => 
+    apiService.post('/calendar', data),
+  update: (id: string, data: any) => 
+    apiService.put(`/calendar/${id}`, data),
+  delete: (id: string) => 
+    apiService.delete(`/calendar/${id}`),
+};
+
+// ==================== REPORT API ====================
+export const reportAPI = {
+  getTimesheetSummary: (params: any) => 
+    apiService.get('/reports/timesheet-summary', params),
+  getProjectUtilization: (params: any) => 
+    apiService.get('/reports/project-utilization', params),
+  getLeaveSummary: (params: any) => 
+    apiService.get('/reports/leave-summary', params),
+  getFilterOptions: () => 
+    apiService.get('/reports/filters'),
+  getWeeklyTrend: (params: any) => 
+    apiService.get('/reports/weekly-trend', params),
+  getDepartmentSummary: (params: any) => 
+    apiService.get('/reports/department-summary', params),
+  getComplianceSummary: (params: any) => 
+    apiService.get('/reports/compliance-summary', params),
+  getSmartInsights: (params: any) => 
+    apiService.get('/reports/insights', params),
+  getTimesheetDetails: (params: any) => 
+    apiService.get('/reports/timesheet-details', params),
+  exportPDF: (params: any) => 
+    apiService.get('/reports/export/pdf', params),
+  exportCSV: (params: any) => 
+    apiService.get('/reports/export/csv', params),
+};
+
+// ==================== SETTINGS API ====================
+export const settingsAPI = {
+  getSettings: () => 
+    apiService.get('/settings'),
+  getGeneralSettings: () => 
+    apiService.get('/settings/general'),
+  saveGeneralSettings: (data: any) => 
+    apiService.post('/settings/general', data),
+  getPayrollSettings: () => 
+    apiService.get('/settings/payroll'),
+  savePayrollSettings: (data: any) => 
+    apiService.post('/settings/payroll', data),
+  getTimesheetSettings: () => 
+    apiService.get('/settings/timesheet'),
+  saveTimesheetSettings: (data: any) => 
+    apiService.post('/settings/timesheet', data),
+  uploadBranding: (data: FormData) => 
+    apiService.post('/settings/branding/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  updateSettings: (data: any) => 
+    apiService.patch('/settings', data),
+};
+
+// ==================== PAYROLL API ====================
+export const payrollAPI = {
+  getMyPayslips: () => 
+    apiService.get('/payroll/history'),
+  downloadPayslip: (id: string) => 
+    apiService.get(`/payroll/payslip/${id}/download`),
+  sendPayslipEmail: (id: string) => 
+    apiService.post(`/payroll/payslip/${id}/send-email`),
+  getProfiles: () => 
+    apiService.get('/payroll/profiles'),
+  getRoleStructures: () => 
+    apiService.get('/payroll/structures'),
+  updateProfile: (userId: string, data: any) => 
+    apiService.patch(`/payroll/profiles/${userId}`, data),
+  deleteProfile: (id: string) => 
+    apiService.delete(`/payroll/profiles/${id}`),
+  getDashboard: (params?: any) => 
+    apiService.get('/payroll/dashboard', params),
+  getBatches: (params?: any) => 
+    apiService.get('/payroll/batches', params),
+  getHistory: (params: any) => 
+    apiService.get('/payroll/history', params),
+  getAnalytics: (params?: any) => 
+    apiService.get('/payroll/analytics', params),
+  getSummaryReport: (params: any) => 
+    apiService.get('/payroll/reports/summary', params),
+  getDepartmentAnalysis: (params: any) => 
+    apiService.get('/payroll/reports/department-analysis', params),
+  getReadiness: (params: any) => 
+    apiService.get('/payroll/dashboard', params),
+  getPreview: (params: any) => 
+    apiService.post('/payroll/process/simulate', params),
+  run: (data: any) => 
+    apiService.post('/payroll/run', data),
+  markPaid: (data: any) => 
+    apiService.post('/payroll/mark-paid', data),
+  updateRoleStructure: (data: any) => 
+    data._id ? apiService.patch(`/payroll/structures/${data._id}`, data) : apiService.post('/payroll/structures', data),
+  toggleStructureStatus: (id: string) => 
+    apiService.patch(`/payroll/structures/${id}/toggle-status`),
+  deleteStructure: (id: string) => 
+    apiService.delete(`/payroll/structures/${id}`),
+};
+
+// ==================== SUBSCRIPTION API ====================
+export const subscriptionAPI = {
+  getCurrent: () => 
+    apiService.get('/subscriptions/current'),
+  upgrade: (data: { planId: string }) => 
+    apiService.post('/subscriptions/upgrade', data),
+};
+
+// ==================== ADMIN API ====================
+export const adminAPI = {
+  getDashboardMetrics: () => 
+    apiService.get('/admin/dashboard-metrics'),
+  getOrganizations: () => 
+    apiService.get('/admin/organizations'),
+};
+
+// ==================== ATTENDANCE API ====================
+export const attendanceAPI = {
+  getAll: (params?: { from?: string; to?: string }) => 
+    apiService.get('/attendance', params),
+  getByUser: (userId: string, params?: { from?: string; to?: string }) => 
+    apiService.get(`/attendance/user/${userId}`, params),
+};
+
+// ==================== USER API ====================
+export const userAPI = {
+  getAll: (params?: any) => 
+    apiService.get('/users', params),
+  getById: (id: string) => 
+    apiService.get(`/users/${id}`),
+  create: (data: any) => 
+    apiService.post('/users', data),
+  update: (id: string, data: any) => 
+    apiService.put(`/users/${id}`, data),
+  delete: (id: string) => 
+    apiService.delete(`/users/${id}`),
+  getDepartments: () => 
+    apiService.get('/users/departments'),
+  getRoles: () => 
+    apiService.get('/users/roles'),
+  resetPassword: (id: string, password: string) => 
+    apiService.patch(`/users/${id}/reset-password`, { password }),
+};
+
+// ==================== AUDIT API ====================
+export const auditAPI = {
+  getAll: (params?: any) => 
+    apiService.get('/audit', params),
+  create: (data: any) => 
+    apiService.post('/audit', data),
+};
+
+// ==================== INCIDENT API ====================
+export const incidentService = {
+  getIncidents: (params?: any) => 
+    apiService.get('/incidents', params),
+  getIncident: (id: string) => 
+    apiService.get(`/incidents/${id}`),
+  getById: (id: string) => 
+    apiService.get(`/incidents/${id}`),
+  createIncident: (data: any) => 
+    apiService.post('/incidents', data),
+  updateIncident: (id: string, data: any) => 
+    apiService.patch(`/incidents/${id}`, data),
+  deleteIncident: (id: string) => 
+    apiService.delete(`/incidents/${id}`),
+  addResponse: (id: string, message: string) => 
+    apiService.post(`/incidents/${id}/responses`, { message }),
+};
+
+// ==================== SUPPORT API ====================
+export const supportService = {
+  getTickets: (params?: any) => 
+    apiService.get('/support/tickets', params),
+  getTicket: (id: string) => 
+    apiService.get(`/support/tickets/${id}`),
+  createTicket: (data: any) => 
+    apiService.post('/support/tickets', data),
+  updateTicketStatus: (id: string, status: string) => 
+    apiService.patch(`/support/tickets/${id}`, { status }),
+  deleteTicket: (id: string) => 
+    apiService.delete(`/support/tickets/${id}`),
+};
+
+// ==================== POLICY API ====================
+export const policyAPI = {
+  getPolicy: () => 
+    apiService.get('/policies/payroll'),
+  updatePolicy: (data: any) => 
+    apiService.put('/policies/payroll', data),
+  createVersion: (data: any) => 
+    apiService.post('/policies/payroll/versions', data),
+  preview: (data: any) => 
+    apiService.post('/policies/payroll/preview', data),
+};
+
+// ==================== EXPORTS ====================
+export default {
+  authAPI,
+  timesheetAPI,
+  projectAPI,
+  leaveAPI,
+  announcementAPI,
+  notificationAPI,
+  calendarAPI,
+  reportAPI,
+  settingsAPI,
+  subscriptionAPI,
+  adminAPI,
+  userAPI,
+  payrollAPI,
+  taskAPI,
+  auditAPI,
+  policyAPI,
+  attendanceAPI,
+  incidentService,
+  supportService,
+};
