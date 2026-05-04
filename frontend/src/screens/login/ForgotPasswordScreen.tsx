@@ -9,13 +9,17 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
+  StyleSheet,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Mail, ArrowLeft } from 'lucide-react-native';
 import api from '../../services/api';
+import { RootStackParamList } from '../../navigation/AppNavigator';
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -25,10 +29,14 @@ type ForgotPasswordFormData = {
   email: string;
 };
 
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ForgotPassword'>;
+
 export default function ForgotPasswordScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
   const [sent, setSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [manualToken, setManualToken] = useState('');
 
   const {
     control,
@@ -57,7 +65,7 @@ export default function ForgotPasswordScreen() {
 
   if (sent) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#f8fafc', justifyContent: 'center', paddingHorizontal: 24 }}>
+      <View style={{ flex: 1, backgroundColor: '#ffffff', justifyContent: 'center', paddingHorizontal: 24 }}>
         <View style={{ alignItems: 'center', gap: 24 }}>
           <View
             style={{
@@ -82,25 +90,74 @@ export default function ForgotPasswordScreen() {
               A password recovery link has been dispatched to your corporate email address.
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Login' as never)}
-            style={{
-              width: '100%',
-              height: 56,
-              backgroundColor: '#3b82f6',
-              borderRadius: 16,
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#3b82f6',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              elevation: 4,
-            }}
-          >
-            <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Return to Login</Text>
-          </TouchableOpacity>
+          
+          <View style={{ width: '100%', gap: 12 }}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Login' as never)}
+              style={{
+                width: '100%',
+                height: 56,
+                backgroundColor: '#3b82f6',
+                borderRadius: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Back to Login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setIsModalVisible(true)}
+            >
+              <Text style={{ color: '#64748b', fontSize: 14, textAlign: 'center', textDecorationLine: 'underline' }}>
+                Already have a token? Click here
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Token Input Modal */}
+        <Modal
+          visible={isModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Enter Reset Token</Text>
+              <Text style={styles.modalSubtitle}>
+                Paste the reset token you received in your email to set a new password.
+              </Text>
+              <TextInput
+                style={styles.tokenInput}
+                placeholder="Enter token here..."
+                value={manualToken}
+                onChangeText={setManualToken}
+                autoCapitalize="none"
+              />
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  onPress={() => setIsModalVisible(false)}
+                  style={styles.cancelButton}
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (manualToken.trim()) {
+                      setIsModalVisible(false);
+                      navigation.navigate('ResetPassword', { token: manualToken.trim() });
+                    }
+                  }}
+                  style={styles.proceedButton}
+                >
+                  <Text style={styles.proceedText}>Proceed</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -108,7 +165,7 @@ export default function ForgotPasswordScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: '#f8fafc' }}
+      style={{ flex: 1, backgroundColor: '#ffffff' }}
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}
@@ -228,3 +285,63 @@ export default function ForgotPasswordScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+  },
+  tokenInput: {
+    height: 56,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    color: '#0f172a',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelText: {
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  proceedButton: {
+    flex: 1,
+    height: 48,
+    backgroundColor: '#3b82f6',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proceedText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+});

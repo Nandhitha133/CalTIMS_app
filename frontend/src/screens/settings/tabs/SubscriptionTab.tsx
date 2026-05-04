@@ -324,8 +324,13 @@ export default function SubscriptionTab() {
             <Text style={styles.titleHighlight}>for your organization.</Text>
           </Text>
           <Text style={styles.subtitle}>
-            Scale your productivity with automated timesheets and payroll.
-            Start your 28-day free trial today.
+            Scale your productivity with automated timesheets and payroll.{' '}
+            <Text 
+              style={{ color: '#4f46e5', fontWeight: '700', textDecorationLine: 'underline' }}
+              onPress={() => navigation.navigate('Signup' as never)}
+            >
+              Start your 28-day free trial today.
+            </Text>
           </Text>
         </View>
 

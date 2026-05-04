@@ -357,12 +357,13 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
       const filePath = `${downloadPath}/${filename}`;
 
       // Convert base64 to file if needed
+      const globalAny = globalThis as any;
       if (typeof data === 'string' && data.startsWith('data:application/pdf')) {
         const base64Data = data.split(',')[1];
         await RNFS.writeFile(filePath, base64Data, 'base64');
-      } else if (data instanceof Blob) {
+      } else if (data instanceof (globalAny.Blob || Object)) {
         // Handle blob data
-        const reader = new FileReader();
+        const reader = new globalAny.FileReader();
         reader.onload = async () => {
           const base64 = (reader.result as string).split(',')[1];
           await RNFS.writeFile(filePath, base64, 'base64');

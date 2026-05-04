@@ -14,11 +14,13 @@ import {
   Dimensions,
   Platform,
   FlatList,
+  Share,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, getISOWeek } from 'date-fns';
+import RNFS from 'react-native-fs';
 import {
   Filter,
   Download,
@@ -825,15 +827,33 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
       });
 
       if (Platform.OS === 'web') {
-        const blob = new Blob([csvData], { type: 'text/csv' } as any);
-        const url = URL.createObjectURL(blob);
-        const link = (globalThis as any).document.createElement('a');
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData], { type: 'text/csv' } as any);
+        const url = globalAny.URL.createObjectURL(blob);
+        const link = globalAny.document.createElement('a');
         link.href = url;
         link.download = `timesheets_export_${format(new Date(), 'yyyyMMdd')}.csv`;
         link.click();
-        URL.revokeObjectURL(url);
+        globalAny.URL.revokeObjectURL(url);
       } else {
-        Alert.alert('Export', 'Export feature is available on web platform');
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `admin_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Admin Timesheets Export',
+          message: `Timesheets exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
       }
 
       Alert.alert('Success', 'All matching records exported!');

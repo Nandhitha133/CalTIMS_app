@@ -90,6 +90,8 @@ export const taskAPI = {
     apiService.put(`/tasks/${id}`, data),
   delete: (id: string) => 
     apiService.delete(`/tasks/${id}`),
+  export: (params: any) => 
+    apiService.get('/tasks/export', params, { headers: { 'Accept': 'text/csv' } }),
 };
 
 // ==================== PROJECT API ====================
@@ -104,6 +106,8 @@ export const projectAPI = {
     apiService.put(`/projects/${id}`, data),
   delete: (id: string) => 
     apiService.delete(`/projects/${id}`),
+  export: (params: any) => 
+    apiService.get('/projects/export', params, { headers: { 'Accept': 'text/csv' } }),
 };
 
 // ==================== LEAVE API ====================
@@ -120,6 +124,8 @@ export const leaveAPI = {
     apiService.patch(`/leaves/${id}/reject`, { reason }),
   cancel: (id: string, reason: string) => 
     apiService.patch(`/leaves/${id}/cancel`, { reason }),
+  export: (params: any) => 
+    apiService.get('/leaves/export', params, { headers: { 'Accept': 'text/csv' } }),
 };
 
 // ==================== ANNOUNCEMENT API ====================
@@ -223,9 +229,9 @@ export const payrollAPI = {
   getProfiles: () => 
     apiService.get('/payroll/profiles'),
   getRoleStructures: () => 
-    apiService.get('/payroll/structures'),
+    apiService.get('/payroll/role-structures'),
   updateProfile: (userId: string, data: any) => 
-    apiService.patch(`/payroll/profiles/${userId}`, data),
+    apiService.post('/payroll/profiles', { ...data, userId }),
   deleteProfile: (id: string) => 
     apiService.delete(`/payroll/profiles/${id}`),
   getDashboard: (params?: any) => 
@@ -298,6 +304,8 @@ export const userAPI = {
     apiService.get('/users/roles'),
   resetPassword: (id: string, password: string) => 
     apiService.patch(`/users/${id}/reset-password`, { password }),
+  export: (params: any) => 
+    apiService.get('/users/export', params, { headers: { 'Accept': 'text/csv' } }),
 };
 
 // ==================== AUDIT API ====================

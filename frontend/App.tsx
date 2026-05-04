@@ -55,7 +55,7 @@ const CustomDarkTheme = {
 
 // Deep linking configuration
 const linking = {
-  prefixes: ['caltims://'],
+  prefixes: ['caltims://', 'https://caldimproducts.com/caltims'],
   config: {
     screens: {
       OAuthSuccess: {
@@ -66,11 +66,10 @@ const linking = {
         },
       },
       ResetPassword: {
-        path: 'reset-password',
-        parse: {
-          token: (token: string) => token,
-        },
+        path: 'reset-password/:token',
       },
+      Login: 'login',
+      Signup: 'signup',
     },
   },
 };

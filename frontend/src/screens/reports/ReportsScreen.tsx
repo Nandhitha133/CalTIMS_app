@@ -804,14 +804,15 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
       const data = extractData(response, '');
       
       if (Platform.OS === 'web') {
-        const blob = new Blob([data], { type: format === 'pdf' ? 'application/pdf' : 'text/csv' } as any);
-        const url = URL.createObjectURL(blob);
-        const doc = (globalThis as any).document;
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([data], { type: format === 'pdf' ? 'application/pdf' : 'text/csv' } as any);
+        const url = globalAny.URL.createObjectURL(blob);
+        const doc = globalAny.document;
         const link = doc.createElement('a');
         link.href = url;
         link.download = `enterprise-report-${dateFnsFormat(new Date(), 'yyyyMMdd')}.${format}`;
         link.click();
-        URL.revokeObjectURL(url);
+        globalAny.URL.revokeObjectURL(url);
       } else {
         await Share.share({
           title: 'Export Report',

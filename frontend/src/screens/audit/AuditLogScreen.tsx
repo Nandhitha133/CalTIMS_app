@@ -12,10 +12,12 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  Share,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
+import RNFS from 'react-native-fs';
 import {
   Shield,
   Search,
@@ -478,7 +480,7 @@ export default function AuditLogScreen() {
     );
   }, [logs, searchQuery]);
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     try {
       const headers = ['Action', 'User', 'Role', 'Entity', 'Status', 'IP Address', 'Timestamp'];
       const rows = filteredLogs.map(log => [
@@ -495,22 +497,38 @@ export default function AuditLogScreen() {
         .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
         .join('\n');
       
-      // For React Native, we'll use a different approach - show alert with share option
-      Alert.alert(
-        'Export Data',
-        `${filteredLogs.length} logs ready to export. Use device sharing to save.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Share', 
-            onPress: () => {
-              // You can implement sharing here using react-native-share
-              Alert.alert('Info', 'Share functionality would be implemented here');
-            }
-          }
-        ]
-      );
+      if (Platform.OS === 'web') {
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvContent], { type: 'text/csv' });
+        const url = globalAny.URL.createObjectURL(blob);
+        const a = globalAny.document.createElement('a');
+        a.href = url;
+        a.download = `audit_logs_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        a.click();
+        globalAny.URL.revokeObjectURL(url);
+      } else {
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `audit_logs_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvContent, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Export Audit Logs',
+          message: `Audit logs exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
+      }
+      Alert.alert('Success', 'Audit logs exported successfully!');
     } catch (error) {
+      console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to export logs');
     }
   };

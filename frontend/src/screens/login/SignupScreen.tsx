@@ -141,7 +141,7 @@ export default function SignupScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: '#f8fafc' }}
+      style={{ flex: 1, backgroundColor: '#ffffff' }}
     >
       <ScrollView
         contentContainerStyle={{ flexGrow: 1 }}

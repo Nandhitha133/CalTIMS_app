@@ -24,7 +24,6 @@ import {
   Plus,
   Search,
   Filter,
-  Download,
   Eye,
   Pencil,
   Trash2,
@@ -43,6 +42,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
+  Download,
 } from 'lucide-react-native';
 import { projectAPI, userAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
@@ -685,6 +685,52 @@ export default function ProjectsScreen() {
       fetchProjects();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to delete project');
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const params: any = {};
+      if (searchQuery.length >= 2) params.search = searchQuery;
+      if (statusFilter) params.status = statusFilter;
+      if (managerFilter) params.managerId = managerFilter;
+      if (projectCodeFilter) params.code = projectCodeFilter;
+
+      const csvData = await projectAPI.export(params);
+      
+      if (Platform.OS === 'web') {
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
+        const url = globalAny.URL.createObjectURL(blob);
+        const a = globalAny.document.createElement('a');
+        a.href = url;
+        a.download = `projects_${format(new Date(), 'yyyyMMdd')}.csv`;
+        a.click();
+        globalAny.URL.revokeObjectURL(url);
+      } else {
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `projects_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Export Projects',
+          message: `Projects exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
+      }
+      Alert.alert('Success', 'Projects exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      Alert.alert('Error', 'Failed to export CSV. Please try again.');
     }
   };
 

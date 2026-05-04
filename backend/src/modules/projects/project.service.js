@@ -5,6 +5,7 @@ const AppError = require('../../shared/utils/AppError');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { ROLES } = require('../../constants');
 const { logAction } = require('../audit/audit.routes');
+const { Parser } = require('json2csv');
 
 const projectService = {
   async getAll(query, requestor, organizationId) {
@@ -142,6 +143,46 @@ const projectService = {
     });
 
     return true;
+  },
+
+  async exportProjects(query, requestor, organizationId) {
+    const filter = { organizationId };
+    if (query.status) filter.status = query.status;
+    if (query.search) filter.name = new RegExp(query.search, 'i');
+    if (query.code) filter.code = query.code.toUpperCase();
+    if (query.managerId) filter.managerId = query.managerId;
+    
+    filter.code = { ... (query.code && { $eq: query.code.toUpperCase() }), $ne: 'LEAVE-SYS' };
+
+    const assignedOnly = query.assignedOnly === 'true';
+    const isEmployee = requestor.role === ROLES.EMPLOYEE;
+    const isManager = requestor.role === ROLES.MANAGER;
+
+    if (assignedOnly || isEmployee || isManager) {
+      filter.$or = [
+        { managerId: requestor._id },
+        { 'allocatedEmployees.userId': requestor._id }
+      ];
+    }
+
+    const projects = await Project.find(filter)
+      .populate('managerId', 'name')
+      .sort({ name: 1 })
+      .lean();
+
+    const fields = [
+      { label: 'Project Name', value: 'name' },
+      { label: 'Project Code', value: 'code' },
+      { label: 'Client', value: 'clientName' },
+      { label: 'Status', value: 'status' },
+      { label: 'Manager', value: 'managerId.name' },
+      { label: 'Budget Hours', value: 'budgetHours' },
+      { label: 'Start Date', value: (row) => row.startDate ? new Date(row.startDate).toLocaleDateString() : 'N/A' },
+      { label: 'End Date', value: (row) => row.endDate ? new Date(row.endDate).toLocaleDateString() : 'N/A' },
+    ];
+
+    const parser = new Parser({ fields });
+    return parser.parse(projects);
   },
 };
 

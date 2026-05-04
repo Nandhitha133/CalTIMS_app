@@ -12,10 +12,12 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
+import RNFS from 'react-native-fs';
 import {
   Calendar,
   Search,
@@ -879,12 +881,41 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       if (filters.status) params.status = filters.status;
       if (filters.leaveType) params.leaveType = filters.leaveType;
 
-      const response = await leaveAPI.getAll(params);
-      const data = (response as any)?.data?.data || [];
-
-      Alert.alert('Success', `Exported ${data.length} records`);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to export');
+      const csvData = await leaveAPI.export(params);
+      
+      if (Platform.OS === 'web') {
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
+        const url = globalAny.URL.createObjectURL(blob);
+        const a = globalAny.document.createElement('a');
+        a.href = url;
+        a.download = `leave_applications_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        a.click();
+        globalAny.URL.revokeObjectURL(url);
+      } else {
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `leave_applications_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Export Leaves',
+          message: `Leaves exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
+      }
+      Alert.alert('Success', 'Leaves exported successfully!');
+    } catch (error: any) {
+      console.error('Export failed:', error);
+      Alert.alert('Error', error?.message || 'Failed to export CSV. Please try again.');
     }
   };
 
@@ -893,12 +924,41 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       const params: any = { limit: 1000 };
       if (eligibilityFilters.department) params.department = eligibilityFilters.department;
 
-      const response = await userAPI.getAll(params);
-      const data = (response as any)?.data?.data || [];
-
-      Alert.alert('Success', `Exported ${data.length} employees`);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to export');
+      const csvData = await userAPI.export(params);
+      
+      if (Platform.OS === 'web') {
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
+        const url = globalAny.URL.createObjectURL(blob);
+        const a = globalAny.document.createElement('a');
+        a.href = url;
+        a.download = `leave_eligibility_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        a.click();
+        globalAny.URL.revokeObjectURL(url);
+      } else {
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `leave_eligibility_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Export Leave Eligibility',
+          message: `Leave eligibility exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
+      }
+      Alert.alert('Success', 'Eligibility exported successfully!');
+    } catch (error: any) {
+      console.error('Export failed:', error);
+      Alert.alert('Error', error?.message || 'Failed to export CSV. Please try again.');
     }
   };
 

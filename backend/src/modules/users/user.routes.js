@@ -14,6 +14,9 @@ router.use(authenticate);
 // My profile
 router.get('/me', userController.getMe);
 
+// Export employees
+router.get('/export', checkPermission('manageEmployees'), userController.exportEmployees);
+
 // List employees (admin/manager/HR)
 router.get('/', checkPermission('manageEmployees'), userController.getAll);
 

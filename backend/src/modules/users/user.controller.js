@@ -87,6 +87,14 @@ const userController = {
     const departments = await userService.getDepartments(req.organizationId);
     ApiResponse.success(res, { data: departments });
   }),
+
+  exportEmployees: asyncHandler(async (req, res) => {
+    const csvData = await userService.exportEmployees(req.query, req.organizationId);
+    const now = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="employees-${now}.csv"`);
+    res.send(csvData);
+  }),
 };
 
 module.exports = userController;

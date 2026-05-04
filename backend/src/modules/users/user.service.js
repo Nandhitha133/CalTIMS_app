@@ -6,6 +6,7 @@ const emailService = require('../../shared/services/email.service');
 const { parsePagination, buildPaginationMeta, buildSort } = require('../../shared/utils/pagination');
 const { logAction } = require('../audit/audit.routes');
 const { ROLES } = require('../../constants');
+const { Parser } = require('json2csv');
 
 const userService = {
   async getAll(query, organizationId) {
@@ -268,6 +269,40 @@ const userService = {
 
   async getDepartments(organizationId) {
     return User.distinct('department', { organizationId, isActive: true });
+  },
+
+  async exportEmployees(query, organizationId) {
+    const filter = { organizationId };
+    if (query.status === 'active') filter.isActive = true;
+    else if (query.status === 'inactive') filter.isActive = false;
+    if (query.role) filter.role = query.role;
+    if (query.department) filter.department = new RegExp(query.department, 'i');
+    
+    if (query.search) {
+      filter.$or = [
+        { name: new RegExp(query.search, 'i') },
+        { email: new RegExp(query.search, 'i') },
+        { employeeId: new RegExp(query.search, 'i') },
+        { department: new RegExp(query.search, 'i') },
+      ];
+    }
+
+    const users = await User.find(filter).sort({ name: 1 }).lean();
+
+    const fields = [
+      { label: 'Name', value: 'name' },
+      { label: 'Employee ID', value: 'employeeId' },
+      { label: 'Email', value: 'email' },
+      { label: 'Phone', value: 'phone' },
+      { label: 'Role', value: 'role' },
+      { label: 'Department', value: 'department' },
+      { label: 'Designation', value: 'designation' },
+      { label: 'Status', value: (row) => row.isActive ? 'Active' : 'Inactive' },
+      { label: 'Joining Date', value: (row) => row.joinDate ? new Date(row.joinDate).toLocaleDateString() : 'N/A' },
+    ];
+
+    const parser = new Parser({ fields });
+    return parser.parse(users);
   },
 };
 

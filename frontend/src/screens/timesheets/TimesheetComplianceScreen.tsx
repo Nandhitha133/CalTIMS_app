@@ -13,10 +13,12 @@ import {
   StyleSheet,
   Platform,
   FlatList,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, startOfWeek, subDays, addDays, isAfter, isBefore } from 'date-fns';
+import RNFS from 'react-native-fs';
 import {
   Calendar,
   ChevronLeft,
@@ -598,15 +600,33 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
       });
 
       if (Platform.OS === 'web') {
-        const blob = new Blob([csvData], { type: 'text/csv' } as any);
-        const url = URL.createObjectURL(blob);
-        const link = (globalThis as any).document.createElement('a');
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData], { type: 'text/csv' } as any);
+        const url = globalAny.URL.createObjectURL(blob);
+        const link = globalAny.document.createElement('a');
         link.href = url;
         link.download = `compliance_report_${format(weekStart, 'yyyyMMdd')}.csv`;
         link.click();
-        URL.revokeObjectURL(url);
+        globalAny.URL.revokeObjectURL(url);
       } else {
-        Alert.alert('Export', 'Export feature is available on web platform');
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `compliance_report_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Compliance Report Export',
+          message: `Compliance report exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
       }
 
       Alert.alert('Success', 'Compliance report exported!');

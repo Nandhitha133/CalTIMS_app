@@ -12,11 +12,13 @@ import {
   TextInput,
   StyleSheet,
   Platform,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import RNFS from 'react-native-fs';
 import {
   Plus,
   Search,
@@ -39,6 +41,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from 'lucide-react-native';
 import { userAPI, auditAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
@@ -58,6 +61,7 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
   filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
+  exportButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#3b82f6', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   filterBadgeText: { color: 'white', fontSize: 10, fontWeight: '700' },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
@@ -70,7 +74,6 @@ const styles = StyleSheet.create({
   filterField: { marginBottom: 12 },
   filterLabel: { fontSize: 12, fontWeight: '600', color: '#64748b', marginBottom: 4 },
   filterSelectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 10 },
-  filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
   filterSelectText: { fontSize: 14, color: '#1e293b', flex: 1 },
   placeholderText: { color: '#94a3b8' },
   filterRow: { flexDirection: 'row', gap: 12 },
@@ -101,7 +104,6 @@ const modalStyles = StyleSheet.create({
   field: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: '#334155' },
   input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1e293b', backgroundColor: '#f8fafc' },
-  inputError: { borderColor: '#ef4444', backgroundColor: '#fef2f2' },
   selectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#f8fafc' },
   selectButtonText: { fontSize: 14, color: '#1e293b', flex: 1 },
   textArea: { height: 80, textAlignVertical: 'top' },
@@ -266,6 +268,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
 
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
   const [showEmployeeIdDropdown, setShowEmployeeIdDropdown] = useState(false);
   const [dropdownContext, setDropdownContext] = useState<'create' | 'edit' | 'filter'>('create');
 
@@ -276,6 +279,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const [editFormErrors, setEditFormErrors] = useState<Record<string, boolean>>({});
 
   const [employees, setEmployees] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<string[]>([]);
   const [allEmployees, setAllEmployees] = useState<User[]>([]);
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
 
@@ -292,11 +296,12 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' },
   ], []);
 
+  const departmentOptions = useMemo(() => departments.map(d => ({ value: d, label: d })), [departments]);
   const employeeIdOptions = useMemo(() => allEmployees.filter(e => e.employeeId).map(e => ({ value: e.employeeId!, label: `${e.employeeId} - ${e.name}` })), [allEmployees]);
 
   useFocusEffect(useCallback(() => {
     loadUserData();
-    loadUserData();
+    fetchDepartments();
     fetchRoles();
     fetchAllEmployees();
     fetchEmployees();
@@ -309,19 +314,24 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     } catch (error) { console.error('Error loading user data:', error); }
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const response = await userAPI.getDepartments();
+      setDepartments((response as any)?.data?.data || []);
+    } catch (error) { console.error('Error fetching departments:', error); }
+  };
+
   const fetchRoles = async () => {
     try {
       const response = await userAPI.getRoles();
-      const data = (response as any)?.data;
-      setRoles(Array.isArray(data) ? data : data?.data || []);
+      setRoles((response as any)?.data?.data || []);
     } catch (error) { console.error('Error fetching roles:', error); }
   };
 
   const fetchAllEmployees = async () => {
     try {
       const response = await userAPI.getAll({ limit: 5000 });
-      const data = (response as any)?.data;
-      setAllEmployees(Array.isArray(data) ? data : data?.data || []);
+      setAllEmployees((response as any)?.data?.data || []);
     } catch (error) { console.error('Error fetching all employees:', error); }
   };
 
@@ -332,11 +342,9 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
       const params: any = { page, limit, search: effectiveSearch, role: roleFilter, status: statusFilter, department: departmentFilter, employeeId: employeeIdFilter };
       const response = await userAPI.getAll(params);
       const data = (response as any)?.data;
-      const pagination = (response as any)?.pagination;
-      
-      setEmployees(Array.isArray(data) ? data : data?.data || []);
-      setTotalPages(pagination?.totalPages || 1);
-      setTotalResults(pagination?.total || 0);
+      setEmployees(data?.data || []);
+      setTotalPages(data?.pagination?.totalPages || 1);
+      setTotalResults(data?.pagination?.total || 0);
     } catch (error) {
       console.error('Error fetching employees:', error);
       Alert.alert('Error', 'Failed to load employees');
@@ -354,25 +362,21 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     if (!isEdit && (!data.password || data.password.length < 8)) errors.password = true;
     if (!data.department?.trim()) errors.department = true;
     if (!data.designation?.trim()) errors.designation = true;
-    if (!data.phone?.trim() || !/^\d{10}$/.test(data.phone.replace(/\D/g, ''))) errors.phone = true;
+    if (!data.phone?.trim() || data.phone.replace(/\D/g, '').length !== 10) errors.phone = true;
     if (!data.joinDate) errors.joinDate = true;
     if (!data.bankName?.trim()) errors.bankName = true;
-    if (!data.accountNumber?.trim() || !/^\d+$/.test(data.accountNumber)) errors.accountNumber = true;
+    if (!data.accountNumber?.trim()) errors.accountNumber = true;
     if (!data.branchName?.trim()) errors.branchName = true;
-    if (!data.ifscCode?.trim() || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.ifscCode)) errors.ifscCode = true;
-    if (!data.uan?.trim() || !/^\d{12}$/.test(data.uan)) errors.uan = true;
-    if (!data.pan?.trim() || !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan)) errors.pan = true;
-    if (!data.aadhaar?.trim() || !/^\d{12}$/.test(data.aadhaar)) errors.aadhaar = true;
+    if (!data.ifscCode?.trim()) errors.ifscCode = true;
+    if (!data.uan?.trim()) errors.uan = true;
+    if (!data.pan?.trim()) errors.pan = true;
+    if (!data.aadhaar?.trim()) errors.aadhaar = true;
     return errors;
   };
 
   const handleCreateEmployee = async () => {
     const errors = validateFields(formData);
-    if (Object.keys(errors).length > 0) { 
-      setFormErrors(errors); 
-      Alert.alert('Validation Error', 'Please ensure all fields are properly formatted:\n• Phone: 10 digits\n• UAN/Aadhaar: 12 digits\n• PAN: ABCDE1234F\n• IFSC: ABCD0123456'); 
-      return; 
-    }
+    if (Object.keys(errors).length > 0) { setFormErrors(errors); Alert.alert('Error', 'Please fill all required fields correctly'); return; }
     setIsSubmitting(true);
     try {
       await userAPI.create(formData);
@@ -392,11 +396,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     if (!selectedEmployee) return;
     const errors = validateFields(editFormData, true);
     if (editFormData.newPassword && editFormData.newPassword.length < 8) errors.newPassword = true;
-    if (Object.keys(errors).length > 0) { 
-      setEditFormErrors(errors); 
-      Alert.alert('Validation Error', 'Please ensure all fields are properly formatted:\n• Phone: 10 digits\n• UAN/Aadhaar: 12 digits\n• PAN: ABCDE1234F\n• IFSC: ABCD0123456'); 
-      return; 
-    }
+    if (Object.keys(errors).length > 0) { setEditFormErrors(errors); Alert.alert('Error', 'Please fill all required fields correctly'); return; }
     setIsSubmitting(true);
     try {
       const updateData: any = { ...editFormData };
@@ -443,6 +443,53 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const params = {
+        role: roleFilter,
+        status: statusFilter,
+        department: departmentFilter,
+        employeeId: employeeIdFilter,
+        search: searchQuery.trim().length >= 2 ? searchQuery.trim() : ''
+      };
+      const csvData = await userAPI.export(params);
+      
+      if (Platform.OS === 'web') {
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
+        const url = globalAny.URL.createObjectURL(blob);
+        const a = globalAny.document.createElement('a');
+        a.href = url;
+        a.download = `employees_${format(new Date(), 'yyyyMMdd')}.csv`;
+        a.click();
+        globalAny.URL.revokeObjectURL(url);
+      } else {
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `employees_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Export Employees',
+          message: `Employees exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
+      }
+      Alert.alert('Success', 'Employees exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      Alert.alert('Error', 'Failed to export CSV. Please try again.');
+    }
+  };
+
   const openEditModal = (employee: User) => {
     setSelectedEmployee(employee);
     setEditFormData({
@@ -480,7 +527,6 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const handleFormChange = (name: string, value: string, isEdit = false) => {
     let processedValue = value;
     if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) processedValue = value.replace(/\D/g, '');
-    if (['pan', 'ifscCode'].includes(name)) processedValue = value.toUpperCase();
     if (isEdit) {
       setEditFormData(prev => ({ ...prev, [name]: processedValue }));
       if (editFormErrors[name]) setEditFormErrors(prev => { const up = { ...prev }; delete up[name]; return up; });
@@ -491,54 +537,60 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   };
 
   const getRoleDisplayValue = (role: string) => roleOptions.find(r => r.value === role)?.label || 'Select Role';
+  const getDepartmentDisplayValue = (department: string) => department || 'Select Department';
 
   const activeFilterCount = (roleFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (departmentFilter ? 1 : 0) + (employeeIdFilter ? 1 : 0);
 
   const renderEmployeeForm = (isEdit = false) => {
     const data = isEdit ? editFormData : formData;
-    const errors = isEdit ? editFormErrors : formErrors;
     const handleChange = (name: string, value: string) => handleFormChange(name, value, isEdit);
 
     return (
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={modalStyles.form}>
           <Text style={modalStyles.sectionTitle}>Basic Information</Text>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Full Name *</Text><TextInput style={[modalStyles.input, errors.name && modalStyles.inputError]} placeholder="Enter full name" value={data.name} onChangeText={(text) => handleChange('name', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Email Address *</Text><TextInput style={[modalStyles.input, errors.email && modalStyles.inputError]} placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" value={data.email} onChangeText={(text) => handleChange('email', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Full Name *</Text><TextInput style={modalStyles.input} placeholder="Enter full name" value={data.name} onChangeText={(text) => handleChange('name', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Email Address *</Text><TextInput style={modalStyles.input} placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" value={data.email} onChangeText={(text) => handleChange('email', text)} /></View>
           {!isEdit ? (
-            <View style={modalStyles.field}><Text style={modalStyles.label}>Password *</Text><TextInput style={[modalStyles.input, errors.password && modalStyles.inputError]} placeholder="Min 8 characters" secureTextEntry value={data.password} onChangeText={(text) => handleChange('password', text)} /></View>
+            <View style={modalStyles.field}><Text style={modalStyles.label}>Password *</Text><TextInput style={modalStyles.input} placeholder="Min 8 characters" secureTextEntry value={data.password} onChangeText={(text) => handleChange('password', text)} /></View>
           ) : (
-            <View style={modalStyles.field}><Text style={modalStyles.label}>Reset Password (Optional)</Text><TextInput style={[modalStyles.input, errors.newPassword && modalStyles.inputError]} placeholder="Min 8 characters" secureTextEntry value={data.newPassword} onChangeText={(text) => handleChange('newPassword', text)} /></View>
+            <View style={modalStyles.field}><Text style={modalStyles.label}>Reset Password (Optional)</Text><TextInput style={modalStyles.input} placeholder="Min 8 characters" secureTextEntry value={data.newPassword} onChangeText={(text) => handleChange('newPassword', text)} /></View>
           )}
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Role *</Text>
-            <TouchableOpacity style={[modalStyles.selectButton, errors.role && modalStyles.inputError]} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowRoleDropdown(true); }}>
+            <TouchableOpacity style={modalStyles.selectButton} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowRoleDropdown(true); }}>
               <Text style={[modalStyles.selectButtonText, !data.role && { color: '#94a3b8' }]}>{getRoleDisplayValue(data.role)}</Text>
               <ChevronDown size={16} color="#64748b" />
             </TouchableOpacity>
           </View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Department *</Text><TextInput style={[modalStyles.input, errors.department && modalStyles.inputError]} placeholder="e.g. Engineering" value={data.department} onChangeText={(text) => handleChange('department', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Designation *</Text><TextInput style={[modalStyles.input, errors.designation && modalStyles.inputError]} placeholder="e.g. Senior Developer" value={data.designation} onChangeText={(text) => handleChange('designation', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Phone Number *</Text><TextInput style={[modalStyles.input, errors.phone && modalStyles.inputError]} placeholder="10 digit number" keyboardType="phone-pad" maxLength={10} value={data.phone} onChangeText={(text) => handleChange('phone', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Employee ID</Text><TextInput style={[modalStyles.input, errors.employeeId && modalStyles.inputError]} placeholder="e.g. EMP001" value={data.employeeId} onChangeText={(text) => handleChange('employeeId', text)} /></View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Department *</Text>
+            <TouchableOpacity style={modalStyles.selectButton} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowDepartmentDropdown(true); }}>
+              <Text style={[modalStyles.selectButtonText, !data.department && { color: '#94a3b8' }]}>{getDepartmentDisplayValue(data.department)}</Text>
+              <ChevronDown size={16} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Designation *</Text><TextInput style={modalStyles.input} placeholder="e.g. Senior Developer" value={data.designation} onChangeText={(text) => handleChange('designation', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Phone Number *</Text><TextInput style={modalStyles.input} placeholder="10 digit number" keyboardType="phone-pad" maxLength={10} value={data.phone} onChangeText={(text) => handleChange('phone', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Employee ID</Text><TextInput style={modalStyles.input} placeholder="e.g. EMP001" value={data.employeeId} onChangeText={(text) => handleChange('employeeId', text)} /></View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Joining Date *</Text>
-            <TouchableOpacity style={[modalStyles.selectButton, errors.joinDate && modalStyles.inputError]} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowDatePicker(true); }}>
+            <TouchableOpacity style={modalStyles.selectButton} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowDatePicker(true); }}>
               <Text style={[modalStyles.selectButtonText, !data.joinDate && { color: '#94a3b8' }]}>{formatDateString(data.joinDate)}</Text>
               <ChevronDown size={16} color="#64748b" />
             </TouchableOpacity>
           </View>
 
           <Text style={[modalStyles.sectionTitle, { marginTop: 12 }]}>Bank Details</Text>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Bank Name *</Text><TextInput style={[modalStyles.input, errors.bankName && modalStyles.inputError]} placeholder="Enter bank name" value={data.bankName} onChangeText={(text) => handleChange('bankName', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Account Number *</Text><TextInput style={[modalStyles.input, errors.accountNumber && modalStyles.inputError]} placeholder="Enter account number" keyboardType="numeric" value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Branch Name *</Text><TextInput style={[modalStyles.input, errors.branchName && modalStyles.inputError]} placeholder="Enter branch name" value={data.branchName} onChangeText={(text) => handleChange('branchName', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>IFSC Code *</Text><TextInput style={[modalStyles.input, errors.ifscCode && modalStyles.inputError]} placeholder="Enter IFSC code" autoCapitalize="characters" value={data.ifscCode} onChangeText={(text) => handleChange('ifscCode', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>UAN *</Text><TextInput style={[modalStyles.input, errors.uan && modalStyles.inputError]} placeholder="Enter UAN" keyboardType="numeric" value={data.uan} onChangeText={(text) => handleChange('uan', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Bank Name *</Text><TextInput style={modalStyles.input} placeholder="Enter bank name" value={data.bankName} onChangeText={(text) => handleChange('bankName', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Account Number *</Text><TextInput style={modalStyles.input} placeholder="Enter account number" keyboardType="numeric" value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Branch Name *</Text><TextInput style={modalStyles.input} placeholder="Enter branch name" value={data.branchName} onChangeText={(text) => handleChange('branchName', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>IFSC Code *</Text><TextInput style={modalStyles.input} placeholder="Enter IFSC code" autoCapitalize="characters" value={data.ifscCode} onChangeText={(text) => handleChange('ifscCode', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>UAN *</Text><TextInput style={modalStyles.input} placeholder="Enter UAN" keyboardType="numeric" value={data.uan} onChangeText={(text) => handleChange('uan', text)} /></View>
 
           <Text style={[modalStyles.sectionTitle, { marginTop: 12 }]}>Personal IDs</Text>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>PAN *</Text><TextInput style={[modalStyles.input, errors.pan && modalStyles.inputError]} placeholder="Enter PAN number" autoCapitalize="characters" value={data.pan} onChangeText={(text) => handleChange('pan', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Aadhaar *</Text><TextInput style={[modalStyles.input, errors.aadhaar && modalStyles.inputError]} placeholder="12 digit number" keyboardType="numeric" maxLength={12} value={data.aadhaar} onChangeText={(text) => handleChange('aadhaar', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>PAN *</Text><TextInput style={modalStyles.input} placeholder="Enter PAN number" autoCapitalize="characters" value={data.pan} onChangeText={(text) => handleChange('pan', text)} /></View>
+          <View style={modalStyles.field}><Text style={modalStyles.label}>Aadhaar *</Text><TextInput style={modalStyles.input} placeholder="12 digit number" keyboardType="numeric" maxLength={12} value={data.aadhaar} onChangeText={(text) => handleChange('aadhaar', text)} /></View>
         </View>
       </ScrollView>
     );
@@ -563,6 +615,9 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
               <Filter size={16} color={showFilters || activeFilterCount > 0 ? '#3b82f6' : '#64748b'} />
               {activeFilterCount > 0 && <View style={styles.filterBadge}><Text style={styles.filterBadgeText}>{activeFilterCount}</Text></View>}
             </TouchableOpacity>
+            <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
+              <Download size={16} color="#64748b" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.addButton} onPress={() => { setFormData(INITIAL_FORM); setFormErrors({}); setShowCreateModal(true); }}>
               <Plus size={16} color="white" /><Text style={styles.addButtonText}>Add</Text>
             </TouchableOpacity>
@@ -586,7 +641,10 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
               </View>
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Department</Text>
-                <TextInput style={styles.filterInput} placeholder="e.g. Engineering" placeholderTextColor="#94a3b8" value={tempFilters.department} onChangeText={(text) => setTempFilters(prev => ({ ...prev, department: text }))} />
+                <TouchableOpacity style={styles.filterSelectButton} onPress={() => { setDropdownContext('filter'); setShowDepartmentDropdown(true); }}>
+                  <Text style={[styles.filterSelectText, !tempFilters.department && styles.placeholderText]}>{tempFilters.department || 'All Departments'}</Text>
+                  <ChevronDown size={14} color="#64748b" />
+                </TouchableOpacity>
               </View>
               <View style={styles.filterRow}>
                 <View style={[styles.filterField, { flex: 1 }]}>
@@ -650,6 +708,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
       {/* Dropdown Modals */}
       <DropdownModal visible={showRoleDropdown} onClose={() => setShowRoleDropdown(false)} options={roleOptions} selectedValue={dropdownContext === 'create' ? formData.role : dropdownContext === 'edit' ? editFormData.role : dropdownContext === 'filter' ? tempFilters.role : ''} onSelect={(value) => { if (dropdownContext === 'create' || dropdownContext === 'edit') { const setter = dropdownContext === 'create' ? setFormData : setEditFormData; setter(prev => ({ ...prev, role: value })); } else if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, role: value })); }} title="Select Role" />
       <DropdownModal visible={showStatusDropdown} onClose={() => setShowStatusDropdown(false)} options={statusOptions} selectedValue={dropdownContext === 'filter' ? tempFilters.status : ''} onSelect={(value) => { if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, status: value })); }} title="Select Status" />
+      <DropdownModal visible={showDepartmentDropdown} onClose={() => setShowDepartmentDropdown(false)} options={departmentOptions} selectedValue={dropdownContext === 'create' ? formData.department : dropdownContext === 'edit' ? editFormData.department : dropdownContext === 'filter' ? tempFilters.department : ''} onSelect={(value) => { if (dropdownContext === 'create' || dropdownContext === 'edit') { const setter = dropdownContext === 'create' ? setFormData : setEditFormData; setter(prev => ({ ...prev, department: value })); } else if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, department: value })); }} title="Select Department" />
       <DropdownModal visible={showEmployeeIdDropdown} onClose={() => setShowEmployeeIdDropdown(false)} options={employeeIdOptions} selectedValue={dropdownContext === 'filter' ? tempFilters.employeeId : ''} onSelect={(value) => { if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, employeeId: value })); }} title="Select Employee" />
 
       {/* Date Picker */}

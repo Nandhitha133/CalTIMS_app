@@ -13,11 +13,13 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
+  Share,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
+import RNFS from 'react-native-fs';
 import {
   Filter,
   Download,
@@ -629,38 +631,39 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
       
       // Share CSV file
       if (Platform.OS === 'web') {
-        const blob = new Blob([csvData], { 
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData], { 
           type: 'text/csv',
           lastModified: Date.now()
         } as any);
-        const url = URL.createObjectURL(blob);
-        const link = (globalThis as any).document.createElement('a');
+        const url = globalAny.URL.createObjectURL(blob);
+        const link = globalAny.document.createElement('a');
         link.href = url;
         link.download = `timesheet_history_${format(new Date(), 'yyyyMMdd')}.csv`;
         link.click();
-        URL.revokeObjectURL(url);
+        globalAny.URL.revokeObjectURL(url);
       } else {
-        // For React Native, use Share API
-        // Note: react-native-share needs to be installed for this to work perfectly with files
-        try {
-          const Share = require('react-native-share').default;
-          if (Share) {
-            await Share.open({
-              title: 'Export Timesheet History',
-              url: `data:text/csv;base64,${csvData}`, // Assuming csvData is already base64 or can be shared as is
-              type: 'text/csv',
-              filename: `timesheet_history_${format(new Date(), 'yyyyMMdd')}.csv`,
-            });
-          } else {
-            Alert.alert('Export', 'Share feature is not configured. CSV Content:\n' + csvData.slice(0, 100) + '...');
-          }
-        } catch (e) {
-          Alert.alert('Export', 'Exporting to CSV is currently supported on Web. On Native, please install react-native-share.');
-          console.log('CSV Content:', csvData);
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `my_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'My Timesheets Export',
+          message: `Timesheets exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
         }
+        
+        await Share.share(shareOptions);
       }
       
-      Alert.alert('Success', 'Timesheet history exported!');
+      Alert.alert('Success', 'History exported successfully!');
     } catch (error) {
       console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to export CSV');

@@ -13,11 +13,13 @@ import {
   StyleSheet,
   Platform,
   Switch,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import RNFS from 'react-native-fs';
 import {
   Plus,
   Search,
@@ -635,16 +637,46 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
 
   const handleExportCSV = async () => {
     try {
-      const allTasksResponse = await taskAPI.getAll({ limit: 5000 });
-      const extracted = extractResponseData(allTasksResponse);
-      const allTasks = extracted.data;
-      if (!allTasks || allTasks.length === 0) {
-        Alert.alert('Error', 'No data to export');
-        return;
+      const params: any = { limit: 5000 };
+      if (searchQuery.length >= 2) params.search = searchQuery;
+      if (projectFilter) params.projectId = projectFilter;
+      if (statusFilter) params.status = statusFilter;
+
+      const csvData = await taskAPI.export(params);
+      
+      if (Platform.OS === 'web') {
+        const globalAny = globalThis as any;
+        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
+        const url = globalAny.URL.createObjectURL(blob);
+        const a = globalAny.document.createElement('a');
+        a.href = url;
+        a.download = `tasks_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        a.click();
+        globalAny.URL.revokeObjectURL(url);
+      } else {
+        const downloadPath = Platform.OS === 'android'
+          ? RNFS.DownloadDirectoryPath
+          : RNFS.DocumentDirectoryPath;
+        const fileName = `tasks_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        const filePath = `${downloadPath}/${fileName}`;
+        
+        await RNFS.writeFile(filePath, csvData as string, 'utf8');
+        
+        const shareOptions: any = {
+          title: 'Export Tasks',
+          message: `Tasks exported to ${fileName}`,
+        };
+        
+        if (Platform.OS === 'ios') {
+          shareOptions.url = `file://${filePath}`;
+        }
+        
+        await Share.share(shareOptions);
       }
-      Alert.alert('Success', `Exported ${allTasks.length} tasks successfully!`);
+      Alert.alert('Success', 'Tasks exported successfully!');
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to export');
+      console.error('Export failed:', error);
+      Alert.alert('Error', error?.message || 'Failed to export CSV. Please try again.');
     }
   };
 

@@ -10,6 +10,14 @@ const { authorize, checkPermission } = require('../../middleware/rbac.middleware
 
 router.use(authenticate);
 
+router.get('/export', asyncHandler(async (req, res) => {
+  const csvData = await projectService.exportProjects(req.query, req.user, req.organizationId);
+  const now = new Date().toISOString().split('T')[0];
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="projects-${now}.csv"`);
+  res.send(csvData);
+}));
+
 router.get('/', asyncHandler(async (req, res) => {
   const { projects, pagination } = await projectService.getAll(req.query, req.user, req.organizationId);
   ApiResponse.success(res, { data: projects, pagination });
