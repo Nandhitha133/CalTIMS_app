@@ -15,7 +15,6 @@ import {
   Platform,
   Share,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format as dateFnsFormat, startOfYear, endOfYear, startOfMonth, endOfMonth, startOfWeek, endOfWeek, setWeek, addDays, format } from 'date-fns';
@@ -50,6 +49,7 @@ import {
 import { reportAPI, projectAPI, userAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import SafeSelector from '../../components/common/SafeSelector';
 import ProGuard from '../../components/common/ProGuard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -262,9 +262,13 @@ const ExportModal = ({ visible, onClose, onExport, isExporting }: any) => {
 // Filter Modal Component
 const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOptions, employees, projects, departments }: any) => {
   const [tempFilters, setTempFilters] = useState(filters);
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
 
   React.useEffect(() => {
-    if (visible) setTempFilters(filters);
+    if (visible) {
+      setTempFilters(filters);
+      setActiveSelector(null);
+    }
   }, [visible, filters]);
 
   const months = [
@@ -328,81 +332,75 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
 
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Employee</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={tempFilters.userId}
-                    onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, userId: value }))}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="All Employees" value="all" />
-                    {employees.map((emp: any) => (
-                      <Picker.Item key={emp._id} label={emp.name} value={emp._id} />
-                    ))}
-                  </Picker>
-                </View>
+                <SafeSelector
+                  options={[
+                    { label: 'All Employees', value: 'all' },
+                    ...employees.map((emp: any) => ({ label: emp.name, value: emp._id })),
+                  ]}
+                  selectedValue={tempFilters.userId}
+                  onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, userId: value }))}
+                  visible={activeSelector === 'employee'}
+                  onOpen={() => setActiveSelector('employee')}
+                  onClose={() => setActiveSelector(null)}
+                />
               </View>
 
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Project</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={tempFilters.projectId}
-                    onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, projectId: value }))}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="All Projects" value="all" />
-                    {projects.map((proj: any) => (
-                      <Picker.Item key={proj._id} label={proj.name} value={proj._id} />
-                    ))}
-                  </Picker>
-                </View>
+                <SafeSelector
+                  options={[
+                    { label: 'All Projects', value: 'all' },
+                    ...projects.map((proj: any) => ({ label: proj.name, value: proj._id })),
+                  ]}
+                  selectedValue={tempFilters.projectId}
+                  onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, projectId: value }))}
+                  visible={activeSelector === 'project'}
+                  onOpen={() => setActiveSelector('project')}
+                  onClose={() => setActiveSelector(null)}
+                />
               </View>
 
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Department</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={tempFilters.department}
-                    onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, department: value }))}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="All Departments" value="all" />
-                    {departments.map((dept: string) => (
-                      <Picker.Item key={dept} label={dept} value={dept} />
-                    ))}
-                  </Picker>
-                </View>
+                <SafeSelector
+                  options={[
+                    { label: 'All Departments', value: 'all' },
+                    ...departments.map((dept: string) => ({ label: dept, value: dept })),
+                  ]}
+                  selectedValue={tempFilters.department}
+                  onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, department: value }))}
+                  visible={activeSelector === 'department'}
+                  onOpen={() => setActiveSelector('department')}
+                  onClose={() => setActiveSelector(null)}
+                />
               </View>
 
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Year</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={tempFilters.year}
-                    onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, year: value }))}
-                    style={styles.picker}
-                  >
-                    {(filterOptions.years || [2024, 2025, 2026]).map((year: number) => (
-                      <Picker.Item key={year} label={String(year)} value={year} />
-                    ))}
-                  </Picker>
-                </View>
+                <SafeSelector
+                  options={(filterOptions.years || [2024, 2025, 2026]).map((year: number) => ({
+                    label: String(year),
+                    value: year,
+                  }))}
+                  selectedValue={tempFilters.year}
+                  onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, year: value }))}
+                  visible={activeSelector === 'year'}
+                  onOpen={() => setActiveSelector('year')}
+                  onClose={() => setActiveSelector(null)}
+                />
               </View>
 
               <View style={styles.filterRow}>
                 <View style={[styles.filterField, { flex: 1 }]}>
                   <Text style={styles.filterLabel}>Month</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={tempFilters.month}
-                      onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, month: value }))}
-                      style={styles.picker}
-                    >
-                      {months.map(m => (
-                        <Picker.Item key={m.value} label={m.label} value={m.value} />
-                      ))}
-                    </Picker>
-                  </View>
+                  <SafeSelector
+                    options={months}
+                    selectedValue={tempFilters.month}
+                    onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, month: value }))}
+                    visible={activeSelector === 'month'}
+                    onOpen={() => setActiveSelector('month')}
+                    onClose={() => setActiveSelector(null)}
+                  />
                 </View>
                 <View style={[styles.filterField, { flex: 1 }]}>
                   <Text style={styles.filterLabel}>Week</Text>
@@ -1369,8 +1367,6 @@ const styles = StyleSheet.create({
   filterField: { gap: 6 },
   filterLabel: { fontSize: 12, fontWeight: '600', color: '#64748b' },
   filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, backgroundColor: '#f8fafc', color: '#1e293b' },
-  pickerContainer: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, backgroundColor: '#f8fafc', overflow: 'hidden' },
-  picker: { height: 50, width: '100%', color: '#1e293b' },
   dateRangeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dateButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#f8fafc' },
   dateButtonText: { fontSize: 12, color: '#1e293b' },

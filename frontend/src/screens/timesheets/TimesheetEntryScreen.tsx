@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import { format, startOfWeek, addDays, isSameDay, getWeek } from 'date-fns';
 import {
   Plus,

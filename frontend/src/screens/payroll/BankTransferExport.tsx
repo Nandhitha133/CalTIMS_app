@@ -15,32 +15,13 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import RNFS from 'react-native-fs';
-import {
-  Landmark,
-  Wallet,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  ShieldAlert,
-  Filter,
-  Download,
-  Eye,
-  Edit3,
-  X,
-  Search,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Building2,
-  Calendar,
-  Users,
-} from 'lucide-react-native';
+import { Landmark, Wallet, CheckCircle2, Clock, AlertCircle, ShieldAlert, Filter, Download, Eye, Edit3, X, Search, ChevronDown, ChevronLeft, ChevronRight, Building2, Calendar, Users } from 'lucide-react-native';
 import { payrollAPI, settingsAPI, userAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
-import { formatCurrency } from '../../utils/formatters';
+import SafeSelector from '../../components/common/SafeSelector';
+import { formatCurrency } from './payrollFormatters';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const COLORS = {
@@ -224,6 +205,7 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
   const [refreshing, setRefreshing] = useState(false);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [bankFilter, setBankFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -520,53 +502,50 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
             <View style={styles.filterGroup}>
               <View style={styles.filterChip}>
                 <Building2 size={14} color={COLORS.gray} />
-                <Picker
+                <SafeSelector
+                  options={[...Array(12)].map((_, i) => ({
+                    label: new Date(2024, i).toLocaleString('default', { month: 'long' }),
+                    value: i + 1,
+                  }))}
                   selectedValue={month}
-                  onValueChange={(v: number) => setMonth(v)}
-                  style={styles.filterPicker}
-                  dropdownIconColor={COLORS.dark}
-                  itemStyle={styles.pickerItem}
-                >
-                  {[...Array(12)].map((_, i) => (
-                    <Picker.Item
-                      key={i + 1}
-                      label={new Date(2024, i).toLocaleString('default', { month: 'short' })}
-                      value={i + 1}
-                      color={COLORS.dark}
-                    />
-                  ))}
-                </Picker>
+                  onValueChange={(v) => setMonth(v)}
+                  visible={activeSelector === 'month'}
+                  onOpen={() => setActiveSelector('month')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                />
               </View>
               <View style={styles.filterChip}>
                 <Building2 size={14} color={COLORS.gray} />
-                <Picker
+                <SafeSelector
+                  options={[2024, 2025, 2026].map((y) => ({
+                    label: String(y),
+                    value: y,
+                  }))}
                   selectedValue={year}
-                  onValueChange={(v: number) => setYear(v)}
-                  style={styles.filterPicker}
-                  dropdownIconColor={COLORS.dark}
-                  itemStyle={styles.pickerItem}
-                >
-                  {[2024, 2025, 2026].map((y) => (
-                    <Picker.Item key={y} label={String(y)} value={y} color={COLORS.dark} />
-                  ))}
-                </Picker>
+                  onValueChange={(v) => setYear(v)}
+                  visible={activeSelector === 'year'}
+                  onOpen={() => setActiveSelector('year')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                />
               </View>
             </View>
 
             <View style={styles.filterChip}>
               <Landmark size={14} color={COLORS.gray} />
-              <Picker
+              <SafeSelector
+                options={[
+                  { label: 'All Banks', value: '' },
+                  ...uniqueBanks.map((bank: any) => ({ label: bank, value: bank })),
+                ]}
                 selectedValue={bankFilter}
-                onValueChange={(v: string) => setBankFilter(v)}
-                style={styles.filterPicker}
-                dropdownIconColor={COLORS.dark}
-                itemStyle={styles.pickerItem}
-              >
-                <Picker.Item label="All Banks" value="" color={COLORS.dark} />
-                {uniqueBanks.map((bank: any) => (
-                  <Picker.Item key={bank} label={bank} value={bank} color={COLORS.dark} />
-                ))}
-              </Picker>
+                onValueChange={(v) => setBankFilter(v)}
+                visible={activeSelector === 'bank'}
+                onOpen={() => setActiveSelector('bank')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.safeSelector}
+              />
             </View>
           </View>
 
@@ -670,7 +649,7 @@ const styles = StyleSheet.create({
   filtersContainer: { gap: 12, marginBottom: 20 },
   filterGroup: { flexDirection: 'row', gap: 12 },
   filterChip: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 12, height: 50, gap: 8 },
-  filterPicker: { flex: 1, height: 50, color: COLORS.dark },
+  safeSelector: { flex: 1, height: 44, backgroundColor: 'transparent' },
   pickerItem: { fontSize: 14, color: COLORS.dark },
 
   tableCard: { backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 20 },

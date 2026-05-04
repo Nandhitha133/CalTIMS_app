@@ -15,7 +15,6 @@ import {
   Platform,
   Share,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
@@ -44,6 +43,7 @@ import {
 import { timesheetService, TimesheetHistoryItem } from '../../services/timesheet.service';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
 import { formatHours } from '../../utils/formatters';
 
@@ -75,10 +75,12 @@ const FilterModal = ({
   theme: 'light' | 'dark';
 }) => {
   const [tempFilters, setTempFilters] = useState(filters);
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setTempFilters(filters);
+      setActiveSelector(null);
     }
   }, [visible, filters]);
 
@@ -98,58 +100,45 @@ const FilterModal = ({
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Year</Text>
-              <View style={[styles.filterPickerWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', borderColor: theme === 'dark' ? '#475569' : '#e2e8f0' }]}>
-                <Picker
-                  selectedValue={tempFilters.year}
-                  onValueChange={(value) => setTempFilters({ ...tempFilters, year: value })}
-                  style={[styles.filterPicker, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-                  dropdownIconColor={theme === 'dark' ? '#ffffff' : '#64748b'}
-                >
-                  {YEARS.map(year => (
-                    <Picker.Item key={year} label={year} value={year} />
-                  ))}
-                </Picker>
-              </View>
+              <SafeSelector
+                options={YEARS.map(year => ({ label: year, value: year }))}
+                selectedValue={tempFilters.year}
+                onValueChange={(value) => setTempFilters({ ...tempFilters, year: value })}
+                visible={activeSelector === 'year'}
+                onOpen={() => setActiveSelector('year')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.filterSafeSelector}
+              />
             </View>
 
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Month</Text>
-              <View style={[styles.filterPickerWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', borderColor: theme === 'dark' ? '#475569' : '#e2e8f0' }]}>
-                <Picker
-                  selectedValue={tempFilters.month}
-                  onValueChange={(value) => setTempFilters({ ...tempFilters, month: value })}
-                  style={[styles.filterPicker, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-                  dropdownIconColor={theme === 'dark' ? '#ffffff' : '#64748b'}
-                >
-                  {MONTHS.map(month => (
-                    <Picker.Item key={month} label={month} value={month} />
-                  ))}
-                </Picker>
-              </View>
+              <SafeSelector
+                options={MONTHS.map(month => ({ label: month, value: month }))}
+                selectedValue={tempFilters.month}
+                onValueChange={(value) => setTempFilters({ ...tempFilters, month: value })}
+                visible={activeSelector === 'month'}
+                onOpen={() => setActiveSelector('month')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.filterSafeSelector}
+              />
             </View>
 
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Status</Text>
-              <View style={[styles.filterPickerWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', borderColor: theme === 'dark' ? '#475569' : '#e2e8f0' }]}>
-                <Picker
-                  selectedValue={tempFilters.status}
-                  onValueChange={(value) => setTempFilters({ ...tempFilters, status: value })}
-                  style={[styles.filterPicker, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-                  dropdownIconColor={theme === 'dark' ? '#ffffff' : '#64748b'}
-                >
-                  {STATUSES.map(status => (
-                    <Picker.Item 
-                      key={status} 
-                      label={status === 'All Status' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1)} 
-                      value={status} 
-                    />
-                  ))}
-                </Picker>
-              </View>
+              <SafeSelector
+                options={STATUSES.map(status => ({ 
+                  label: status === 'All Status' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1), 
+                  value: status 
+                }))}
+                selectedValue={tempFilters.status}
+                onValueChange={(value) => setTempFilters({ ...tempFilters, status: value })}
+                visible={activeSelector === 'status'}
+                onOpen={() => setActiveSelector('status')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.filterSafeSelector}
+              />
             </View>
-
-
-  
           </ScrollView>
 
           <View style={styles.filterActions}>
@@ -905,15 +894,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748b',
   },
-  filterPickerWrapper: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  filterPicker: {
-    height: 50,
-    width: '100%',
+  filterSafeSelector: {
+    height: 44,
+    backgroundColor: 'transparent',
   },
   filterChip: {
     backgroundColor: '#6366f115',

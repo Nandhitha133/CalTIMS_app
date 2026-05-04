@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import {
   Play,
   CheckCircle2,
@@ -45,9 +44,10 @@ import {
   ShieldCheck,
 } from 'lucide-react-native';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency } from './payrollFormatters';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import SafeSelector from '../../components/common/SafeSelector';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -203,6 +203,7 @@ export function PayrollRun({ navigation }: { navigation: any }) {
   const [step, setStep] = useState(1);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [overtimeEnabled, setOvertimeEnabled] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [readinessData, setReadinessData] = useState<any>(null);
@@ -475,31 +476,29 @@ export function PayrollRun({ navigation }: { navigation: any }) {
                   <View style={styles.periodSelector}>
                     <Text style={styles.selectorLabel}>Salary Month</Text>
                     <View style={styles.pickerWrapper}>
-                      <Picker
+                      <SafeSelector
+                        options={months.map((m, i) => ({ label: m, value: i + 1 }))}
                         selectedValue={month}
-                        onValueChange={(v: number) => setMonth(v)}
-                        style={styles.picker}
-                        dropdownIconColor={COLORS.gray}
-                      >
-                        {months.map((m, i) => (
-                          <Picker.Item key={i} label={m} value={i + 1} />
-                        ))}
-                      </Picker>
+                        onValueChange={(v) => setMonth(v)}
+                        visible={activeSelector === 'month'}
+                        onOpen={() => setActiveSelector('month')}
+                        onClose={() => setActiveSelector(null)}
+                        style={styles.safeSelector}
+                      />
                     </View>
                   </View>
                   <View style={styles.periodSelector}>
                     <Text style={styles.selectorLabel}>Salary Year</Text>
                     <View style={styles.pickerWrapper}>
-                      <Picker
+                      <SafeSelector
+                        options={years.map((y) => ({ label: String(y), value: y }))}
                         selectedValue={year}
-                        onValueChange={(v: number) => setYear(v)}
-                        style={styles.picker}
-                        dropdownIconColor={COLORS.gray}
-                      >
-                        {years.map((y) => (
-                          <Picker.Item key={y} label={String(y)} value={y} />
-                        ))}
-                      </Picker>
+                        onValueChange={(v) => setYear(v)}
+                        visible={activeSelector === 'year'}
+                        onOpen={() => setActiveSelector('year')}
+                        onClose={() => setActiveSelector(null)}
+                        style={styles.safeSelector}
+                      />
                     </View>
                   </View>
                 </View>
@@ -745,7 +744,7 @@ const styles = StyleSheet.create({
   periodSelector: { flex: 1 },
   selectorLabel: { fontSize: 10, fontWeight: 'bold', color: COLORS.gray, marginBottom: 8, textTransform: 'uppercase' },
   pickerWrapper: { backgroundColor: COLORS.light, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
-  picker: { height: 50, width: '100%' },
+  safeSelector: { height: 44, width: '100%', backgroundColor: 'transparent' },
   continueButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 16, borderRadius: 24 },
   continueButtonText: { fontSize: 16, fontWeight: 'bold', color: COLORS.white },
 

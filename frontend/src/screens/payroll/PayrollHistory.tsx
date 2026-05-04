@@ -11,11 +11,9 @@ import {
   Alert,
   Modal,
   TextInput,
-  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import {
   Archive,
   Users,
@@ -30,14 +28,17 @@ import {
   CreditCard,
   X,
   History,
-  Calendar,
-  CheckCircle2,
+  Eye,
+  Send,
+  MoreVertical,
+  Plus,
 } from 'lucide-react-native';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CollapsibleSidebar from '../../components/common/CollapsibleSidebar';
-import { formatCurrency } from '../../utils/formatters';
+import SafeSelector from '../../components/common/SafeSelector';
+import { formatCurrency } from './payrollFormatters';
 
 const COLORS = {
   primary: '#6366f1',
@@ -178,6 +179,7 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
+  const [activeSelector, setActiveSelector] = useState(false);
   const [detailRecords, setDetailRecords] = useState<PayrollDetail[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [settings, setSettings] = useState<any>(null);
@@ -333,18 +335,21 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
 
             <View style={styles.filterRow}>
               <View style={styles.filterChip}>
-                <Filter size={14} color={COLORS.gray} />
-                <Picker
-                  selectedValue={statusFilter}
-                  onValueChange={(v: any) => setStatusFilter(v)}
-                  style={styles.filterPicker}
-                  dropdownIconColor={COLORS.gray}
-                >
-                  <Picker.Item label="All Cycles" value="all" />
-                  <Picker.Item label="Paid" value="Paid" />
-                  <Picker.Item label="Unpaid" value="Unpaid" />
-                </Picker>
-              </View>
+              <Filter size={14} color={COLORS.gray} />
+              <SafeSelector
+                options={[
+                  { label: 'All Cycles', value: 'all' },
+                  { label: 'Paid', value: 'Paid' },
+                  { label: 'Unpaid', value: 'Unpaid' },
+                ]}
+                selectedValue={statusFilter}
+                onValueChange={(v) => setStatusFilter(v)}
+                visible={activeSelector}
+                onOpen={() => setActiveSelector(true)}
+                onClose={() => setActiveSelector(false)}
+                style={styles.filterSafeSelector}
+              />
+            </View>
 
               <TouchableOpacity style={styles.exportButton} onPress={() => setShowExportMenu(true)}>
                 <Download size={16} color={COLORS.white} />
@@ -373,7 +378,7 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
         </View>
       </ScrollView>
 
-      <Footer showSocialLinks showCopyright />
+      <Footer showCopyright />
       <CollapsibleSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} user={user} />
 
       {/* Export Menu Modal */}
@@ -604,9 +609,10 @@ const styles = StyleSheet.create({
     height: 44,
     gap: 8,
   },
-  filterPicker: {
-    flex: 1,
-    height: 44,
+  filterSafeSelector: {
+    width: 130,
+    height: 36,
+    backgroundColor: 'transparent',
   },
   exportButton: {
     flex: 1,

@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import {
   Calendar,
   Download,
@@ -36,7 +35,8 @@ import {
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
-import { formatCurrency } from '../../utils/formatters';
+import SafeSelector from '../../components/common/SafeSelector';
+import { formatCurrency } from './payrollFormatters';
 import RNFS from 'react-native-fs';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
@@ -250,6 +250,7 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [payslip, setPayslip] = useState<Payslip | null>(null);
   const [history, setHistory] = useState<Payslip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -296,22 +297,23 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  const fetchAllData = async () => {
-    setLoading(true);
+  const fetchAllData = async (showFullLoading = false) => {
+    if (showFullLoading) setLoading(true);
     await Promise.all([fetchSettings(), fetchPayslips()]);
-    setLoading(false);
+    if (showFullLoading) setLoading(false);
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAllData();
+    await fetchAllData(false);
     setRefreshing(false);
   };
 
   useFocusEffect(
     useCallback(() => {
       loadUserData();
-      fetchAllData();
+      // Initial load with full screen spinner, subsequent filter changes won't unmount pickers
+      fetchAllData(loading); 
     }, [selectedMonth, selectedYear])
   );
 
@@ -453,28 +455,26 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
           <View style={styles.selectorContainer}>
             <Calendar size={18} color="#3b82f6" />
             <View style={styles.pickerWrapper}>
-              <Picker
+              <SafeSelector
+                options={months.map((m, i) => ({ label: m, value: i + 1 }))}
                 selectedValue={selectedMonth}
-                onValueChange={(v: number) => setSelectedMonth(v)}
-                style={styles.picker}
-                dropdownIconColor="#64748b"
-              >
-                {months.map((m, i) => (
-                  <Picker.Item key={m} label={m} value={i + 1} />
-                ))}
-              </Picker>
+                onValueChange={(v) => setSelectedMonth(v)}
+                visible={activeSelector === 'month'}
+                onOpen={() => setActiveSelector('month')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.safeSelector}
+              />
             </View>
             <View style={styles.pickerWrapper}>
-              <Picker
+              <SafeSelector
+                options={years.map((y) => ({ label: String(y), value: y }))}
                 selectedValue={selectedYear}
-                onValueChange={(v: number) => setSelectedYear(v)}
-                style={styles.picker}
-                dropdownIconColor="#64748b"
-              >
-                {years.map((y) => (
-                  <Picker.Item key={y} label={String(y)} value={y} />
-                ))}
-              </Picker>
+                onValueChange={(v) => setSelectedYear(v)}
+                visible={activeSelector === 'year'}
+                onOpen={() => setActiveSelector('year')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.safeSelector}
+              />
             </View>
           </View>
 
@@ -647,8 +647,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  pickerWrapper: { flex: 1, height: 50 },
-  picker: { height: 50, width: '100%' },
+  pickerWrapper: { flex: 1, height: 50, overflow: 'hidden' },
+  safeSelector: { height: 40, width: '100%', backgroundColor: 'transparent' },
 
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
   statCard: { flex: 1, minWidth: '45%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },

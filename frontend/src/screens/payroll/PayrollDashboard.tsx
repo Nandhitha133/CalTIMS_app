@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import {
   Wallet,
   Calendar,
@@ -37,6 +36,7 @@ import {
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
 
 // Color palette
@@ -183,7 +183,7 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
 
   const loadUserData = async () => {
     try {
@@ -326,14 +326,34 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
       />
 
       <View style={styles.content}>
-        {/* Month/Year Selector */}
-        <TouchableOpacity style={styles.dateSelector} onPress={() => setShowMonthPicker(true)}>
-          <Calendar size={16} color={COLORS.gray} />
-          <Text style={styles.dateSelectorText}>
-            {new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' })} {selectedYear}
-          </Text>
-          <ChevronRight size={16} color={COLORS.gray} />
-        </TouchableOpacity>
+        {/* Month/Year Selectors */}
+        <View style={styles.dateSelectorsRow}>
+          <View style={styles.dateSelectorWrapper}>
+            <SafeSelector
+              options={[
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+              ].map((m, i) => ({ label: m, value: i + 1 }))}
+              selectedValue={selectedMonth}
+              onValueChange={(v) => setSelectedMonth(v)}
+              visible={activeSelector === 'month'}
+              onOpen={() => setActiveSelector('month')}
+              onClose={() => setActiveSelector(null)}
+              style={styles.dateSafeSelector}
+            />
+          </View>
+          <View style={styles.dateSelectorWrapper}>
+            <SafeSelector
+              options={[2024, 2025, 2026].map(y => ({ label: String(y), value: y }))}
+              selectedValue={selectedYear}
+              onValueChange={(v) => setSelectedYear(v)}
+              visible={activeSelector === 'year'}
+              onOpen={() => setActiveSelector('year')}
+              onClose={() => setActiveSelector(null)}
+              style={styles.dateSafeSelector}
+            />
+          </View>
+        </View>
 
         {/* Module Navigation Grid - New Section */}
         <View style={styles.moduleGrid}>
@@ -589,23 +609,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  dateSelector: {
+  dateSelectorsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    gap: 12,
     marginBottom: 20,
-    alignSelf: 'flex-start',
   },
-  dateSelectorText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.dark,
+  dateSelectorWrapper: {
+    flex: 1,
+  },
+  dateSafeSelector: {
+    backgroundColor: COLORS.white,
+    height: 48,
   },
   kpiGrid: {
     flexDirection: 'row',

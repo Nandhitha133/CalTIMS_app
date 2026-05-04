@@ -16,30 +16,26 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Users,
-  CheckCircle2,
-  Clock,
   AlertCircle,
   Search,
   Filter,
-  Eye,
-  Edit3,
   Trash2,
   X,
   Save,
   Building2,
-  Banknote,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Shield,
   CreditCard,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import { payrollAPI, userAPI } from '../../services/endpoints';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CollapsibleSidebar from '../../components/common/CollapsibleSidebar';
+import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
 
 const COLORS = {
@@ -154,7 +150,7 @@ const ProfileCard = ({ employee, onPress, currencySymbol }: ProfileCardProps) =>
   );
 };
 
-export const EmployeePayrollProfiles = ({ navigation }: { navigation: any }) => {
+export const EmployeePayrollProfiles = () => {
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -169,6 +165,7 @@ export const EmployeePayrollProfiles = ({ navigation }: { navigation: any }) => 
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     payrollType: 'Monthly',
     employeeType: 'Permanent',
@@ -452,32 +449,32 @@ export const EmployeePayrollProfiles = ({ navigation }: { navigation: any }) => 
 
           {/* Filters */}
           <View style={styles.filtersRow}>
-            <View style={styles.filterChip}>
-              <Filter size={14} color={COLORS.gray} />
-              <Picker
-                selectedValue={deptFilter}
-                onValueChange={(v: any) => setDeptFilter(v)}
-                style={styles.filterPicker}
-              >
-                {departments.map(dept => (
-                  <Picker.Item key={dept} label={dept === 'All' ? 'All Depts' : dept} value={dept} />
-                ))}
-              </Picker>
-            </View>
+            <SafeSelector
+              style={styles.filterChip}
+              options={departments.map(dept => ({ label: dept === 'All' ? 'All Depts' : dept, value: dept }))}
+              selectedValue={deptFilter}
+              onValueChange={(v) => setDeptFilter(v)}
+              visible={activeSelector === 'dept'}
+              onOpen={() => setActiveSelector('dept')}
+              onClose={() => setActiveSelector(null)}
+              placeholder="All Depts"
+            />
             
-            <View style={styles.filterChip}>
-              <Filter size={14} color={COLORS.gray} />
-              <Picker
-                selectedValue={statusFilter}
-                onValueChange={(v: any) => setStatusFilter(v)}
-                style={styles.filterPicker}
-              >
-                <Picker.Item label="All Status" value="All" />
-                <Picker.Item label="Active" value="Active" />
-                <Picker.Item label="Pending Setup" value="Not Configured" />
-                <Picker.Item label="Error" value="Error" />
-              </Picker>
-            </View>
+            <SafeSelector
+              style={styles.filterChip}
+              options={[
+                { label: 'All Status', value: 'All' },
+                { label: 'Active', value: 'Active' },
+                { label: 'Pending Setup', value: 'Not Configured' },
+                { label: 'Error', value: 'Error' },
+              ]}
+              selectedValue={statusFilter}
+              onValueChange={(v) => setStatusFilter(v)}
+              visible={activeSelector === 'status'}
+              onOpen={() => setActiveSelector('status')}
+              onClose={() => setActiveSelector(null)}
+              placeholder="All Status"
+            />
           </View>
 
           {/* Profiles List */}
@@ -523,7 +520,7 @@ export const EmployeePayrollProfiles = ({ navigation }: { navigation: any }) => 
         </View>
       </ScrollView>
 
-      <Footer showSocialLinks showCopyright />
+      <Footer showCopyright />
       <CollapsibleSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} user={user} />
 
       {/* Profile Modal */}
@@ -583,31 +580,37 @@ export const EmployeePayrollProfiles = ({ navigation }: { navigation: any }) => 
                   <Text style={styles.sectionTitle}>Payroll Configuration</Text>
                   
                   <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Payroll Cycle</Text>
-                    <Picker
+                    <SafeSelector
+                      label="Payroll Cycle"
+                      options={[
+                        { label: 'Monthly', value: 'Monthly' },
+                        { label: 'Weekly', value: 'Weekly' },
+                        { label: 'Hourly', value: 'Hourly' },
+                        { label: 'Daily', value: 'Daily' },
+                      ]}
                       selectedValue={formData.payrollType}
-                      onValueChange={(v: any) => setFormData({ ...formData, payrollType: v })}
-                      style={styles.formPicker}
-                    >
-                      <Picker.Item label="Monthly" value="Monthly" />
-                      <Picker.Item label="Weekly" value="Weekly" />
-                      <Picker.Item label="Hourly" value="Hourly" />
-                      <Picker.Item label="Daily" value="Daily" />
-                    </Picker>
+                      onValueChange={(v) => setFormData({ ...formData, payrollType: v })}
+                      visible={activeSelector === 'payrollType'}
+                      onOpen={() => setActiveSelector('payrollType')}
+                      onClose={() => setActiveSelector(null)}
+                    />
                   </View>
 
                   <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Employment Type</Text>
-                    <Picker
+                    <SafeSelector
+                      label="Employment Type"
+                      options={[
+                        { label: 'Permanent', value: 'Permanent' },
+                        { label: 'Contractor', value: 'Contractor' },
+                        { label: 'Probation', value: 'Probation' },
+                        { label: 'Intern', value: 'Trainee' },
+                      ]}
                       selectedValue={formData.employeeType}
-                      onValueChange={(v: any) => setFormData({ ...formData, employeeType: v })}
-                      style={styles.formPicker}
-                    >
-                      <Picker.Item label="Permanent" value="Permanent" />
-                      <Picker.Item label="Contractor" value="Contractor" />
-                      <Picker.Item label="Probation" value="Probation" />
-                      <Picker.Item label="Intern" value="Trainee" />
-                    </Picker>
+                      onValueChange={(v) => setFormData({ ...formData, employeeType: v })}
+                      visible={activeSelector === 'employeeType'}
+                      onOpen={() => setActiveSelector('employeeType')}
+                      onClose={() => setActiveSelector(null)}
+                    />
                   </View>
 
                   <View style={styles.formField}>
@@ -634,17 +637,19 @@ export const EmployeePayrollProfiles = ({ navigation }: { navigation: any }) => 
 
                   {formData.salaryMode === 'Employee-Based' && (
                     <View style={styles.formField}>
-                      <Text style={styles.formLabel}>Salary Structure</Text>
-                      <Picker
+                      <SafeSelector
+                        label="Salary Structure"
+                        options={[
+                          { label: 'Select a structure...', value: '' },
+                          ...structures.filter(s => s.type === 'Employee-Based').map(s => ({ label: s.name, value: s._id }))
+                        ]}
                         selectedValue={formData.salaryStructureId}
-                        onValueChange={(v: any) => setFormData({ ...formData, salaryStructureId: v })}
-                        style={styles.formPicker}
-                      >
-                        <Picker.Item label="Select a structure..." value="" />
-                        {structures.filter(s => s.type === 'Employee-Based').map(s => (
-                          <Picker.Item key={s._id} label={s.name} value={s._id} />
-                        ))}
-                      </Picker>
+                        onValueChange={(v) => setFormData({ ...formData, salaryStructureId: v })}
+                        visible={activeSelector === 'salaryStructure'}
+                        onOpen={() => setActiveSelector('salaryStructure')}
+                        onClose={() => setActiveSelector(null)}
+                        placeholder="Select a structure..."
+                      />
                     </View>
                   )}
 

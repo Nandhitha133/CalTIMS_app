@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import {
   Layers,
   Plus,
@@ -33,6 +32,7 @@ import { payrollAPI } from '../../services/endpoints';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CollapsibleSidebar from '../../components/common/CollapsibleSidebar';
+import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
 
 const COLORS = {
@@ -198,9 +198,21 @@ interface ComponentRowProps {
   type: 'earnings' | 'deductions';
   onUpdate: (type: 'earnings' | 'deductions', index: number, field: string, value: any) => void;
   onRemove: (type: 'earnings' | 'deductions', index: number) => void;
+  activeSelector: { type: string, index?: number } | null;
+  onOpenSelector: (type: string, index: number) => void;
+  onCloseSelector: () => void;
 }
 
-const ComponentRow = ({ component, index, type, onUpdate, onRemove }: ComponentRowProps) => (
+const ComponentRow = ({ 
+  component, 
+  index, 
+  type, 
+  onUpdate, 
+  onRemove,
+  activeSelector,
+  onOpenSelector,
+  onCloseSelector
+}: ComponentRowProps) => (
   <View style={styles.componentRow}>
     <TextInput
       style={styles.componentName}
@@ -209,14 +221,18 @@ const ComponentRow = ({ component, index, type, onUpdate, onRemove }: ComponentR
       onChangeText={(text) => onUpdate(type, index, 'name', text)}
       placeholderTextColor={COLORS.gray}
     />
-    <Picker
+    <SafeSelector
+      style={styles.componentSelector}
+      options={[
+        { label: 'Fixed', value: 'Fixed' },
+        { label: 'Percentage', value: 'Percentage' },
+      ]}
       selectedValue={component.calculationType}
       onValueChange={(v) => onUpdate(type, index, 'calculationType', v)}
-      style={styles.componentPicker}
-    >
-      <Picker.Item label="Fixed" value="Fixed" />
-      <Picker.Item label="Percentage" value="Percentage" />
-    </Picker>
+      visible={activeSelector?.type === type && activeSelector?.index === index}
+      onOpen={() => onOpenSelector(type, index)}
+      onClose={onCloseSelector}
+    />
     <TextInput
       style={styles.componentValue}
       placeholder="Value"
@@ -243,6 +259,7 @@ export const SalaryStructures = () => {
   const [editingStructure, setEditingStructure] = useState<SalaryStructure | null>(null);
   const [showStatusConfirm, setShowStatusConfirm] = useState<SalaryStructure | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [activeSelector, setActiveSelector] = useState<{ type: string, index?: number } | null>(null);
   const [formData, setFormData] = useState<{
     name: string;
     description: string;
@@ -560,7 +577,7 @@ export const SalaryStructures = () => {
         </View>
       </ScrollView>
 
-      <Footer showSocialLinks showCopyright />
+      <Footer showCopyright />
       <CollapsibleSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} user={user} />
 
       {/* Edit/Create Modal */}
@@ -627,6 +644,9 @@ export const SalaryStructures = () => {
                       component={e}
                       onUpdate={updateComponent}
                       onRemove={removeComponent}
+                      activeSelector={activeSelector}
+                      onOpenSelector={(type, index) => setActiveSelector({ type, index })}
+                      onCloseSelector={() => setActiveSelector(null)}
                     />
                   ))}
                 </View>
@@ -647,6 +667,9 @@ export const SalaryStructures = () => {
                       component={d}
                       onUpdate={updateComponent}
                       onRemove={removeComponent}
+                      activeSelector={activeSelector}
+                      onOpenSelector={(type, index) => setActiveSelector({ type, index })}
+                      onCloseSelector={() => setActiveSelector(null)}
                     />
                   ))}
                 </View>

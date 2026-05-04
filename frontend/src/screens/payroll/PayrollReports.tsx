@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
 import {
   Wallet,
   Calculator,
@@ -40,7 +39,8 @@ import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
-import { formatCurrency } from '../../utils/formatters';
+import SafeSelector from '../../components/common/SafeSelector';
+import { formatCurrency } from './payrollFormatters';
 import RNFS from 'react-native-fs';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
@@ -357,6 +357,7 @@ export function PayrollReports({ navigation }: { navigation: any }) {
   const [selectedMetric, setSelectedMetric] = useState('netPay');
   const [tableFilter, setTableFilter] = useState('All');
   const [reportPeriod, setReportPeriod] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() });
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -737,16 +738,19 @@ export function PayrollReports({ navigation }: { navigation: any }) {
             </View>
 
             <View style={styles.pickerWrapper}>
-              <Picker
+              <SafeSelector
+                options={[
+                  { label: '3 Months', value: 3 },
+                  { label: '6 Months', value: 6 },
+                  { label: '12 Months', value: 12 },
+                ]}
                 selectedValue={timeRange}
-                onValueChange={(v: number) => setTimeRange(v)}
-                style={styles.picker}
-                dropdownIconColor={COLORS.gray}
-              >
-                <Picker.Item label="3 Months" value={3} />
-                <Picker.Item label="6 Months" value={6} />
-                <Picker.Item label="12 Months" value={12} />
-              </Picker>
+                onValueChange={(v) => setTimeRange(v)}
+                visible={activeSelector === 'timeRange'}
+                onOpen={() => setActiveSelector('timeRange')}
+                onClose={() => setActiveSelector(null)}
+                style={styles.safeSelector}
+              />
             </View>
 
             <View style={styles.metricSelector}>
@@ -912,32 +916,32 @@ export function PayrollReports({ navigation }: { navigation: any }) {
 
             <View style={styles.archivePeriod}>
               <View style={styles.pickerWrapper}>
-                <Picker
+                <SafeSelector
+                  options={[...Array(12)].map((_, i) => ({
+                    label: new Date(2024, i).toLocaleString('default', { month: 'long' }),
+                    value: i + 1,
+                  }))}
                   selectedValue={reportPeriod.month}
-                  onValueChange={(v: number) => setReportPeriod({ ...reportPeriod, month: v })}
-                  style={styles.picker}
-                  dropdownIconColor={COLORS.gray}
-                >
-                  {[...Array(12)].map((_, i) => (
-                    <Picker.Item
-                      key={i + 1}
-                      label={new Date(2024, i).toLocaleString('default', { month: 'long' })}
-                      value={i + 1}
-                    />
-                  ))}
-                </Picker>
+                  onValueChange={(v) => setReportPeriod({ ...reportPeriod, month: v })}
+                  visible={activeSelector === 'reportMonth'}
+                  onOpen={() => setActiveSelector('reportMonth')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                />
               </View>
               <View style={styles.pickerWrapper}>
-                <Picker
+                <SafeSelector
+                  options={[2024, 2025, 2026].map((y) => ({
+                    label: String(y),
+                    value: y,
+                  }))}
                   selectedValue={reportPeriod.year}
-                  onValueChange={(v: number) => setReportPeriod({ ...reportPeriod, year: v })}
-                  style={styles.picker}
-                  dropdownIconColor={COLORS.gray}
-                >
-                  {[2024, 2025, 2026].map((y) => (
-                    <Picker.Item key={y} label={String(y)} value={y} />
-                  ))}
-                </Picker>
+                  onValueChange={(v) => setReportPeriod({ ...reportPeriod, year: v })}
+                  visible={activeSelector === 'reportYear'}
+                  onOpen={() => setActiveSelector('reportYear')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                />
               </View>
             </View>
 
@@ -989,7 +993,7 @@ const styles = StyleSheet.create({
   chartTypeText: { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', color: COLORS.gray },
   chartTypeTextActive: { color: COLORS.primary },
   pickerWrapper: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, overflow: 'hidden', marginVertical: 4 },
-  picker: { height: 40, width: '100%' },
+  safeSelector: { height: 40, width: '100%', backgroundColor: 'transparent' },
   metricSelector: { flexDirection: 'row', gap: 8, marginTop: 4 },
   metricButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8, backgroundColor: COLORS.light },
   metricButtonActive: { backgroundColor: `${COLORS.primary}15` },
