@@ -4,13 +4,9 @@ import { useAuthStore } from '../store/authStore';
 
 // Get base URL based on environment
 const getBaseUrl = () => {
-  // Check if we are in production or should use Render
-  // The user mentioned "Render connect", so we ensure the Render URL is used if preferred
-  const RENDER_URL = 'https://caltims-backend.onrender.com/api/v1';
+  // Main live link - do not change
   const PRODUCTION_URL = 'https://caldimproducts.com/caltims/api/v1';
 
-  // Return the production URL by default, but prioritize Render if requested via logic
-  // For now, we'll keep the production URL but ensure it's robust
   return PRODUCTION_URL;
 };
 

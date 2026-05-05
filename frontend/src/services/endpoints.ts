@@ -262,6 +262,18 @@ export const payrollAPI = {
     apiService.delete(`/payroll/structures/${id}`),
 };
 
+// ==================== POLICY API ====================
+export const policyAPI = {
+  getPolicy: () => 
+    apiService.get('/policy'),
+  updatePolicy: (data: any) => 
+    apiService.put('/policy', data),
+  createVersion: (data: any) => 
+    apiService.post('/policy/version', data),
+  preview: (data: any) => 
+    apiService.post('/policy/preview', data),
+};
+
 // ==================== SUBSCRIPTION API ====================
 export const subscriptionAPI = {
   getCurrent: () => 
@@ -346,18 +358,6 @@ export const supportService = {
     apiService.patch(`/support/tickets/${id}`, { status }),
   deleteTicket: (id: string) => 
     apiService.delete(`/support/tickets/${id}`),
-};
-
-// ==================== POLICY API ====================
-export const policyAPI = {
-  getPolicy: () => 
-    apiService.get('/policies/payroll'),
-  updatePolicy: (data: any) => 
-    apiService.put('/policies/payroll', data),
-  createVersion: (data: any) => 
-    apiService.post('/policies/payroll/versions', data),
-  preview: (data: any) => 
-    apiService.post('/policies/payroll/preview', data),
 };
 
 // ==================== EXPORTS ====================

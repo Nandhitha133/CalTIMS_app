@@ -8,7 +8,6 @@ import OAuthSuccessScreen from '../screens/login/OAuthSuccessScreen';
 import SignupScreen from '../screens/login/SignupScreen';
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
 import SubscriptionScreen from '../screens/subscription/SubscriptionScreen';
-
 import MyPayslipsScreen from '../screens/payroll/MyPayslipsScreen';
 import {
   PayrollDashboard,

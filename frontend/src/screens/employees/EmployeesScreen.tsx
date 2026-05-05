@@ -50,6 +50,14 @@ import DropdownModal from '../../components/common/DropdownModal';
 import EmployeeCard from '../../components/employees/EmployeeCard';
 import EmployeeHistory from '../../components/employees/EmployeeHistory';
 
+// Helper to extract data from API response
+const extractData = (response: any, defaultValue: any = null): any => {
+  if (!response) return defaultValue;
+  if (response.data?.data) return response.data.data;
+  if (response.data) return response.data;
+  return response;
+};
+
 // Styles
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
@@ -317,21 +325,24 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const fetchDepartments = async () => {
     try {
       const response = await userAPI.getDepartments();
-      setDepartments((response as any)?.data?.data || []);
+      const data = extractData(response, []);
+      setDepartments(data);
     } catch (error) { console.error('Error fetching departments:', error); }
   };
 
   const fetchRoles = async () => {
     try {
       const response = await userAPI.getRoles();
-      setRoles((response as any)?.data?.data || []);
+      const data = extractData(response, []);
+      setRoles(data);
     } catch (error) { console.error('Error fetching roles:', error); }
   };
 
   const fetchAllEmployees = async () => {
     try {
       const response = await userAPI.getAll({ limit: 5000 });
-      setAllEmployees((response as any)?.data?.data || []);
+      const data = extractData(response, []);
+      setAllEmployees(data);
     } catch (error) { console.error('Error fetching all employees:', error); }
   };
 
@@ -341,8 +352,9 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
       const effectiveSearch = searchQuery.trim().length >= 2 ? searchQuery.trim() : '';
       const params: any = { page, limit, search: effectiveSearch, role: roleFilter, status: statusFilter, department: departmentFilter, employeeId: employeeIdFilter };
       const response = await userAPI.getAll(params);
-      const data = (response as any)?.data;
-      setEmployees(data?.data || []);
+      const data = extractData(response, {});
+      
+      setEmployees(data?.data || data || []);
       setTotalPages(data?.pagination?.totalPages || 1);
       setTotalResults(data?.pagination?.total || 0);
     } catch (error) {

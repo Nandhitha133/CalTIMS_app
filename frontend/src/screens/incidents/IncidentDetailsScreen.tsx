@@ -78,8 +78,11 @@ const priorityColors: Record<string, any> = {
 
 const extractData = (response: any, defaultValue: any = null): any => {
   if (!response) return defaultValue;
-  if (response.data?.data) return response.data.data;
-  if (response.data) return response.data;
+  // If the response is wrapped in { success: true, data: ... }
+  if (response.data !== undefined && response.data !== null) {
+    // If it's paginated or just a single object in .data
+    return response.data;
+  }
   return response;
 };
 
@@ -124,6 +127,26 @@ export default function IncidentDetailsScreen() {
   const fetchTicket = async () => {
     try {
       setLoading(true);
+      
+      // Check for mock data first
+      if (id === 'mock-1') {
+        setTicket({
+          _id: 'mock-1',
+          incidentId: 'INC-0001',
+          title: 'missing timesheet',
+          description: 'i forgot to fill timesheet .',
+          category: 'INCORRECT HOURS',
+          priority: 'Low',
+          status: 'Open',
+          employee: { id: 'm1', _id: 'm1', name: 'Current User', email: 'user@example.com', role: 'employee' },
+          responses: [],
+          createdAt: '2026-05-04T10:00:00.000Z',
+          updatedAt: '2026-05-04T10:00:00.000Z',
+        });
+        setLoading(false);
+        return;
+      }
+
       let response;
       if (type === 'support') {
         response = await supportService.getTicket(id!);
@@ -221,7 +244,8 @@ export default function IncidentDetailsScreen() {
     const colors = statusColors[status] || statusColors.Open;
     return (
       <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-        <Text style={[styles.statusText, { color: colors.text }]}>{status}</Text>
+        <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
+        <Text style={[styles.statusText, { color: colors.text }]}>{status.toUpperCase()}</Text>
       </View>
     );
   };
@@ -230,35 +254,14 @@ export default function IncidentDetailsScreen() {
     const colors = priorityColors[priority] || priorityColors.Medium;
     return (
       <View style={[styles.priorityBadge, { backgroundColor: colors.bg }]}>
-        <Text style={[styles.priorityText, { color: colors.text }]}>{priority}</Text>
+        <Text style={[styles.priorityText, { color: colors.text }]}>{priority.toUpperCase()}</Text>
       </View>
     );
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
-
-  if (!id || !ticket) {
-    return (
-      <View style={styles.errorContainer}>
-        <AlertCircle size={48} color="#ef4444" />
-        <Text style={styles.errorText}>{!id ? 'Invalid Ticket ID' : 'Ticket not found'}</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={16} color="#3b82f6" />
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const canReply = ticket.status !== 'Closed' && ticket.status !== 'Withdrawn';
-  const showWithdraw = !isAdmin && isOwner && ['Open', 'In Progress'].includes(ticket.status);
-  const showReopen = !isAdmin && isOwner && ['Resolved', 'Closed', 'Withdrawn'].includes(ticket.status);
+  const canReply = ticket?.status !== 'Closed' && ticket?.status !== 'Withdrawn';
+  const showWithdraw = !isAdmin && isOwner && ticket && ['Open', 'In Progress'].includes(ticket.status);
+  const showReopen = !isAdmin && isOwner && ticket && ['Resolved', 'Closed', 'Withdrawn'].includes(ticket.status);
 
   return (
     <Layout
@@ -269,14 +272,29 @@ export default function IncidentDetailsScreen() {
       refreshing={false}
       onRefresh={() => {}}
     >
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <PageHeader 
-            title={`Ticket ${ticket.incidentId || ticket._id.slice(-8)}`}
+      {loading ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={styles.loaderText}>Loading ticket details...</Text>
+        </View>
+      ) : !id || !ticket ? (
+        <View style={styles.errorContainer}>
+          <AlertCircle size={48} color="#ef4444" />
+          <Text style={styles.errorText}>{!id ? 'Invalid Ticket ID' : 'Ticket not found'}</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <ArrowLeft size={16} color="#3b82f6" />
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <PageHeader 
+            title={`Ticket ${ticket?.incidentId || (ticket?._id || '').slice(-8)}`}
             subtitle="Incident Details"
             icon={AlertCircle}
             iconColor="#3b82f6"
@@ -286,32 +304,32 @@ export default function IncidentDetailsScreen() {
           <View style={styles.content}>
             {/* Ticket Header */}
             <View style={styles.ticketHeader}>
-              {getStatusBadge(ticket.status)}
-              {getPriorityBadge(ticket.priority)}
+              {getStatusBadge(ticket?.status || 'Open')}
+              {getPriorityBadge(ticket?.priority || 'Medium')}
             </View>
 
-            <Text style={styles.ticketTitle}>{ticket.title}</Text>
+            <Text style={styles.ticketTitle}>{ticket?.title || 'No Title'}</Text>
 
             {/* Ticket Meta */}
             <View style={styles.metaContainer}>
               <View style={styles.metaItem}>
                 <User size={14} color="#64748b" />
-                <Text style={styles.metaText}>{ticket.employee?.name}</Text>
+                <Text style={styles.metaText}>{ticket?.employee?.name || 'Unknown'}</Text>
               </View>
               <View style={styles.metaItem}>
                 <Calendar size={14} color="#64748b" />
-                <Text style={styles.metaText}>{formatDate(ticket.createdAt, 'MMM d, yyyy h:mm a')}</Text>
+                <Text style={styles.metaText}>{formatDate(ticket?.createdAt || '', 'MMM d, yyyy h:mm a')}</Text>
               </View>
               <View style={styles.metaItem}>
                 <Tag size={14} color="#64748b" />
-                <Text style={styles.metaText}>{ticket.category}</Text>
+                <Text style={styles.metaText}>{ticket?.category || 'General'}</Text>
               </View>
             </View>
 
             {/* Description */}
             <View style={styles.descriptionCard}>
               <Text style={styles.descriptionTitle}>Description</Text>
-              <Text style={styles.descriptionText}>{ticket.description}</Text>
+              <Text style={styles.descriptionText}>{ticket?.description || 'No Description'}</Text>
             </View>
 
             {/* Admin Status Controls */}
@@ -331,10 +349,10 @@ export default function IncidentDetailsScreen() {
                     {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'].map(status => (
                       <TouchableOpacity
                         key={status}
-                        style={[styles.statusMenuItem, ticket.status === status && styles.statusMenuItemActive]}
+                        style={[styles.statusMenuItem, ticket?.status === status && styles.statusMenuItemActive]}
                         onPress={() => handleStatusChange(status)}
                       >
-                        <Text style={[styles.statusMenuItemText, ticket.status === status && styles.statusMenuItemTextActive]}>
+                        <Text style={[styles.statusMenuItemText, ticket?.status === status && styles.statusMenuItemTextActive]}>
                           {status}
                         </Text>
                       </TouchableOpacity>
@@ -365,25 +383,25 @@ export default function IncidentDetailsScreen() {
                 <Text style={styles.conversationTitle}>Conversation</Text>
               </View>
 
-              {ticket.responses?.length === 0 ? (
+              {ticket?.responses?.length === 0 ? (
                 <Text style={styles.noReplies}>No replies yet.</Text>
               ) : (
-                ticket.responses?.map((response, idx) => {
-                  const isMe = response.user?._id === user?._id || response.user?.id === user?.id;
-                  const isAdminResponse = response.user?.role === 'admin';
+                ticket?.responses?.map((response, idx) => {
+                  const isMe = response?.user?._id === user?._id || response?.user?.id === user?.id;
+                  const isAdminResponse = response?.user?.role === 'admin';
                   return (
                     <View key={idx} style={[styles.messageRow, isMe && styles.messageRowRight]}>
                       <View style={[styles.messageBubble, isMe ? styles.messageBubbleRight : styles.messageBubbleLeft]}>
                         <View style={styles.messageHeader}>
-                          <Text style={styles.messageName}>{response.user?.name}</Text>
+                          <Text style={styles.messageName}>{response?.user?.name || 'Unknown'}</Text>
                           {isAdminResponse && (
                             <Text style={styles.adminBadge}>Admin</Text>
                           )}
                           <Text style={styles.messageTime}>
-                            {formatDate(response.createdAt, 'MMM d, h:mm a')}
+                            {formatDate(response?.createdAt || '', 'MMM d, h:mm a')}
                           </Text>
                         </View>
-                        <Text style={styles.messageText}>{response.message}</Text>
+                        <Text style={styles.messageText}>{response?.message || ''}</Text>
                       </View>
                     </View>
                   );
@@ -415,18 +433,19 @@ export default function IncidentDetailsScreen() {
                 </View>
               )}
 
-              {!canReply && (
+              {!canReply && ticket && (
                 <View style={styles.closedMessage}>
                   <AlertCircle size={16} color="#f59e0b" />
                   <Text style={styles.closedMessageText}>
-                    This ticket is {ticket.status.toLowerCase()}. You cannot add new replies.
+                    This ticket is {(ticket?.status || '').toLowerCase()}. You cannot add new replies.
                   </Text>
                 </View>
               )}
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      )}
     </Layout>
   );
 }
@@ -442,10 +461,11 @@ const styles = StyleSheet.create({
   backButtonText: { fontSize: 14, fontWeight: '600', color: '#3b82f6' },
   
   ticketHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusText: { fontSize: 11, fontWeight: '600' },
-  priorityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  priorityText: { fontSize: 10, fontWeight: '600' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  priorityBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  priorityText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   
   ticketTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 16 },
   

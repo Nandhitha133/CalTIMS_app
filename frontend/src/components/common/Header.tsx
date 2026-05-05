@@ -303,7 +303,7 @@ export default function Header({
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       {showTrialBanner && bannerVisible && (
-        <TrialBanner onHide={() => setBannerVisible(false)} />
+        <TrialBanner onClose={() => setBannerVisible(false)} />
       )}
       
       <View style={styles.headerContent}>
