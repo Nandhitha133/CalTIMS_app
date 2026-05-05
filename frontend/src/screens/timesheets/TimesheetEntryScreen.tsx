@@ -48,6 +48,16 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Interfaces
+interface Row {
+  id: number;
+  projectId: string;
+  taskType: string;
+  dayHours: string[];
+  dayMeta: any[];
+  isLeaveRow?: boolean;
+}
+
 // Constants
 const DEFAULT_TASK_TYPES = ['Development', 'Bug Fixing', 'Design', 'Meeting', 'Documentation', 'Testing'];
 const DEFAULT_LEAVE_TYPES = ['Annual', 'Sick', 'Casual', 'Unpaid'];
@@ -385,7 +395,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       return new Date(initialDateStr);
     } catch { return new Date(); }
   });
-  const [rows, setRows] = useState<any[]>([
+  const [rows, setRows] = useState<Row[]>([
     { id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00'), dayMeta: Array(7).fill(null) }
   ]);
   const [isDirty, setIsDirty] = useState(false);

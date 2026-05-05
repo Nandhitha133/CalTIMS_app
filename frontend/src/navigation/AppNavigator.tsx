@@ -20,12 +20,11 @@ import {
   BankTransferExport,
   PayrollHourManagement,
   PayrollPolicy,
-  PayrollPayslip
+  PayrollPayslip,
 } from '../screens/payroll';
 import AnnouncementsScreen from '../screens/announcements/AnnouncementsScreen';
 import IncidentsScreen from '../screens/incidents/IncidentListScreen';
 import IncidentDetailsScreen from '../screens/incidents/IncidentDetailsScreen';
-// TimesheetEntryScreen module not found – using a placeholder component
 import TimesheetEntryScreen from '../screens/timesheets/TimesheetEntryScreen';
 import TimesheetHistoryScreen from '../screens/timesheets/TimesheetHistoryScreen';
 import AdminTimesheetScreen from '../screens/timesheets/AdminTimesheetScreen';
@@ -40,9 +39,6 @@ import NotificationsTab from '../screens/settings/tabs/NotificationsTab';
 import LeaveTrackerScreen from '../screens/leaves/LeaveTrackerScreen';
 import LeaveManagementScreen from '../screens/leaves/LeaveManagementScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
-
-
-
 
 export type RootStackParamList = {
   Login: undefined;

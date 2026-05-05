@@ -22,6 +22,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
+import { exportFile } from '../../utils/exportHelper';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const COLORS = {
@@ -339,70 +340,23 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
     ]);
   }, [filteredNodes, month, year]);
 
-  const requestStoragePermission = async (): Promise<boolean> => {
-    if (Platform.OS === 'android') {
-      try {
-        const permission = Platform.Version >= 33
-          ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES
-          : PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE;
-        const result = await request(permission);
-        return result === RESULTS.GRANTED;
-      } catch (error) {
-        console.error('Permission error:', error);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const saveFileToDevice = async (content: string, fileName: string): Promise<string> => {
-    const downloadPath = Platform.OS === 'android'
-      ? RNFS.DownloadDirectoryPath
-      : RNFS.DocumentDirectoryPath;
-    const filePath = `${downloadPath}/${fileName}`;
-    await RNFS.writeFile(filePath, content, 'utf8');
-    return filePath;
-  };
-
-  const shareFile = async (filePath: string, fileName: string) => {
-    await Share.share({
-      title: 'Bank Transfer File',
-      message: `Bank transfer file ${fileName} is ready`,
-      url: `file://${filePath}`,
-    });
-  };
-
   const downloadBankFile = async () => {
     if (!filteredNodes.length) {
       Alert.alert('No Data', 'No validated payouts found for export');
       return;
     }
 
-    const hasPermission = await requestStoragePermission();
-    if (!hasPermission) {
-      Alert.alert(
-        'Permission Required',
-        'Storage permission is needed to save exported files.',
-        [{ text: 'OK' }]
-      );
-      return;
+    try {
+      const fileName = `Bank_Transfer_${bankFilter || 'All'}_M${month}_Y${year}.csv`;
+      const content = [headers.join(','), ...previewRows.map((r) => r.join(','))].join('\n');
+
+      await exportFile(content, fileName, 'text/csv');
+      setIsConfirmOpen(false);
+      setIsPreviewOpen(false);
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to generate bank transfer file');
     }
-
-    const csvContent = [headers.join(','), ...previewRows.map((r) => r.join(','))].join('\n');
-    const fileName = `Bank_Transfer_${bankFilter || 'All'}_M${month}_Y${year}.csv`;
-    const filePath = await saveFileToDevice(csvContent, fileName);
-
-    Alert.alert(
-      'Export Successful',
-      `File saved to:\n${filePath}\n\nWould you like to share it?`,
-      [
-        { text: 'Close', style: 'cancel' },
-        { text: 'Share', onPress: () => shareFile(filePath, fileName) },
-      ]
-    );
-
-    setIsConfirmOpen(false);
-    setIsPreviewOpen(false);
   };
 
   const currencySymbol = settings?.payroll?.currencySymbol || '₹';

@@ -47,6 +47,7 @@ import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
 import { formatHours } from '../../utils/formatters';
+import { exportFile } from '../../utils/exportHelper';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -829,31 +830,13 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
         const url = globalAny.URL.createObjectURL(blob);
         const link = globalAny.document.createElement('a');
         link.href = url;
-        link.download = `timesheets_export_${format(new Date(), 'yyyyMMdd')}.csv`;
+        link.download = `admin_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
         link.click();
         globalAny.URL.revokeObjectURL(url);
       } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
         const fileName = `admin_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Admin Timesheets Export',
-          message: `Timesheets exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
+        await exportFile(csvData as string, fileName, 'text/csv');
       }
-
-      Alert.alert('Success', 'All matching records exported!');
     } catch (error) {
       console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to export CSV');

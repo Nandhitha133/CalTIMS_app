@@ -39,6 +39,7 @@ import Footer from '../../components/common/Footer';
 import CollapsibleSidebar from '../../components/common/CollapsibleSidebar';
 import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
+import { exportFile } from '../../utils/exportHelper';
 
 const COLORS = {
   primary: '#6366f1',
@@ -51,6 +52,14 @@ const COLORS = {
   gray: '#64748b',
   white: '#ffffff',
   border: '#e2e8f0',
+};
+
+// Helper to extract data from API response
+const extractData = (response: any, defaultValue: any = null): any => {
+  if (!response) return defaultValue;
+  if (response.data?.data) return response.data.data;
+  if (response.data) return response.data;
+  return response;
 };
 
 interface PayrollRun {
@@ -276,9 +285,50 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
     await fetchDetailRecords(run.month, run.year);
   };
 
-  const handleExport = (type: string) => {
+  const handleExport = async (type: string) => {
     setShowExportMenu(false);
-    Alert.alert('Export', `${type} export will be available soon`);
+    try {
+      // Fetch all records from the API to ensure we have ALL data for the export
+      const response = await payrollAPI.getHistory({ limit: 1000 }); // Fetch up to 1000 records
+      const allRuns = extractData(response, []);
+
+      if (allRuns.length === 0) {
+        Alert.alert('No Data', 'No payroll records found to export.');
+        return;
+      }
+
+      const isExcel = type === 'Excel';
+      const extension = isExcel ? 'xls' : 'csv';
+      const fileName = `Payroll_History_${new Date().getFullYear()}.${extension}`;
+      
+      // Define CSV headers
+      const headers = [
+        'Run ID', 'Month', 'Year', 'Total Employees', 
+        'Total Gross Earnings', 'Total Deductions', 'Total Net Payout', 
+        'Status', 'Processed Date'
+      ];
+
+      // Format records for CSV
+      const rows = allRuns.map((run: any) => [
+        `"${run.runId || 'N/A'}"`,
+        run.month,
+        run.year,
+        run.employeeCount || 0,
+        run.totalGross || 0,
+        run.totalDeductions || 0,
+        run.netPay || 0,
+        `"${run.status || 'Processed'}"`,
+        `"${run.createdAt ? new Date(run.createdAt).toLocaleDateString() : 'N/A'}"`
+      ]);
+
+      const content = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+      
+      const fileType = isExcel ? 'application/vnd.ms-excel' : 'text/csv';
+      await exportFile(content, fileName, fileType);
+    } catch (error) {
+      console.error('Export failed:', error);
+      Alert.alert('Error', 'Failed to fetch and export all records. Please try again.');
+    }
   };
 
   const currencySymbol = settings?.payroll?.currencySymbol || '₹';
@@ -366,9 +416,9 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
               <Text style={styles.emptyText}>Run payroll to see data here</Text>
             </View>
           ) : (
-            filteredRuns.map(run => (
+            filteredRuns.map((run, index) => (
               <RunCard
-                key={run._id}
+                key={run._id || `run-${index}`}
                 run={run}
                 onPress={() => handleRunSelect(run)}
                 currencySymbol={currencySymbol}

@@ -37,6 +37,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
+import { exportFile } from '../../utils/exportHelper';
 import RNFS from 'react-native-fs';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
@@ -317,34 +318,12 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
     }, [selectedMonth, selectedYear])
   );
 
-  const requestStoragePermission = async (): Promise<boolean> => {
-    if (Platform.OS === 'android') {
-      try {
-        const permission = Platform.Version >= 33
-          ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES
-          : PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE;
-        const result = await request(permission);
-        return result === RESULTS.GRANTED;
-      } catch (error) {
-        console.error('Permission error:', error);
-        return false;
-      }
-    }
-    return true;
-  };
-
   const handleDownload = async (payslipItem: Payslip) => {
     const targetId = payslipItem._id || payslipItem.id;
     if (!targetId) return;
 
     setDownloading(targetId);
     try {
-      const hasPermission = await requestStoragePermission();
-      if (!hasPermission) {
-        Alert.alert('Permission Required', 'Storage permission is needed to save files.');
-        return;
-      }
-
       const response = await payrollAPI.downloadPayslip(targetId);
       const data = extractData(response);
 
@@ -352,44 +331,16 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
       const empCode = payslipItem.employeeInfo?.employeeId || user?.employeeId || 'EMP';
       const filename = `Payslip_${empCode}_${months[payslipItem.month - 1]}_${payslipItem.year}.pdf`;
 
-      // Save to device
-      const downloadPath = Platform.OS === 'android'
-        ? RNFS.DownloadDirectoryPath
-        : RNFS.DocumentDirectoryPath;
-      const filePath = `${downloadPath}/${filename}`;
-
-      // Convert base64 to file if needed
+      let content = '';
       const globalAny = globalThis as any;
       if (typeof data === 'string' && data.startsWith('data:application/pdf')) {
-        const base64Data = data.split(',')[1];
-        await RNFS.writeFile(filePath, base64Data, 'base64');
-      } else if (data instanceof (globalAny.Blob || Object)) {
-        // Handle blob data
-        const reader = new globalAny.FileReader();
-        reader.onload = async () => {
-          const base64 = (reader.result as string).split(',')[1];
-          await RNFS.writeFile(filePath, base64, 'base64');
-        };
-        reader.readAsDataURL(data);
+        content = data.split(',')[1];
+      } else {
+        // Assume it's base64 or needs conversion
+        content = data; 
       }
 
-      Alert.alert(
-        'Download Successful',
-        `File saved to:\n${filePath}\n\nWould you like to share it?`,
-        [
-          { text: 'Close', style: 'cancel' },
-          {
-            text: 'Share',
-            onPress: async () => {
-              await Share.share({
-                title: filename,
-                message: `Payslip for ${months[payslipItem.month - 1]} ${payslipItem.year}`,
-                url: `file://${filePath}`,
-              });
-            },
-          },
-        ]
-      );
+      await exportFile(content, filename, 'application/pdf', true);
     } catch (error) {
       console.error('Download error:', error);
       Alert.alert('Error', 'Failed to download payslip');

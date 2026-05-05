@@ -9,10 +9,11 @@ import {
   Alert,
   StatusBar,
   Platform,
+  ScrollView,
 } from 'react-native';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Menu, Bell, X, User } from 'lucide-react-native';
+import { Menu, Bell, X, User, LayoutDashboard, Calendar, ClipboardList, Briefcase, Users, FileText, Settings, LogOut, ChevronRight, ReceiptText, ShieldAlert, History } from 'lucide-react-native';
 import TrialBanner from './TrialBanner';
 
 interface Notification {
@@ -22,6 +23,14 @@ interface Notification {
   type: 'info' | 'success' | 'warning' | 'error';
   read: boolean;
   createdAt: Date;
+}
+
+interface SidebarItem {
+  id: string;
+  title: string;
+  icon: any;
+  screen: string;
+  role?: string[];
 }
 
 interface HeaderProps {
@@ -45,12 +54,26 @@ export default function Header({
   onBackPress,
   user: initialUser,
 }: HeaderProps) {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [user, setUser] = useState<any>(initialUser || null);
   const [bannerVisible, setBannerVisible] = useState(true);
+
+  const sidebarItems: SidebarItem[] = [
+    { id: 'dashboard', title: 'Dashboard', icon: LayoutDashboard, screen: 'Dashboard' },
+    { id: 'timesheets', title: 'Timesheets', icon: ClipboardList, screen: 'TimesheetEntry' },
+    { id: 'projects', title: 'Projects', icon: Briefcase, screen: 'Projects' },
+    { id: 'leaves', title: 'Leave Tracker', icon: Calendar, screen: 'LeaveTracker' },
+    { id: 'payslips', title: 'My Payslips', icon: FileText, screen: 'MyPayslips' },
+    { id: 'incidents', title: 'Incidents', icon: ShieldAlert, screen: 'Incidents' },
+    { id: 'announcements', title: 'Announcements', icon: Bell, screen: 'Announcements' },
+    { id: 'employees', title: 'Employees', icon: Users, screen: 'Employees', role: ['admin', 'hr'] },
+    { id: 'payroll', title: 'Payroll Management', icon: ReceiptText, screen: 'PayrollDashboard', role: ['admin', 'hr'] },
+    { id: 'reports', title: 'Reports', icon: History, screen: 'Reports', role: ['admin', 'hr'] },
+  ];
 
   useEffect(() => {
     loadUserData();
@@ -65,7 +88,7 @@ export default function Header({
       if (userData && !initialUser) {
         setUser(JSON.parse(userData));
       }
-    } catch (error) {
+    } catch (error) { 
       console.error('Error loading user data:', error);
     }
   };
@@ -98,7 +121,25 @@ export default function Header({
     if (onMenuPress) {
       onMenuPress();
     } else {
-      navigation.dispatch(DrawerActions.openDrawer());
+      setShowSidebar(true);
+    }
+  };
+
+  const handleSidebarNavigation = (screen: string) => {
+    setShowSidebar(false);
+    navigation.navigate(screen);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.multiRemove(['token', 'refreshToken', 'user']);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to logout');
     }
   };
 
@@ -148,82 +189,162 @@ export default function Header({
               </TouchableOpacity>
             </View>
           </View>
-
+          
           <FlatList
             data={notifications}
-            keyExtractor={(item) => item.id}
+            keyExtractor={item => item.id}
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.notificationItem, !item.read && styles.unreadNotification]}
+              <TouchableOpacity 
+                style={[styles.notificationItem, !item.read && styles.unreadItem]}
                 onPress={() => markAsRead(item.id)}
               >
-                <View style={[styles.notificationDot, { backgroundColor: getNotificationColor(item.type) }]} />
-                <View style={styles.notificationContent}>
+                <View style={[styles.notificationTypeIndicator, { backgroundColor: getNotificationColor(item.type) }]} />
+                <View style={styles.notificationTextContent}>
                   <Text style={styles.notificationTitle}>{item.title}</Text>
                   <Text style={styles.notificationMessage}>{item.message}</Text>
-                  <Text style={styles.notificationTime}>
-                    {item.createdAt.toLocaleDateString()} {item.createdAt.toLocaleTimeString()}
-                  </Text>
                 </View>
               </TouchableOpacity>
             )}
-            ListEmptyComponent={() => (
-              <View style={styles.emptyContainer}>
-                <Bell size={48} color="#cbd5e1" />
+            ListEmptyComponent={
+              <View style={styles.emptyNotifications}>
                 <Text style={styles.emptyText}>No notifications</Text>
               </View>
-            )}
+            }
           />
         </View>
       </View>
     </Modal>
   );
 
+  const SidebarModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={showSidebar}
+      onRequestClose={() => setShowSidebar(false)}
+    >
+      <TouchableOpacity 
+        style={styles.sidebarOverlay} 
+        activeOpacity={1} 
+        onPress={() => setShowSidebar(false)}
+      >
+        <View style={styles.sidebarContent}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }}>
+            <View style={styles.sidebarHeader}>
+              <View style={styles.userProfileSection}>
+                <View style={styles.avatarContainer}>
+                  <User size={30} color="#6366f1" />
+                </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>{user?.name || 'User'}</Text>
+                  <Text style={styles.userRole}>{user?.role || 'Employee'}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setShowSidebar(false)}>
+                <X size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.sidebarScroll}>
+              {sidebarItems.map((item) => {
+                if (item.role && !item.role.includes(user?.role?.toLowerCase())) {
+                  return null;
+                }
+                const IconComponent = item.icon;
+                return (
+                  <TouchableOpacity 
+                    key={item.id} 
+                    style={styles.sidebarItem}
+                    onPress={() => handleSidebarNavigation(item.screen)}
+                  >
+                    <View style={styles.sidebarItemLeft}>
+                      <IconComponent size={20} color="#64748b" />
+                      <Text style={styles.sidebarItemText}>{item.title}</Text>
+                    </View>
+                    <ChevronRight size={16} color="#cbd5e1" />
+                  </TouchableOpacity>
+                );
+              })}
+              
+              <View style={styles.sidebarDivider} />
+              
+              <TouchableOpacity 
+                style={styles.sidebarItem}
+                onPress={() => handleSidebarNavigation('Settings')}
+              >
+                <View style={styles.sidebarItemLeft}>
+                  <Settings size={20} color="#64748b" />
+                  <Text style={styles.sidebarItemText}>Settings</Text>
+                </View>
+                <ChevronRight size={16} color="#cbd5e1" />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.sidebarItem, styles.logoutItem]}
+                onPress={handleLogout}
+              >
+                <View style={styles.sidebarItemLeft}>
+                  <LogOut size={20} color="#ef4444" />
+                  <Text style={[styles.sidebarItemText, styles.logoutText]}>Logout</Text>
+                </View>
+              </TouchableOpacity>
+            </ScrollView>
+            
+            <View style={styles.sidebarFooter}>
+              <Text style={styles.versionText}>v1.0.0</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   return (
-    <View style={styles.headerWrapper}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      {/* Trial Banner - Shows above header */}
       {showTrialBanner && bannerVisible && (
-        <TrialBanner 
-          onClose={() => setBannerVisible(false)} 
-          onUpgradePress={() => navigation.navigate('Subscription' as never)}
-        />
+        <TrialBanner onHide={() => setBannerVisible(false)} />
       )}
-      {/* Header Content */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          {showSidebarButton && (
-            <TouchableOpacity onPress={handleMenuPress} style={styles.menuButton}>
+      
+      <View style={styles.headerContent}>
+        <View style={styles.leftSection}>
+          {showBackButton ? (
+            <TouchableOpacity onPress={onBackPress || (() => navigation.goBack())} style={styles.iconButton}>
+              <X size={24} color="#1e293b" />
+            </TouchableOpacity>
+          ) : showSidebarButton ? (
+            <TouchableOpacity onPress={handleMenuPress} style={styles.iconButton}>
               <Menu size={24} color="#1e293b" />
             </TouchableOpacity>
-          )}
-          {showBackButton && (
-            <TouchableOpacity onPress={() => (onBackPress ? onBackPress() : navigation.goBack())} style={styles.backButton}>
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-          )}
-          {title && <Text style={styles.headerTitle}>{title}</Text>}
+          ) : null}
+          
+          <Text style={styles.title} numberOfLines={1}>
+            {title || 'CALTIMS'}
+          </Text>
         </View>
 
-        <View style={styles.headerRight}>
+        <View style={styles.rightSection}>
           {showNotification && (
             <TouchableOpacity 
               onPress={() => setShowNotifications(true)} 
-              style={styles.notificationButton}
+              style={styles.iconButton}
             >
-              <Bell size={22} color="#64748b" />
+              <Bell size={24} color="#1e293b" />
               {unreadCount > 0 && (
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  <Text style={styles.badgeText}>{unreadCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity onPress={() => navigation.navigate('Profile' as never)} style={styles.userButton}>
+          
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Profile')}
+            style={styles.profileButton}
+          >
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+              <Text style={styles.avatarInitial}>
+                {(user?.name || 'U').charAt(0).toUpperCase()}
               </Text>
             </View>
           </TouchableOpacity>
@@ -231,91 +352,77 @@ export default function Header({
       </View>
 
       <NotificationModal />
+      <SidebarModal />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerWrapper: {
+  container: {
     backgroundColor: '#ffffff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderBottomColor: '#f1f5f9',
+    paddingTop: Platform.OS === 'ios' ? 44 : 0,
   },
-  headerLeft: {
+  headerContent: {
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
   },
-  menuButton: {
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
     padding: 8,
+    marginRight: 4,
+    position: 'relative',
   },
-  backButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  backButtonText: {
-    color: '#3b82f6',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  headerTitle: {
+  title: {
     fontSize: 18,
     fontWeight: '700',
     color: '#1e293b',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  notificationButton: {
-    position: 'relative',
-    padding: 8,
+    marginLeft: 4,
   },
   badge: {
     position: 'absolute',
     top: 4,
     right: 4,
     backgroundColor: '#ef4444',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: 'center',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
     alignItems: 'center',
-    paddingHorizontal: 4,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   badgeText: {
-    color: 'white',
-    fontSize: 10,
+    color: '#ffffff',
+    fontSize: 8,
     fontWeight: '700',
   },
-  userButton: {
-    padding: 4,
+  profileButton: {
+    marginLeft: 8,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#3b82f6',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6366f1',
+    alignItems: 'center', 
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  avatarText: {
-    color: 'white',
-    fontSize: 16,
+  avatarInitial: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '700',
   },
   modalOverlay: {
@@ -324,36 +431,35 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: '80%',
+    paddingBottom: 20,
   },
   modalHeader: {
     flexDirection: 'row',
+    alignItems: 'center', 
     justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#f1f5f9',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1e293b',
   },
   modalHeaderButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
   },
   markAllButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginRight: 16,
   },
   markAllText: {
-    color: '#3b82f6',
-    fontSize: 12,
+    color: '#6366f1',
+    fontSize: 14,
     fontWeight: '600',
   },
   notificationItem: {
@@ -361,18 +467,16 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
-    gap: 12,
   },
-  unreadNotification: {
-    backgroundColor: '#eff6ff',
+  unreadItem: {
+    backgroundColor: '#f8fafc',
   },
-  notificationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 4,
+  notificationTypeIndicator: {
+    width: 4,
+    borderRadius: 2,
+    marginRight: 12,
   },
-  notificationContent: {
+  notificationTextContent: {
     flex: 1,
   },
   notificationTitle: {
@@ -382,23 +486,103 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   notificationMessage: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#64748b',
-    marginBottom: 4,
   },
-  notificationTime: {
-    fontSize: 10,
-    color: '#94a3b8',
-  },
-  emptyContainer: {
+  emptyNotifications: {
+    padding: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 48,
-    gap: 12,
   },
   emptyText: {
-    fontSize: 14,
     color: '#94a3b8',
-    fontWeight: '500',
+    fontSize: 14,
+  },
+  sidebarOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  sidebarContent: {
+    width: '80%',
+    height: '100%',
+    backgroundColor: '#ffffff',
+    paddingTop: Platform.OS === 'ios' ? 44 : 0,
+  },
+  sidebarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', 
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  userProfileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userInfo: {
+    justifyContent: 'center',
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  userRole: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  sidebarScroll: {
+    flex: 1,
+    padding: 12,
+  },
+  sidebarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  sidebarItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sidebarItemText: {
+    fontSize: 15,
+    fontWeight: '500', 
+    color: '#475569',
+    marginLeft: 12,
+  },
+  sidebarDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginVertical: 12, 
+    marginHorizontal: 16,
+  },
+  logoutItem: {
+    marginTop: 12,
+  },
+  logoutText: {
+    color: '#ef4444',
+  },
+  sidebarFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  versionText: {
+    fontSize: 12,
+    color: '#94a3b8',
   },
 });

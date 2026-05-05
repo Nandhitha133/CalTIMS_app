@@ -113,12 +113,12 @@ export default function IncidentListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  
+
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
-  
+
   // Pagination
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -160,12 +160,12 @@ export default function IncidentListScreen() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       const filters: Record<string, any> = { page, limit };
       if (searchQuery) filters.search = searchQuery;
       if (statusFilter !== 'All') filters.status = statusFilter;
       if (activeTab === 'incidents' && priorityFilter !== 'All') filters.priority = priorityFilter;
-      
+
       if (activeTab === 'incidents') {
         const response = await incidentService.getIncidents(filters);
         const data = extractData(response, { data: [], pagination: { totalPages: 1, total: 0 } });
@@ -279,7 +279,7 @@ export default function IncidentListScreen() {
     const priorityColors = getPriorityColor(incident.priority);
     const statusColors = getStatusColor(incident.status);
     const employeeName = incident.employee?.user?.name || incident.employee?.name || 'Unknown';
-    
+
     return (
       <TouchableOpacity
         style={styles.ticketCard}
@@ -330,7 +330,7 @@ export default function IncidentListScreen() {
             <Text style={styles.ticketDate}>{format(new Date(ticket.createdAt), 'MMM d, yyyy')}</Text>
           </View>
         </TouchableOpacity>
-        
+
         {isAdmin && (
           <View style={styles.menuContainer}>
             <TouchableOpacity onPress={() => setShowMenu(!showMenu)} style={styles.menuButton}>
@@ -410,7 +410,7 @@ export default function IncidentListScreen() {
                 ))}
               </View>
             </View>
-            
+
             {activeTab === 'incidents' && (
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Priority</Text>
@@ -566,7 +566,7 @@ export default function IncidentListScreen() {
       onRefresh={onRefresh}
     >
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <PageHeader 
+        <PageHeader
           title="Help & Support Center"
           subtitle="Track and manage support requests"
           icon={LifeBuoy}
@@ -652,7 +652,7 @@ export default function IncidentListScreen() {
             </View>
           ) : (
             currentItems.map(item => (
-              activeTab === 'incidents' 
+              activeTab === 'incidents'
                 ? <IncidentCard key={item._id} incident={item as Incident} />
                 : <SupportTicketCard key={item._id} ticket={item as SupportTicket} />
             ))
@@ -691,16 +691,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   content: { paddingHorizontal: 16, paddingBottom: 100 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  
+
   createButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
   createButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
-  
+
   tabContainer: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 12, marginBottom: 16, padding: 4 },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 8 },
   tabActive: { backgroundColor: 'white', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   tabText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
   tabTextActive: { color: '#3b82f6' },
-  
+
   searchContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
@@ -708,10 +708,10 @@ const styles = StyleSheet.create({
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#3b82f6', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   filterBadgeText: { color: 'white', fontSize: 10, fontWeight: '700' },
-  
+
   resultsHeader: { marginBottom: 12, paddingHorizontal: 4 },
   resultsText: { fontSize: 10, fontWeight: '700', color: '#94a3b8', letterSpacing: 1 },
-  
+
   ticketCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row' },
   ticketContent: { flex: 1 },
   ticketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
   ticketCategory: { fontSize: 11, color: '#64748b', backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   ticketEmployee: { fontSize: 11, color: '#64748b' },
   ticketDate: { fontSize: 11, color: '#94a3b8' },
-  
+
   menuContainer: { position: 'relative' },
   menuButton: { padding: 6 },
   menuDropdown: { position: 'absolute', right: 0, top: 30, width: 160, backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4, zIndex: 100 },
@@ -740,17 +740,17 @@ const styles = StyleSheet.create({
   menuDivider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 },
   menuItemDanger: { gap: 8 },
   menuItemDangerText: { fontSize: 12, fontWeight: '500', color: '#ef4444' },
-  
+
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, backgroundColor: 'white', borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0' },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginTop: 16 },
   emptyText: { fontSize: 13, color: '#64748b', marginTop: 8, textAlign: 'center' },
-  
+
   pagination: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, paddingVertical: 20 },
   pageButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'white', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   pageButtonDisabled: { opacity: 0.5 },
   pageButtonText: { fontSize: 13, fontWeight: '600', color: '#3b82f6' },
   pageInfo: { fontSize: 13, color: '#64748b' },
-  
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' },
   filterModal: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
@@ -758,44 +758,44 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
   modalContent: { padding: 20 },
   modalFooter: { flexDirection: 'row', gap: 12, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
-  
+
   filterContent: { gap: 20, marginBottom: 20 },
   filterField: { gap: 8 },
   filterLabel: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
-  
+
   statusOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f1f5f9' },
   statusChipActive: { backgroundColor: '#3b82f6' },
   statusChipText: { fontSize: 12, color: '#64748b' },
   statusChipTextActive: { color: 'white' },
-  
+
   priorityOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   priorityChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f1f5f9' },
   priorityChipActive: { backgroundColor: '#3b82f6' },
   priorityChipText: { fontSize: 12, color: '#64748b' },
   priorityChipTextActive: { color: 'white' },
-  
+
   resetButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
   resetButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
   applyButton: { flex: 2, paddingVertical: 12, borderRadius: 12, backgroundColor: '#3b82f6', alignItems: 'center' },
   applyButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
-  
+
   formField: { marginBottom: 20 },
   formLabel: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8 },
   required: { color: '#ef4444' },
   formInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1e293b', backgroundColor: '#f8fafc' },
   textArea: { height: 120, textAlignVertical: 'top' },
-  
+
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9' },
   categoryButtonActive: { backgroundColor: '#3b82f6' },
   categoryText: { fontSize: 13, fontWeight: '500', color: '#64748b' },
   categoryTextActive: { color: 'white' },
-  
+
   priorityRow: { flexDirection: 'row', gap: 8 },
   priorityButton: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: '#f1f5f9' },
   modalPriorityText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
-  
+
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 14, borderRadius: 12, marginTop: 8 },
   disabledButton: { opacity: 0.5 },
   submitText: { fontSize: 14, fontWeight: '700', color: 'white' },

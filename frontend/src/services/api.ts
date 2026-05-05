@@ -8,7 +8,7 @@ const getBaseUrl = () => {
   // The user mentioned "Render connect", so we ensure the Render URL is used if preferred
   const RENDER_URL = 'https://caltims-backend.onrender.com/api/v1';
   const PRODUCTION_URL = 'https://caldimproducts.com/caltims/api/v1';
-  
+
   // Return the production URL by default, but prioritize Render if requested via logic
   // For now, we'll keep the production URL but ensure it's robust
   return PRODUCTION_URL;
@@ -26,7 +26,7 @@ class ApiService {
     };
 
     const mergedHeaders = { ...defaultHeaders, ...customHeaders };
-    
+
     // If we're sending FormData, don't set Content-Type so fetch can set it with boundary
     if (mergedHeaders['Content-Type'] === 'multipart/form-data') {
       delete mergedHeaders['Content-Type'];
@@ -46,7 +46,7 @@ class ApiService {
 
       const userData = await AsyncStorage.getItem('user');
       const user = userData ? JSON.parse(userData) : null;
-      
+
       const entity = endpoint.split('/')[1]?.toUpperCase() || 'SYSTEM';
       const actionMap: Record<string, string> = {
         'POST': 'CREATE',
@@ -85,14 +85,14 @@ class ApiService {
       if (response.status === 401) {
         // Handle unauthorized globally
         const message = await response.json().then(j => j.message).catch(() => 'Session expired. Please log in again.');
-        
+
         // Log out the user
         const logout = useAuthStore.getState().logout;
         if (logout) {
           logout();
           try {
-             Alert.alert('Session Expired', message);
-          } catch(e) {}
+            Alert.alert('Session Expired', message);
+          } catch (e) { }
         }
         throw new Error(message);
       }
@@ -104,20 +104,20 @@ class ApiService {
       } catch (e) {
         errorMessage = response.statusText || errorMessage;
       }
-      
+
       console.error(`API Error [${response.status}] ${response.url}:`, errorMessage);
       throw new Error(errorMessage);
     }
-    
+
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       return await response.json();
     }
-    
+
     if (contentType && (contentType.includes('text/csv') || contentType.includes('text/plain'))) {
       return await response.text() as unknown as T;
     }
-    
+
     return { success: true } as T;
   }
 
@@ -141,7 +141,7 @@ class ApiService {
 
   async post<T>(endpoint: string, data?: any, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: await this.getHeaders(config?.headers),
@@ -149,16 +149,16 @@ class ApiService {
     });
 
     const result = await this.handleResponse<T>(response);
-    
+
     // Auto-audit successful mutations
     this.logAuditAction('POST', endpoint, data);
-    
+
     return result;
   }
 
   async put<T>(endpoint: string, data?: any, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
-    
+
     const response = await fetch(url, {
       method: 'PUT',
       headers: await this.getHeaders(config?.headers),
@@ -166,16 +166,16 @@ class ApiService {
     });
 
     const result = await this.handleResponse<T>(response);
-    
+
     // Auto-audit successful mutations
     this.logAuditAction('PUT', endpoint, data);
-    
+
     return result;
   }
 
   async patch<T>(endpoint: string, data?: any, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
-    
+
     const response = await fetch(url, {
       method: 'PATCH',
       headers: await this.getHeaders(config?.headers),
@@ -183,26 +183,26 @@ class ApiService {
     });
 
     const result = await this.handleResponse<T>(response);
-    
+
     // Auto-audit successful mutations
     this.logAuditAction('PATCH', endpoint, data);
-    
+
     return result;
   }
 
   async delete<T>(endpoint: string, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
-    
+
     const response = await fetch(url, {
       method: 'DELETE',
       headers: await this.getHeaders(config?.headers),
     });
 
     const result = await this.handleResponse<T>(response);
-    
+
     // Auto-audit successful mutations
     this.logAuditAction('DELETE', endpoint);
-    
+
     return result;
   }
 }

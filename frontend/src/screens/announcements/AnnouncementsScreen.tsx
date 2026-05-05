@@ -12,7 +12,9 @@ import {
   Switch,
   StyleSheet,
   Platform,
+  Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
@@ -32,7 +34,6 @@ import {
 } from 'lucide-react-native';
 import { announcementAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
-import PageHeader from '../../components/common/PageHeader';
 
 interface User {
   id: string;
@@ -62,10 +63,36 @@ interface AnnouncementData {
   };
 }
 
+const { width } = Dimensions.get('window');
+
 const TYPE_CONFIG: Record<string, any> = {
-  info: { label: 'Info', icon: Info, bg: '#eff6ff', badgeBg: '#dbeafe', badgeText: '#1e40af', dot: '#3b82f6' },
-  warning: { label: 'Warning', icon: AlertTriangle, bg: '#fffbeb', badgeBg: '#fef3c7', badgeText: '#92400e', dot: '#f59e0b' },
-  urgent: { label: 'Urgent', icon: Bell, bg: '#fef2f2', badgeBg: '#fee2e2', badgeText: '#991b1b', dot: '#ef4444' },
+  info: {
+    label: 'Info',
+    icon: Info,
+    bg: '#eff6ff',
+    badgeBg: '#dbeafe',
+    badgeText: '#1e40af',
+    dot: '#3b82f6',
+    gradient: ['#3b82f6', '#2563eb']
+  },
+  warning: {
+    label: 'Warning',
+    icon: AlertTriangle,
+    bg: '#fffbeb',
+    badgeBg: '#fef3c7',
+    badgeText: '#92400e',
+    dot: '#f59e0b',
+    gradient: ['#f59e0b', '#d97706']
+  },
+  urgent: {
+    label: 'Urgent',
+    icon: Bell,
+    bg: '#fef2f2',
+    badgeBg: '#fee2e2',
+    badgeText: '#991b1b',
+    dot: '#ef4444',
+    gradient: ['#ef4444', '#dc2626']
+  },
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -73,6 +100,309 @@ const ROLE_LABELS: Record<string, string> = {
   manager: 'Managers',
   employee: 'Employees',
 };
+
+// --- Sub-components moved outside to prevent re-rendering/focus issues ---
+
+const AnnouncementCard = ({ 
+  announcement, 
+  onEdit, 
+  onDelete, 
+  isExpired 
+}: { 
+  announcement: Announcement; 
+  onEdit: (a: Announcement) => void;
+  onDelete: (a: Announcement) => void;
+  isExpired: (date?: string) => boolean;
+}) => {
+  const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.info;
+  const cfg = getTypeConfig(announcement.type);
+  const TypeIcon = cfg.icon;
+  const expired = isExpired(announcement.expiresAt);
+  const isInactive = !announcement.isActive;
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => onEdit(announcement)}
+      style={[
+        styles.announcementCard,
+        { borderLeftColor: cfg.dot },
+        (isInactive || expired) && styles.inactiveCard
+      ]}
+    >
+      <View style={styles.cardHeader}>
+        <View style={[styles.iconContainer, { backgroundColor: cfg.badgeBg }]}>
+          <TypeIcon size={18} color={cfg.badgeText} />
+        </View>
+        <View style={styles.cardContent}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{announcement.title}</Text>
+            <View style={[styles.typeBadge, { backgroundColor: cfg.badgeBg }]}>
+              <Text style={[styles.typeBadgeText, { color: cfg.badgeText }]}>{announcement.type}</Text>
+            </View>
+          </View>
+
+          <View style={styles.badgeRow}>
+            {!announcement.isActive && (
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusBadgeText}>Draft</Text>
+              </View>
+            )}
+            {expired && (
+              <View style={styles.expiredBadge}>
+                <Text style={styles.expiredBadgeText}>Expired</Text>
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.cardDescription} numberOfLines={3}>{announcement.content}</Text>
+
+          <View style={styles.cardDivider} />
+
+          <View style={styles.cardFooter}>
+            <View style={styles.metaInfo}>
+              <View style={styles.authorAvatar}>
+                <Text style={styles.authorInitial}>
+                  {announcement.publishedBy?.name?.charAt(0) || 'S'}
+                </Text>
+              </View>
+              <View>
+                <Text style={styles.authorName}>{announcement.publishedBy?.name || 'System'}</Text>
+                <Text style={styles.metaText}>{format(new Date(announcement.createdAt), 'MMM d, yyyy')}</Text>
+              </View>
+            </View>
+
+            <View style={styles.cardActions}>
+              <TouchableOpacity onPress={() => onEdit(announcement)} style={styles.actionBtn}>
+                <Pencil size={14} color="#64748b" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onDelete(announcement)} style={styles.actionBtn}>
+                <Trash2 size={14} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.targetAudience}>
+            <Users size={10} color="#94a3b8" />
+            <Text style={styles.targetText}>
+              {announcement.targetRoles && announcement.targetRoles.length > 0
+                ? announcement.targetRoles.map(r => ROLE_LABELS[r]).join(', ')
+                : 'Everyone'}
+            </Text>
+            {announcement.expiresAt && (
+              <View style={styles.expiryInfo}>
+                <Calendar size={10} color={expired ? '#ef4444' : '#94a3b8'} />
+                <Text style={[styles.targetText, expired && styles.expiredText]}>
+                  {format(new Date(announcement.expiresAt), 'MMM d')}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+const AnnouncementModal = ({
+  visible,
+  onClose,
+  editTarget,
+  form,
+  setForm,
+  onSubmit,
+  isSubmitting,
+  toggleRole,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  editTarget: Announcement | null;
+  form: any;
+  setForm: (f: any) => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+  toggleRole: (role: string) => void;
+}) => {
+  const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.info;
+  
+  return (
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+      <View style={modalStyles.overlay}>
+        <View style={modalStyles.container}>
+          <View style={[modalStyles.header, { borderTopColor: getTypeConfig(form.type).dot }]}>
+            <View style={modalStyles.headerLeft}>
+              <View style={[modalStyles.headerIcon, { backgroundColor: getTypeConfig(form.type).badgeBg }]}>
+                <Megaphone size={16} color={getTypeConfig(form.type).badgeText} />
+              </View>
+              <Text style={modalStyles.title}>{editTarget ? 'Edit Announcement' : 'New Announcement'}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={modalStyles.form}>
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Title <Text style={modalStyles.required}>*</Text></Text>
+                <TextInput
+                  style={modalStyles.input}
+                  placeholder="e.g. Office Closure on Public Holiday"
+                  placeholderTextColor="#94a3b8"
+                  value={form.title}
+                  onChangeText={(text) => setForm({ ...form, title: text })}
+                />
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Content <Text style={modalStyles.required}>*</Text></Text>
+                <TextInput
+                  style={[modalStyles.input, modalStyles.textArea]}
+                  placeholder="Write your announcement details here..."
+                  placeholderTextColor="#94a3b8"
+                  multiline
+                  numberOfLines={4}
+                  value={form.content}
+                  onChangeText={(text) => setForm({ ...form, content: text })}
+                />
+                <Text style={modalStyles.charCount}>{form.content.length}/5000</Text>
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Type</Text>
+                <View style={modalStyles.typeRow}>
+                  {Object.entries(TYPE_CONFIG).map(([key, cfg]) => {
+                    const Icon = cfg.icon;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          modalStyles.typeButton,
+                          form.type === key && { backgroundColor: cfg.badgeBg, borderColor: cfg.dot },
+                        ]}
+                        onPress={() => setForm({ ...form, type: key as any })}
+                      >
+                        <Icon size={14} color={form.type === key ? cfg.badgeText : '#64748b'} />
+                        <Text style={[modalStyles.typeButtonText, form.type === key && { color: cfg.badgeText }]}>
+                          {cfg.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Target Audience</Text>
+                <View style={modalStyles.rolesRow}>
+                  {['admin', 'manager', 'employee'].map(role => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[
+                        modalStyles.roleButton,
+                        form.targetRoles.includes(role) && modalStyles.roleButtonActive,
+                      ]}
+                      onPress={() => toggleRole(role)}
+                    >
+                      <Text style={[
+                        modalStyles.roleButtonText,
+                        form.targetRoles.includes(role) && modalStyles.roleButtonTextActive,
+                      ]}>
+                        {ROLE_LABELS[role]}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={modalStyles.helperText}>Empty = everyone</Text>
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Expires On (Optional)</Text>
+                <TextInput
+                  style={modalStyles.input}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94a3b8"
+                  value={form.expiresAt}
+                  onChangeText={(text) => setForm({ ...form, expiresAt: text })}
+                />
+              </View>
+
+              <View style={modalStyles.switchRow}>
+                <View>
+                  <Text style={modalStyles.switchLabel}>Active</Text>
+                  <Text style={modalStyles.switchSub}>Inactive announcements are hidden from all users</Text>
+                </View>
+                <Switch
+                  value={form.isActive}
+                  onValueChange={(value) => setForm({ ...form, isActive: value })}
+                  trackColor={{ false: '#cbd5e1', true: '#3b82f6' }}
+                  thumbColor="white"
+                />
+              </View>
+
+              <View style={modalStyles.buttonRow}>
+                <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+                  <Text style={modalStyles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={modalStyles.submitButton}
+                  onPress={onSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <>
+                      {editTarget ? <CheckCircle size={16} color="white" /> : <Megaphone size={16} color="white" />}
+                      <Text style={modalStyles.submitButtonText}>
+                        {editTarget ? 'Update' : 'Publish & Notify'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const DeleteModal = ({
+  visible,
+  onClose,
+  title,
+  onConfirm,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title?: string;
+  onConfirm: () => void;
+}) => (
+  <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
+    <View style={deleteModalStyles.overlay}>
+      <View style={deleteModalStyles.container}>
+        <View style={deleteModalStyles.iconContainer}>
+          <Trash2 size={24} color="#ef4444" />
+        </View>
+        <Text style={deleteModalStyles.title}>Delete Announcement</Text>
+        <Text style={deleteModalStyles.message}>
+          "{title}" will be permanently removed.
+        </Text>
+        <View style={deleteModalStyles.buttonRow}>
+          <TouchableOpacity style={deleteModalStyles.cancelButton} onPress={onClose}>
+            <Text style={deleteModalStyles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={deleteModalStyles.deleteButton} onPress={onConfirm}>
+            <Trash2 size={14} color="white" />
+            <Text style={deleteModalStyles.deleteButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default function AnnouncementsScreen() {
   const navigation = useNavigation();
@@ -240,253 +570,7 @@ export default function AnnouncementsScreen() {
     return TYPE_CONFIG[type] || TYPE_CONFIG.info;
   };
 
-  const AnnouncementCard = ({ announcement }: { announcement: Announcement }) => {
-    const cfg = getTypeConfig(announcement.type);
-    const TypeIcon = cfg.icon;
-    const expired = isExpired(announcement.expiresAt);
-    const isInactive = !announcement.isActive;
 
-    return (
-      <View style={[styles.announcementCard, { borderLeftColor: cfg.dot }, (isInactive || expired) && styles.inactiveCard]}>
-        <View style={styles.cardHeader}>
-          <View style={[styles.iconContainer, { backgroundColor: cfg.badgeBg }]}>
-            <TypeIcon size={16} color={cfg.badgeText} />
-          </View>
-          <View style={styles.cardContent}>
-            <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>{announcement.title}</Text>
-              <View style={[styles.typeBadge, { backgroundColor: cfg.badgeBg }]}>
-                <Text style={[styles.typeBadgeText, { color: cfg.badgeText }]}>{announcement.type}</Text>
-              </View>
-              {!announcement.isActive && (
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusBadgeText}>Inactive</Text>
-                </View>
-              )}
-              {expired && (
-                <View style={styles.expiredBadge}>
-                  <Text style={styles.expiredBadgeText}>Expired</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.cardDescription} numberOfLines={2}>{announcement.content}</Text>
-            <View style={styles.cardMeta}>
-              <Text style={styles.metaText}>By {announcement.publishedBy?.name || 'System'}</Text>
-              <Text style={styles.metaDot}>·</Text>
-              <Text style={styles.metaText}>{format(new Date(announcement.createdAt), 'MMM d, yyyy')}</Text>
-              {announcement.expiresAt && (
-                <>
-                  <Text style={styles.metaDot}>·</Text>
-                  <Text style={[styles.metaText, expired && styles.expiredText]}>
-                    Expires {format(new Date(announcement.expiresAt), 'MMM d, yyyy')}
-                  </Text>
-                </>
-              )}
-              {announcement.targetRoles && announcement.targetRoles.length > 0 && (
-                <>
-                  <Text style={styles.metaDot}>·</Text>
-                  <Text style={styles.metaText}>
-                    → {announcement.targetRoles.map(r => ROLE_LABELS[r]).join(', ')}
-                  </Text>
-                </>
-              )}
-              {(!announcement.targetRoles || announcement.targetRoles.length === 0) && (
-                <>
-                  <Text style={styles.metaDot}>·</Text>
-                  <Text style={styles.metaText}>→ Everyone</Text>
-                </>
-              )}
-            </View>
-          </View>
-          <View style={styles.cardActions}>
-            <TouchableOpacity onPress={() => handleEdit(announcement)} style={styles.actionBtn}>
-              <Pencil size={16} color="#64748b" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(announcement)} style={styles.actionBtn}>
-              <Trash2 size={16} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  // Create/Edit Modal
-  const AnnouncementModal = () => (
-    <Modal visible={showModal} animationType="slide" transparent={true}>
-      <View style={modalStyles.overlay}>
-        <View style={modalStyles.container}>
-          <View style={[modalStyles.header, { borderTopColor: getTypeConfig(form.type).dot }]}>
-            <View style={modalStyles.headerLeft}>
-              <View style={[modalStyles.headerIcon, { backgroundColor: getTypeConfig(form.type).badgeBg }]}>
-                <Megaphone size={16} color={getTypeConfig(form.type).badgeText} />
-              </View>
-              <Text style={modalStyles.title}>{editTarget ? 'Edit Announcement' : 'New Announcement'}</Text>
-            </View>
-            <TouchableOpacity onPress={() => setShowModal(false)}>
-              <X size={24} color="#64748b" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={modalStyles.form}>
-              {/* Title */}
-              <View style={modalStyles.field}>
-                <Text style={modalStyles.label}>Title <Text style={modalStyles.required}>*</Text></Text>
-                <TextInput
-                  style={modalStyles.input}
-                  placeholder="e.g. Office Closure on Public Holiday"
-                  placeholderTextColor="#94a3b8"
-                  value={form.title}
-                  onChangeText={(text) => setForm({ ...form, title: text })}
-                />
-              </View>
-
-              {/* Content */}
-              <View style={modalStyles.field}>
-                <Text style={modalStyles.label}>Content <Text style={modalStyles.required}>*</Text></Text>
-                <TextInput
-                  style={[modalStyles.input, modalStyles.textArea]}
-                  placeholder="Write your announcement details here..."
-                  placeholderTextColor="#94a3b8"
-                  multiline
-                  numberOfLines={4}
-                  value={form.content}
-                  onChangeText={(text) => setForm({ ...form, content: text })}
-                />
-                <Text style={modalStyles.charCount}>{form.content.length}/5000</Text>
-              </View>
-
-              {/* Type */}
-              <View style={modalStyles.field}>
-                <Text style={modalStyles.label}>Type</Text>
-                <View style={modalStyles.typeRow}>
-                  {Object.entries(TYPE_CONFIG).map(([key, cfg]) => {
-                    const Icon = cfg.icon;
-                    return (
-                      <TouchableOpacity
-                        key={key}
-                        style={[
-                          modalStyles.typeButton,
-                          form.type === key && { backgroundColor: cfg.badgeBg, borderColor: cfg.dot },
-                        ]}
-                        onPress={() => setForm({ ...form, type: key as any })}
-                      >
-                        <Icon size={14} color={form.type === key ? cfg.badgeText : '#64748b'} />
-                        <Text style={[modalStyles.typeButtonText, form.type === key && { color: cfg.badgeText }]}>
-                          {cfg.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Target Roles */}
-              <View style={modalStyles.field}>
-                <Text style={modalStyles.label}>Target Audience</Text>
-                <View style={modalStyles.rolesRow}>
-                  {['admin', 'manager', 'employee'].map(role => (
-                    <TouchableOpacity
-                      key={role}
-                      style={[
-                        modalStyles.roleButton,
-                        form.targetRoles.includes(role) && modalStyles.roleButtonActive,
-                      ]}
-                      onPress={() => toggleRole(role)}
-                    >
-                      <Text style={[
-                        modalStyles.roleButtonText,
-                        form.targetRoles.includes(role) && modalStyles.roleButtonTextActive,
-                      ]}>
-                        {ROLE_LABELS[role]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={modalStyles.helperText}>Empty = everyone</Text>
-              </View>
-
-              {/* Expiry Date */}
-              <View style={modalStyles.field}>
-                <Text style={modalStyles.label}>Expires On (Optional)</Text>
-                <TextInput
-                  style={modalStyles.input}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94a3b8"
-                  value={form.expiresAt}
-                  onChangeText={(text) => setForm({ ...form, expiresAt: text })}
-                />
-              </View>
-
-              {/* Active Switch */}
-              <View style={modalStyles.switchRow}>
-                <View>
-                  <Text style={modalStyles.switchLabel}>Active</Text>
-                  <Text style={modalStyles.switchSub}>Inactive announcements are hidden from all users</Text>
-                </View>
-                <Switch
-                  value={form.isActive}
-                  onValueChange={(value) => setForm({ ...form, isActive: value })}
-                  trackColor={{ false: '#cbd5e1', true: '#3b82f6' }}
-                  thumbColor="white"
-                />
-              </View>
-
-              {/* Submit Buttons */}
-              <View style={modalStyles.buttonRow}>
-                <TouchableOpacity style={modalStyles.cancelButton} onPress={() => setShowModal(false)}>
-                  <Text style={modalStyles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={modalStyles.submitButton}
-                  onPress={handleSubmit}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color="white" size="small" />
-                  ) : (
-                    <>
-                      {editTarget ? <CheckCircle size={16} color="white" /> : <Megaphone size={16} color="white" />}
-                      <Text style={modalStyles.submitButtonText}>
-                        {isSubmitting ? 'Saving...' : editTarget ? 'Update' : 'Publish & Notify'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Delete Confirmation Modal
-  const DeleteModal = () => (
-    <Modal visible={showDeleteModal} animationType="fade" transparent={true}>
-      <View style={deleteModalStyles.overlay}>
-        <View style={deleteModalStyles.container}>
-          <View style={deleteModalStyles.iconContainer}>
-            <Trash2 size={24} color="#ef4444" />
-          </View>
-          <Text style={deleteModalStyles.title}>Delete Announcement</Text>
-          <Text style={deleteModalStyles.message}>
-            "{deleteTarget?.title}" will be permanently removed.
-          </Text>
-          <View style={deleteModalStyles.buttonRow}>
-            <TouchableOpacity style={deleteModalStyles.cancelButton} onPress={() => setShowDeleteModal(false)}>
-              <Text style={deleteModalStyles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={deleteModalStyles.deleteButton} onPress={confirmDelete}>
-              <Trash2 size={14} color="white" />
-              <Text style={deleteModalStyles.deleteButtonText}>Delete</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
 
   if (loading && !refreshing) {
     return (
@@ -506,63 +590,107 @@ export default function AnnouncementsScreen() {
         refreshing={refreshing}
         onRefresh={onRefresh}
       >
-        <PageHeader 
-          title="Announcements"
-          subtitle="Create announcements — employees are notified automatically"
-          icon={Megaphone}
-          iconColor="#3b82f6"
-          iconBgColor="#eff6ff"
-          rightComponent={
-            <TouchableOpacity style={styles.createButton} onPress={handleCreate}>
-              <Plus size={16} color="white" />
-              <Text style={styles.createButtonText}>New</Text>
-            </TouchableOpacity>
-          }
-        />
+        <View style={styles.headerActionRow}>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerSubtitle}>
+              Create announcements & notify your employees automatically
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.createButton} onPress={handleCreate}>
+            <Plus size={16} color="white" />
+            <Text style={styles.createButtonText}>New</Text>
+          </TouchableOpacity>
+        </View>
 
-          {/* Announcements List */}
-          {announcements.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Megaphone size={48} color="#cbd5e1" />
-              <Text style={styles.emptyTitle}>No announcements yet</Text>
-              <Text style={styles.emptyText}>Create one to notify your team instantly</Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={handleCreate}>
-                <Plus size={16} color="white" />
-                <Text style={styles.emptyButtonText}>Create First Announcement</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              {announcements.map((ann) => (
-                <AnnouncementCard key={ann._id} announcement={ann} />
-              ))}
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <View style={styles.pagination}>
-                  <TouchableOpacity
-                    style={[styles.pageButton, page === 1 && styles.pageButtonDisabled]}
-                    onPress={() => { if (page > 1) { setPage(page - 1); } }}
-                    disabled={page === 1}
-                  >
-                    <Text style={styles.pageButtonText}>Previous</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.pageInfo}>{page} / {totalPages}</Text>
-                  <TouchableOpacity
-                    style={[styles.pageButton, page === totalPages && styles.pageButtonDisabled]}
-                    onPress={() => { if (page < totalPages) { setPage(page + 1); } }}
-                    disabled={page === totalPages}
-                  >
-                    <Text style={styles.pageButtonText}>Next</Text>
-                  </TouchableOpacity>
+        {/* Announcements List */}
+        {announcements.length === 0 ? (
+          <View style={styles.emptyWrapper}>
+            <LinearGradient
+              colors={['#ffffff', '#f1f5f9']}
+              style={styles.emptyContainer}
+            >
+              <View style={styles.emptyIconWrapper}>
+                <LinearGradient
+                  colors={['#eff6ff', '#dbeafe']}
+                  style={styles.emptyIconCircle}
+                >
+                  <Megaphone size={40} color="#3b82f6" />
+                </LinearGradient>
+                <View style={styles.emptyIconBadge}>
+                  <Plus size={12} color="white" />
                 </View>
-              )}
-            </>
-          )}
+              </View>
+
+              <Text style={styles.emptyTitle}>No announcements yet</Text>
+              <Text style={styles.emptyText}>
+                Keep your team informed by creating your first announcement. They'll be notified instantly.
+              </Text>
+
+              <TouchableOpacity activeOpacity={0.8} onPress={handleCreate}>
+                <LinearGradient
+                  colors={['#3b82f6', '#2563eb']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.emptyButton}
+                >
+                  <Plus size={18} color="white" />
+                  <Text style={styles.emptyButtonText}>Create First Announcement</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
+        ) : (
+          <>
+            {announcements.map((ann) => (
+              <AnnouncementCard 
+                key={ann._id} 
+                announcement={ann} 
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                isExpired={isExpired}
+              />
+            ))}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <View style={styles.pagination}>
+                <TouchableOpacity
+                  style={[styles.pageButton, page === 1 && styles.pageButtonDisabled]}
+                  onPress={() => { if (page > 1) { setPage(page - 1); } }}
+                  disabled={page === 1}
+                >
+                  <Text style={styles.pageButtonText}>Previous</Text>
+                </TouchableOpacity>
+                <Text style={styles.pageInfo}>{page} / {totalPages}</Text>
+                <TouchableOpacity
+                  style={[styles.pageButton, page === totalPages && styles.pageButtonDisabled]}
+                  onPress={() => { if (page < totalPages) { setPage(page + 1); } }}
+                  disabled={page === totalPages}
+                >
+                  <Text style={styles.pageButtonText}>Next</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
       </Layout>
 
-      <AnnouncementModal />
-      <DeleteModal />
+      <AnnouncementModal 
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        editTarget={editTarget}
+        form={form}
+        setForm={setForm}
+        onSubmit={handleSubmit}
+        isSubmitting={isSubmitting}
+        toggleRole={toggleRole}
+      />
+      <DeleteModal 
+        visible={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title={deleteTarget?.title}
+        onConfirm={confirmDelete}
+      />
     </>
   );
 }
@@ -586,22 +714,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8fafc',
   },
-  pageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1e293b',
-  },
-  pageSubtitle: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 4,
-  },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -610,6 +722,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  headerActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    marginTop: 4,
+    gap: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 18,
   },
   createButtonText: {
     fontSize: 13,
@@ -618,29 +751,30 @@ const styles = StyleSheet.create({
   },
   announcementCard: {
     backgroundColor: 'white',
-    borderRadius: 16,
-    marginBottom: 12,
+    borderRadius: 20,
+    marginBottom: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderLeftWidth: 4,
+    borderColor: '#f1f5f9',
+    borderLeftWidth: 5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 3,
   },
   inactiveCard: {
-    opacity: 0.6,
+    opacity: 0.7,
+    backgroundColor: '#f8fafc',
   },
   cardHeader: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -649,31 +783,40 @@ const styles = StyleSheet.create({
   },
   cardTitleRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 4,
   },
   cardTitle: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#1e293b',
+    color: '#0f172a',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
   },
   typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   typeBadgeText: {
     fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 6,
     backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   statusBadgeText: {
     fontSize: 10,
@@ -682,77 +825,175 @@ const styles = StyleSheet.create({
   },
   expiredBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    backgroundColor: '#fef2f2',
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#ffe4e6',
   },
   expiredBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#ef4444',
+    color: '#e11d48',
   },
   cardDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#475569',
-    lineHeight: 18,
-    marginBottom: 8,
+    lineHeight: 20,
+    marginBottom: 16,
   },
-  cardMeta: {
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 12,
+  },
+  cardFooter: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 4,
+    marginBottom: 10,
+  },
+  metaInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  authorAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  authorInitial: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  authorName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
   },
   metaText: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#94a3b8',
   },
-  metaDot: {
-    fontSize: 10,
-    color: '#cbd5e1',
+  cardActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  actionBtn: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+  },
+  targetAudience: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  targetText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  expiryInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 'auto',
+    paddingLeft: 10,
+    borderLeftWidth: 1,
+    borderLeftColor: '#e2e8f0',
   },
   expiredText: {
     color: '#ef4444',
   },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionBtn: {
-    padding: 6,
+  emptyWrapper: {
+    paddingTop: 20,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-    backgroundColor: 'white',
-    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+    borderRadius: 32,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  emptyIconWrapper: {
+    position: 'relative',
+    marginBottom: 24,
+  },
+  emptyIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+  },
+  emptyIconBadge: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    backgroundColor: '#3b82f6',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#ffffff',
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginTop: 16,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748b',
-    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+    paddingHorizontal: 20,
   },
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 20,
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    minWidth: 240,
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
   },
   emptyButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: 'white',
   },
@@ -761,27 +1002,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
-    paddingVertical: 20,
+    paddingVertical: 30,
   },
   pageButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     backgroundColor: 'white',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
   pageButtonDisabled: {
     opacity: 0.5,
   },
   pageButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#3b82f6',
   },
   pageInfo: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748b',
+    fontWeight: '600',
   },
 });
 
@@ -819,9 +1065,9 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
   },
   form: {
     padding: 20,
@@ -839,13 +1085,13 @@ const modalStyles = StyleSheet.create({
     color: '#ef4444',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#f1f5f9',
+    borderRadius: 14,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#1e293b',
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#0f172a',
     backgroundColor: '#f8fafc',
   },
   textArea: {
@@ -868,10 +1114,10 @@ const modalStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: '#e2e8f0',
+    borderColor: '#f1f5f9',
     backgroundColor: 'white',
   },
   typeButtonText: {
@@ -948,13 +1194,18 @@ const modalStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 14,
     backgroundColor: '#3b82f6',
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
     color: 'white',
   },
 });

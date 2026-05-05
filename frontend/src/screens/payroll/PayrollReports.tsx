@@ -41,6 +41,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
+import { exportFile } from '../../utils/exportHelper';
 import RNFS from 'react-native-fs';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
@@ -548,31 +549,9 @@ export function PayrollReports({ navigation }: { navigation: any }) {
     }));
   }, [history, tableFilter]);
 
-  const requestStoragePermission = async (): Promise<boolean> => {
-    if (Platform.OS === 'android') {
-      try {
-        const permission = Platform.Version >= 33
-          ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES
-          : PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE;
-        const result = await request(permission);
-        return result === RESULTS.GRANTED;
-      } catch (error) {
-        console.error('Permission error:', error);
-        return false;
-      }
-    }
-    return true;
-  };
-
   const downloadReport = async (type: string) => {
     setIsExporting(true);
     try {
-      const hasPermission = await requestStoragePermission();
-      if (!hasPermission) {
-        Alert.alert('Permission Required', 'Storage permission is needed to save exported files.');
-        return;
-      }
-
       const params = { month: reportPeriod.month, year: reportPeriod.year };
       let content = '';
       let fileName = '';
@@ -645,27 +624,7 @@ export function PayrollReports({ navigation }: { navigation: any }) {
         fileName = `Full_Payroll_Ledger_${reportPeriod.month}_${reportPeriod.year}.csv`;
       }
 
-      const downloadPath = Platform.OS === 'android' ? RNFS.DownloadDirectoryPath : RNFS.DocumentDirectoryPath;
-      const filePath = `${downloadPath}/${fileName}`;
-      await RNFS.writeFile(filePath, content, 'utf8');
-
-      Alert.alert(
-        'Export Successful',
-        `File saved to:\n${filePath}\n\nWould you like to share it?`,
-        [
-          { text: 'Close', style: 'cancel' },
-          {
-            text: 'Share',
-            onPress: async () => {
-              await Share.share({
-                title: fileName,
-                message: `Payroll report exported`,
-                url: `file://${filePath}`,
-              });
-            },
-          },
-        ]
-      );
+      await exportFile(content, fileName, 'text/csv');
       setShowExportModal(false);
     } catch (error) {
       console.error('Export error:', error);

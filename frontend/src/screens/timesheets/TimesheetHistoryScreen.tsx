@@ -45,6 +45,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
+import { exportFile } from '../../utils/exportHelper';
 import { formatHours } from '../../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -459,6 +460,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const [timesheets, setTimesheets] = useState<TimesheetHistoryItem[]>([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [filters, setFilters] = useState({
@@ -612,19 +614,17 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
   };
 
   const handleExportCSV = async () => {
+    setIsExporting(true);
     try {
       const csvData = await timesheetService.exportHistory({
-        ...filters,
-        search: search.length >= 2 ? search : '',
+        year: filters.year,
+        month: filters.month,
+        status: filters.status === 'All Status' ? '' : filters.status
       });
-      
-      // Share CSV file
+
       if (Platform.OS === 'web') {
         const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData], { 
-          type: 'text/csv',
-          lastModified: Date.now()
-        } as any);
+        const blob = new globalAny.Blob([csvData], { type: 'text/csv' } as any);
         const url = globalAny.URL.createObjectURL(blob);
         const link = globalAny.document.createElement('a');
         link.href = url;
@@ -632,30 +632,14 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         link.click();
         globalAny.URL.revokeObjectURL(url);
       } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `my_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'My Timesheets Export',
-          message: `Timesheets exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
+        const fileName = `timesheet_history_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+        await exportFile(csvData as string, fileName, 'text/csv');
       }
-      
-      Alert.alert('Success', 'History exported successfully!');
     } catch (error) {
       console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to export CSV');
+    } finally {
+      setIsExporting(false);
     }
   };
 

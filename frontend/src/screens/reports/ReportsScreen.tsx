@@ -51,6 +51,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import ProGuard from '../../components/common/ProGuard';
+import { exportFile } from '../../utils/exportHelper';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 32;
@@ -812,16 +813,16 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
         link.click();
         globalAny.URL.revokeObjectURL(url);
       } else {
-        await Share.share({
-          title: 'Export Report',
-          message: `Report exported as ${format.toUpperCase()}`,
-          url: `data:${format === 'pdf' ? 'application/pdf' : 'text/csv'};base64,${btoa(data)}`,
-        });
+        const fileName = `enterprise-report-${dateFnsFormat(new Date(), 'yyyyMMdd')}.${format}`;
+        const fileType = format === 'pdf' ? 'application/pdf' : 'text/csv';
+        // Check if data is already base64 (often PDFs from API are)
+        const isBase64 = format === 'pdf' || (typeof data === 'string' && data.length > 1000 && !data.includes(','));
+        await exportFile(data, fileName, fileType, isBase64);
       }
       
-      Alert.alert('Success', `${format.toUpperCase()} report downloaded!`);
       setShowExportModal(false);
     } catch (error) {
+      console.error('Export error:', error);
       Alert.alert('Error', 'Failed to generate report');
     } finally {
       setIsExporting(false);
