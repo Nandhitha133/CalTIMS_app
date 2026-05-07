@@ -69,7 +69,7 @@ export default function LoginScreen() {
       duration: 500,
       useNativeDriver: true,
     }).start();
-    
+
     loadRememberedEmail();
   }, []);
 
@@ -89,9 +89,9 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       const response = await api.post<any>('/auth/login', data);
-      
+
       let accessToken, refreshToken, user;
-      
+
       if (response.data && response.data.data) {
         accessToken = response.data.data.accessToken;
         refreshToken = response.data.data.refreshToken;
@@ -107,21 +107,21 @@ export default function LoginScreen() {
       } else {
         throw new Error('Unable to extract tokens from response');
       }
-      
+
       if (!accessToken || !user) {
         throw new Error('Missing access token or user data');
       }
-      
+
       await AsyncStorage.setItem('accessToken', accessToken);
       await AsyncStorage.setItem('refreshToken', refreshToken || '');
       await AsyncStorage.setItem('user', JSON.stringify(user));
-      
+
       if (data.rememberMe) {
         await AsyncStorage.setItem('rememberedEmail', data.email);
       } else {
         await AsyncStorage.removeItem('rememberedEmail');
       }
-      
+
       if (user.role === 'super_admin' || user.role === 'admin') {
         navigation.reset({
           index: 0,
@@ -137,7 +137,7 @@ export default function LoginScreen() {
       let message = 'Invalid email or password';
       if (error.message) message = error.message;
       if (error.response?.data?.message) message = error.response.data.message;
-      
+
       Alert.alert('Login Failed', message);
       setError('email', { message: 'Invalid credentials' });
       setError('password', { message: 'Invalid credentials' });
@@ -290,8 +290,8 @@ export default function LoginScreen() {
                 control={control}
                 name="rememberMe"
                 render={({ field: { onChange, value } }) => (
-                  <TouchableOpacity 
-                    style={styles.rememberRow} 
+                  <TouchableOpacity
+                    style={styles.rememberRow}
                     onPress={() => onChange(!value)}
                     activeOpacity={0.7}
                   >
@@ -335,9 +335,9 @@ export default function LoginScreen() {
             {/* Footer */}
             <View style={styles.footer}>
               <Text style={styles.footerText}>
-                New organization?{' '}
+                Don't have an account?{' '}
                 <Text style={styles.footerLink} onPress={handleSignUp}>
-                  Start 28-day free trial
+                  Sign Up
                 </Text>
               </Text>
               <Text style={styles.footerNote}>

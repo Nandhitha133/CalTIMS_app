@@ -32,7 +32,6 @@ import {
   Plus,
   Trash2,
   Filter,
-  Download,
   CheckCircle,
   Clock,
 } from 'lucide-react-native';
@@ -40,7 +39,7 @@ import { timesheetAPI, projectAPI, settingsAPI, taskAPI } from '../../services/e
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import ProGuard from '../../components/common/ProGuard';
-import { timesheetService } from '../../services/timesheet.service';
+
 
 interface User {
   _id: string;
@@ -592,49 +591,7 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
     }
   };
 
-  const handleExportCSV = async () => {
-    try {
-      const csvData = await timesheetService.exportCompliance({
-        weekStartDate: format(weekStart, 'yyyy-MM-dd'),
-        search: searchQuery,
-      });
 
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData], { type: 'text/csv' } as any);
-        const url = globalAny.URL.createObjectURL(blob);
-        const link = globalAny.document.createElement('a');
-        link.href = url;
-        link.download = `compliance_report_${format(weekStart, 'yyyyMMdd')}.csv`;
-        link.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `compliance_report_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Compliance Report Export',
-          message: `Compliance report exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
-      }
-
-      Alert.alert('Success', 'Compliance report exported!');
-    } catch (error) {
-      console.error('Export failed:', error);
-      Alert.alert('Error', 'Failed to export CSV');
-    }
-  };
 
   const isCurrentWeekDisabled = () => {
     const nextWeekStart = startOfWeek(addDays(currentDate, 7), { weekStartsOn });
@@ -709,12 +666,6 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
                   onSubmitEditing={fetchComplianceData}
                 />
               </View>
-              <TouchableOpacity
-                style={[styles.exportButton, { backgroundColor: '#3b82f6' }]}
-                onPress={handleExportCSV}
-              >
-                <Download size={18} color="#ffffff" />
-              </TouchableOpacity>
             </View>
 
             {/* Results Header */}

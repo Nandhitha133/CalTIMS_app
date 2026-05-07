@@ -16,7 +16,6 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { 
   Plus, 
   Search, 
@@ -30,7 +29,11 @@ import {
   CheckCircle2, 
   AlertCircle,
   ChevronDown,
-  Receipt
+  ArrowDown,
+  Receipt,
+  Check,
+  Eye,
+  X
 } from 'lucide-react-native';
 import { payrollAPI, userAPI } from '../../services/endpoints';
 import Header from '../../components/common/Header';
@@ -136,6 +139,7 @@ export const PayrollPayslip = () => {
     paid: 0,
     sent: 0,
   });
+  const [selectedPayslipIds, setSelectedPayslipIds] = useState<string[]>([]);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -159,53 +163,47 @@ export const PayrollPayslip = () => {
       console.error('Error loading user:', error);
     }
   };
-
   const fetchPayslips = async () => {
     setIsLoading(true);
     try {
-      // Get current user info
-      const userStr = await AsyncStorage.getItem('user');
-      const user = userStr ? JSON.parse(userStr) : {};
-      const employeeId = user?.employeeId || user?._id;
-
-      // Fetch payroll history for the employee
-      const response = await payrollAPI.getHistory({ userId: employeeId });
+      // Fetch payroll history for the period
+      const response = await payrollAPI.getHistory({ month: selectedMonth, year: selectedYear });
       let payrollData = extractData(response, []);
 
-      // Filter by month/year if needed
+      // Filter by month/year (redundant but safe)
       const filteredData = payrollData.filter((item: any) => {
-        const itemMonth = item.salaryMonth ? parseInt(item.salaryMonth.split('-')[1]) : item.month;
-        const itemYear = item.salaryMonth ? parseInt(item.salaryMonth.split('-')[0]) : item.year;
+        const itemMonth = item.month || (item.salaryMonth ? parseInt(item.salaryMonth.split('-')[1]) : selectedMonth);
+        const itemYear = item.year || (item.salaryMonth ? parseInt(item.salaryMonth.split('-')[0]) : selectedYear);
         return itemMonth === selectedMonth && itemYear === selectedYear;
       });
 
-      // Transform data
+      // Transform data - Fix: Prioritize employeeInfo and user objects
       const transformedData: PayslipData[] = filteredData.map((item: any, index: number) => ({
         _id: item._id || `payslip_${index}`,
-        employeeId: item.employeeId || employeeId,
-        employeeName: item.employeeName || user?.name || 'Employee',
-        designation: item.designation || user?.designation || 'Staff',
-        department: item.department || user?.department || 'General',
+        employeeId: item.employeeInfo?.employeeId || item.user?.employeeId || item.employeeId || 'Unknown',
+        employeeName: item.employeeInfo?.name || item.user?.name || item.employeeName || 'Employee',
+        designation: item.employeeInfo?.designation || item.user?.designation || item.designation || 'Staff',
+        department: item.employeeInfo?.department || item.user?.department || item.department || 'General',
         month: selectedMonth,
         year: selectedYear,
-        grossAmount: item.totalEarnings || item.grossAmount || 0,
-        totalDeductions: item.totalDeductions || 0,
-        netPay: item.netSalary || item.netPay || 0,
-        status: item.status === 'PAID' ? 'PAID' : item.isEmailSent ? 'SENT' : 'GENERATED',
+        grossAmount: item.breakdown?.summary?.gross || item.grossYield || item.totalEarnings || item.grossAmount || 0,
+        totalDeductions: item.breakdown?.summary?.deductions || item.liability || item.totalDeductions || 0,
+        netPay: item.breakdown?.summary?.net || item.netPay || item.netSalary || 0,
+        status: item.isPaid ? 'PAID' : (item.isEmailSent ? 'SENT' : 'GENERATED'),
         isEmailSent: item.isEmailSent || false,
         paidAt: item.paidAt,
-        generatedAt: item.generatedAt || new Date().toISOString(),
-        basicSalary: item.basicSalary || item.basicDA || 0,
-        hra: item.hra || 0,
-        specialAllowance: item.specialAllowance || 0,
-        pfDeduction: item.pfDeduction || item.pf || 0,
-        professionalTax: item.professionalTax || 0,
-        tds: item.tds || item.tax || 0,
-        bankName: item.bankName || user?.bankName || 'Not Set',
-        accountNumber: item.accountNumber || user?.accountNumber || 'Not Set',
-        ifscCode: item.ifscCode || user?.ifscCode || 'Not Set',
-        pan: item.pan || user?.pan || 'Not Set',
-        uan: item.uan || user?.uan || 'Not Set',
+        generatedAt: item.generatedAt || item.createdAt || new Date().toISOString(),
+        basicSalary: item.breakdown?.earnings?.components?.find((c: any) => c.name === 'Basic')?.value || item.basicSalary || 0,
+        hra: item.breakdown?.earnings?.components?.find((c: any) => c.name === 'HRA')?.value || item.hra || 0,
+        specialAllowance: item.breakdown?.earnings?.components?.find((c: any) => c.name === 'Special Allowance')?.value || item.specialAllowance || 0,
+        pfDeduction: item.breakdown?.deductions?.components?.find((c: any) => c.name === 'PF')?.value || item.pfDeduction || 0,
+        professionalTax: item.breakdown?.deductions?.components?.find((c: any) => c.name === 'Professional Tax')?.value || item.professionalTax || 0,
+        tds: item.breakdown?.deductions?.components?.find((c: any) => c.name === 'TDS')?.value || item.tds || 0,
+        bankName: item.bankDetails?.bankName || item.user?.bankName || 'Not Set',
+        accountNumber: item.bankDetails?.accountNumber || item.user?.accountNumber || 'Not Set',
+        ifscCode: item.bankDetails?.ifscCode || item.user?.ifscCode || 'Not Set',
+        pan: item.bankDetails?.pan || item.user?.pan || 'Not Set',
+        uan: item.bankDetails?.uan || item.user?.uan || 'Not Set',
       }));
 
       setPayslips(transformedData);
@@ -233,42 +231,56 @@ export const PayrollPayslip = () => {
   };
 
   const loadMockData = () => {
-    const userStr = AsyncStorage.getItem('user').then(data => {
-      const user = data ? JSON.parse(data) : {};
-      const mockData: PayslipData[] = [
-        {
-          _id: '1',
-          employeeId: user?.employeeId || 'EMP001',
-          employeeName: user?.name || 'John Doe',
-          designation: 'Senior Software Engineer',
-          department: 'Engineering',
-          month: selectedMonth,
-          year: selectedYear,
-          grossAmount: 85000,
-          totalDeductions: 18500,
-          netPay: 66500,
-          status: 'GENERATED',
-          isEmailSent: false,
-          basicSalary: 34000,
-          hra: 17000,
-          specialAllowance: 25500,
-          pfDeduction: 4080,
-          professionalTax: 200,
-          tds: 8500,
-          bankName: 'HDFC Bank',
-          accountNumber: 'XXXX1234',
-          ifscCode: 'HDFC0001234',
-          pan: 'ABCDE1234F',
-          uan: '123456789012',
-        },
-      ];
-      setPayslips(mockData);
-      setStats({
-        total: mockData.length,
-        generated: mockData.filter(p => p.status === 'GENERATED').length,
-        paid: mockData.filter(p => p.status === 'PAID').length,
-        sent: mockData.filter(p => p.status === 'SENT').length,
-      });
+    const mockData: PayslipData[] = [
+      {
+        _id: '1',
+        employeeId: 'EMP001',
+        employeeName: 'John Doe',
+        designation: 'Senior Developer',
+        department: 'Engineering',
+        month: selectedMonth,
+        year: selectedYear,
+        grossAmount: 85000,
+        totalDeductions: 12000,
+        netPay: 73000,
+        status: 'PAID',
+        isEmailSent: true,
+      },
+      {
+        _id: '2',
+        employeeId: 'EMP002',
+        employeeName: 'Jane Smith',
+        designation: 'Product Manager',
+        department: 'Product',
+        month: selectedMonth,
+        year: selectedYear,
+        grossAmount: 92000,
+        totalDeductions: 15000,
+        netPay: 77000,
+        status: 'GENERATED',
+        isEmailSent: false,
+      },
+      {
+        _id: '3',
+        employeeId: 'EMP003',
+        employeeName: 'Robert Wilson',
+        designation: 'UI Designer',
+        department: 'Design',
+        month: selectedMonth,
+        year: selectedYear,
+        grossAmount: 65000,
+        totalDeductions: 8000,
+        netPay: 57000,
+        status: 'GENERATED',
+        isEmailSent: false,
+      },
+    ];
+    setPayslips(mockData);
+    setStats({
+      total: mockData.length,
+      generated: mockData.filter(p => p.status === 'GENERATED').length,
+      paid: mockData.filter(p => p.status === 'PAID').length,
+      sent: mockData.filter(p => p.status === 'SENT' || p.isEmailSent).length,
     });
   };
 
@@ -461,7 +473,7 @@ export const PayrollPayslip = () => {
           <Text style={styles.dropdownSelectorText}>
             {months[selectedMonth - 1].slice(0, 3)}
           </Text>
-          <ChevronDown size={14} color={COLORS.gray} />
+          <ArrowDown size={14} color={COLORS.gray} />
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -469,7 +481,7 @@ export const PayrollPayslip = () => {
           onPress={() => setShowFilterModal(true)}
         >
           <Text style={styles.dropdownSelectorText}>{selectedYear}</Text>
-          <ChevronDown size={14} color={COLORS.gray} />
+          <ArrowDown size={14} color={COLORS.gray} />
         </TouchableOpacity>
       </View>
       
@@ -497,7 +509,7 @@ export const PayrollPayslip = () => {
           onPress={() => setShowFilterModal(true)}
         >
           <Text style={styles.dropdownSelectorText}>{departmentFilter} Departments</Text>
-          <ChevronDown size={14} color={COLORS.gray} />
+          <ArrowDown size={14} color={COLORS.gray} />
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -505,36 +517,63 @@ export const PayrollPayslip = () => {
           onPress={() => setShowFilterModal(true)}
         >
           <Text style={styles.dropdownSelectorText}>{statusFilter === 'all' ? 'All Status' : statusFilter}</Text>
-          <ChevronDown size={14} color={COLORS.gray} />
+          <ArrowDown size={14} color={COLORS.gray} />
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  const renderTableHeader = () => (
-    <View style={styles.tableHeaderRow}>
-      <View style={styles.checkboxContainer}>
-        <View style={styles.checkbox} />
+  const renderTableHeader = () => {
+    const filtered = getFilteredPayslips();
+    const isAllSelected = filtered.length > 0 && selectedPayslipIds.length === filtered.length;
+
+    return (
+      <View style={styles.tableHeaderRow}>
+        <TouchableOpacity 
+          style={styles.checkboxContainer} 
+          onPress={() => {
+            if (isAllSelected) {
+              setSelectedPayslipIds([]);
+            } else {
+              setSelectedPayslipIds(filtered.map(p => p._id));
+            }
+          }}
+        >
+          <View style={[styles.checkbox, isAllSelected && styles.checkboxSelected]}>
+            {isAllSelected && <Check size={12} color={COLORS.white} />}
+          </View>
+        </TouchableOpacity>
+        <Text style={[styles.tableHeaderText, styles.employeeColumn]}>EMPLOYEE</Text>
+        <Text style={[styles.tableHeaderText, styles.roleColumn]}>ROLE</Text>
+        <Text style={[styles.tableHeaderText, styles.amountColumn]}>GROSS AMOUNT</Text>
+        <Text style={[styles.tableHeaderText, styles.amountColumn]}>DEDUCTIONS</Text>
+        <Text style={[styles.tableHeaderText, styles.amountColumn]}>NET PAYOUT</Text>
+        <Text style={[styles.tableHeaderText, styles.statusColumn]}>STATUS</Text>
+        <Text style={[styles.tableHeaderText, styles.actionsColumn]}>ACTIONS</Text>
       </View>
-      <Text style={[styles.tableHeaderText, styles.employeeColumn]}>EMPLOYEE</Text>
-      <Text style={[styles.tableHeaderText, styles.roleColumn]}>ROLE</Text>
-      <Text style={[styles.tableHeaderText, styles.amountColumn]}>GROSS AMOUNT</Text>
-      <Text style={[styles.tableHeaderText, styles.amountColumn]}>DEDUCTIONS</Text>
-      <Text style={[styles.tableHeaderText, styles.amountColumn]}>NET PAYOUT</Text>
-      <Text style={[styles.tableHeaderText, styles.statusColumn]}>STATUS</Text>
-      <Text style={[styles.tableHeaderText, styles.actionsColumn]}>ACTIONS</Text>
-    </View>
-  );
+    );
+  };
 
   const renderPayslipItem = ({ item }: { item: PayslipData }) => {
     const statusBadge = getStatusBadge(item.status, item.isEmailSent);
-    const canSendEmail = item.status === 'PAID' || item.isEmailSent;
+    const isSelected = selectedPayslipIds.includes(item._id);
     
     return (
-      <View style={styles.tableRow}>
-        <View style={styles.checkboxContainer}>
-          <View style={styles.checkbox} />
-        </View>
+      <View style={[styles.tableRow, isSelected && styles.tableRowSelected]}>
+        <TouchableOpacity 
+          style={styles.checkboxContainer} 
+          onPress={() => {
+            if (isSelected) {
+              setSelectedPayslipIds(prev => prev.filter(id => id !== item._id));
+            } else {
+              setSelectedPayslipIds(prev => [...prev, item._id]);
+            }
+          }}
+        >
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Check size={12} color={COLORS.white} />}
+          </View>
+        </TouchableOpacity>
         
         <View style={styles.employeeColumn}>
           <Text style={styles.employeeNameText}>{item.employeeName}</Text>
@@ -570,7 +609,7 @@ export const PayrollPayslip = () => {
               setSelectedPayslip(item);
               setShowPreviewModal(true);
             }}>
-              <Icon name="visibility" size={18} color={COLORS.blue} />
+              <Eye size={18} color={COLORS.blue} />
             </TouchableOpacity>
             
             {item.status === 'GENERATED' && (
@@ -578,16 +617,16 @@ export const PayrollPayslip = () => {
                 setPayslipToMark(item);
                 setShowMarkPaidConfirm(true);
               }}>
-                <Icon name="payment" size={18} color={COLORS.emerald} />
+                <CreditCard size={18} color={COLORS.emerald} />
               </TouchableOpacity>
             )}
             
             <TouchableOpacity 
-              onPress={() => canSendEmail && handleSendEmail(item)}
-              disabled={!canSendEmail}
-              style={!canSendEmail && { opacity: 0.5 }}
+              onPress={() => (item.status === 'PAID' || item.isEmailSent) && handleSendEmail(item)}
+              disabled={!(item.status === 'PAID' || item.isEmailSent)}
+              style={!(item.status === 'PAID' || item.isEmailSent) && { opacity: 0.5 }}
             >
-              <Icon name="email" size={18} color={canSendEmail ? COLORS.indigo : COLORS.gray} />
+              <Mail size={18} color={(item.status === 'PAID' || item.isEmailSent) ? COLORS.indigo : COLORS.gray} />
             </TouchableOpacity>
           </View>
         </View>
@@ -610,7 +649,7 @@ export const PayrollPayslip = () => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Payslip Preview</Text>
               <TouchableOpacity onPress={() => setShowPreviewModal(false)}>
-                <Icon name="close" size={24} color={COLORS.gray} />
+                <X size={24} color={COLORS.gray} />
               </TouchableOpacity>
             </View>
             
@@ -764,7 +803,7 @@ export const PayrollPayslip = () => {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Filter Options</Text>
             <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-              <Icon name="close" size={24} color={COLORS.gray} />
+              <X size={24} color={COLORS.gray} />
             </TouchableOpacity>
           </View>
           
@@ -892,7 +931,7 @@ export const PayrollPayslip = () => {
       <View style={styles.modalContainer}>
         <View style={styles.confirmModalContent}>
           <View style={styles.confirmIcon}>
-            <Icon name="payment" size={40} color={COLORS.emerald} />
+            <CreditCard size={40} color={COLORS.emerald} />
           </View>
           <Text style={styles.confirmTitle}>Confirm Salary Disbursement</Text>
           <Text style={styles.confirmMessage}>
@@ -989,7 +1028,7 @@ export const PayrollPayslip = () => {
           </View>
         ) : filteredPayslips.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Icon name="receipt" size={60} color={COLORS.gray} />
+            <Receipt size={60} color={COLORS.gray} />
             <Text style={styles.emptyTitle}>No Payslips Found</Text>
             <Text style={styles.emptyText}>
               No payslips found for {months[selectedMonth - 1]} {selectedYear}
@@ -1256,7 +1295,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
-    minWidth: 800, // For horizontal scroll
+    minWidth: 900, // For horizontal scroll
   },
   tableHeaderRow: {
     flexDirection: 'row',
@@ -1692,6 +1731,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.white,
     fontWeight: '500',
+  },
+  checkboxSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableRowSelected: {
+    backgroundColor: COLORS.indigoLight,
   },
 });
 

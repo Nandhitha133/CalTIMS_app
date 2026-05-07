@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 import { useAuthStore } from '../store/authStore';
+import { arrayBufferToBase64 } from '../utils/base64';
 
 // Get base URL based on environment
 const getBaseUrl = () => {
@@ -70,9 +71,9 @@ class ApiService {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(auditPayload)
-      }).catch(err => console.error('Silent Audit Error:', err));
+      }).catch(err => console.warn('Silent Audit Error:', err));
     } catch (e) {
-      console.error('Audit Interceptor Failed:', e);
+      console.warn('Audit Interceptor Failed:', e);
     }
   }
 
@@ -94,15 +95,22 @@ class ApiService {
       }
 
       let errorMessage = `Request failed with status ${response.status}`;
+      let errorData = null;
+
       try {
-        const error = await response.json();
-        errorMessage = error.message || error.error || errorMessage;
+        errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
       } catch (e) {
         errorMessage = response.statusText || errorMessage;
       }
 
-      console.error(`API Error [${response.status}] ${response.url}:`, errorMessage);
-      throw new Error(errorMessage);
+      console.warn(`API Error [${response.status}] ${response.url}:`, errorMessage);
+      
+      const error: any = new Error(errorMessage);
+      error.status = response.status;
+      error.data = errorData;
+      error.response = { data: errorData }; // Compatibility with axios-style handling
+      throw error;
     }
 
     const contentType = response.headers.get('content-type');
@@ -114,6 +122,17 @@ class ApiService {
       return await response.text() as unknown as T;
     }
 
+    if (contentType && (
+      contentType.includes('application/pdf') || 
+      contentType.includes('application/vnd.ms-excel') ||
+      contentType.includes('application/octet-stream')
+    )) {
+      const buffer = await response.arrayBuffer();
+      const base64 = arrayBufferToBase64(buffer).trim();
+      console.log(`[API] Converted ${buffer.byteLength} bytes to ${base64.length} chars base64`);
+      return base64 as unknown as T;
+    }
+
     return { success: true } as T;
   }
 
@@ -121,7 +140,7 @@ class ApiService {
     const url = new URL(`${BASE_URL}${endpoint}`);
     if (params) {
       Object.keys(params).forEach(key => {
-        if (params[key] !== undefined && params[key] !== null) {
+        if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
           url.searchParams.append(key, params[key]);
         }
       });
@@ -130,6 +149,7 @@ class ApiService {
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: await this.getHeaders(config?.headers),
+      credentials: 'include',
     });
 
     return this.handleResponse<T>(response);
@@ -142,6 +162,7 @@ class ApiService {
       method: 'POST',
       headers: await this.getHeaders(config?.headers),
       body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
+      credentials: 'include',
     });
 
     const result = await this.handleResponse<T>(response);
@@ -159,6 +180,7 @@ class ApiService {
       method: 'PUT',
       headers: await this.getHeaders(config?.headers),
       body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
+      credentials: 'include',
     });
 
     const result = await this.handleResponse<T>(response);
@@ -176,6 +198,7 @@ class ApiService {
       method: 'PATCH',
       headers: await this.getHeaders(config?.headers),
       body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
+      credentials: 'include',
     });
 
     const result = await this.handleResponse<T>(response);
@@ -192,6 +215,7 @@ class ApiService {
     const response = await fetch(url, {
       method: 'DELETE',
       headers: await this.getHeaders(config?.headers),
+      credentials: 'include',
     });
 
     const result = await this.handleResponse<T>(response);

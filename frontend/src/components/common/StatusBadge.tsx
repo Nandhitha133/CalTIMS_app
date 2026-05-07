@@ -12,10 +12,22 @@ const badgeStyles = StyleSheet.create({
 
 const StatusBadge = memo(({ status }: StatusBadgeProps) => {
   const getColors = () => {
-    switch (status?.toLowerCase()) {
-      case 'active': return { bg: '#ecfdf5', text: '#10b981' };
-      case 'inactive': return { bg: '#fef2f2', text: '#ef4444' };
-      case 'admin': return { bg: '#eff6ff', text: '#2563eb' };
+    switch (status?.toLowerCase()?.replace(' ', '_')) {
+      case 'active':
+      case 'approved': 
+        return { bg: '#ecfdf5', text: '#10b981' };
+      case 'inactive':
+      case 'rejected':
+      case 'error':
+        return { bg: '#fef2f2', text: '#ef4444' };
+      case 'pending':
+      case 'submitted':
+        return { bg: '#fff7ed', text: '#f59e0b' };
+      case 'draft':
+        return { bg: '#f1f5f9', text: '#64748b' };
+      case 'admin_filled':
+      case 'admin': 
+        return { bg: '#eff6ff', text: '#2563eb' };
       case 'manager': return { bg: '#f5f3ff', text: '#7c3aed' };
       case 'hr': return { bg: '#fdf2f8', text: '#db2777' };
       case 'finance': return { bg: '#fff7ed', text: '#ea580c' };

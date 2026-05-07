@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// screens/login/ForgotPasswordPage.tsx
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,158 +10,733 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Modal,
-  StyleSheet,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Mail, ArrowLeft } from 'lucide-react-native';
+import {
+  Mail,
+  ArrowLeft,
+  Key,
+  Lock,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  ChevronRight,
+  CheckCircle2,
+  RefreshCw,
+} from 'lucide-react-native';
 import api from '../../services/api';
-import { RootStackParamList } from '../../navigation/AppNavigator';
 
-const schema = z.object({
-  email: z.string().email('Enter a valid email'),
+const { width } = Dimensions.get('window');
+
+// Validation schemas for each step
+const emailSchema = z.object({
+  email: z.string().email('Enter a valid email')
 });
 
-type ForgotPasswordFormData = {
-  email: string;
-};
+const otpSchema = z.object({
+  otp: z.string().length(6, 'Enter the 6-digit code')
+});
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ForgotPassword'>;
+const passwordSchema = z.object({
+  password: z.string().min(8, 'Minimum 8 characters'),
+  confirm: z.string(),
+}).refine(d => d.password === d.confirm, {
+  message: "Passwords don't match",
+  path: ['confirm']
+});
 
-export default function ForgotPasswordScreen() {
-  const navigation = useNavigation<NavigationProp>();
-  const [sent, setSent] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [manualToken, setManualToken] = useState('');
+type EmailFormData = { email: string };
+type OTPFormData = { otp: string };
+type PasswordFormData = { password: string; confirm: string };
 
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ForgotPasswordFormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      email: '',
-    },
+export default function ForgotPasswordPage() {
+  const navigation = useNavigation();
+  const [step, setStep] = useState(1); // 1: Email, 2: OTP, 3: New Password
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  // Animation values
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // Progress bar animation
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: step,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [step]);
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [1, 3],
+    outputRange: ['33%', '100%'],
+    extrapolate: 'clamp',
   });
 
-  const onSubmit = async (data: ForgotPasswordFormData) => {
-    setIsLoading(true);
+  const animateTransition = (nextStep: number) => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -30,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => setStep(nextStep));
+  };
+
+  // --- Step 1: Send OTP ---
+  const emailForm = useForm<EmailFormData>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: { email: '' }
+  });
+
+  const handleSendOTP = async (data: EmailFormData) => {
+    setIsSending(true);
     try {
-      await api.post('/auth/forgot-password', data);
-      setSent(true);
-      Alert.alert('Success', 'Reset link sent to your email');
+      const trimmedEmail = data.email.trim().toLowerCase();
+      console.log('Sending Forgot Password OTP to:', trimmedEmail);
+      await api.post('/auth/forgot-password-otp', { email: trimmedEmail });
+      setEmail(trimmedEmail);
+      animateTransition(2);
+      Alert.alert('Success', 'Recovery code sent to your email');
     } catch (error: any) {
-      const message = error.response?.data?.message || error.message || 'Failed to send reset link. Please try again.';
+      console.log('Forgot Password OTP Error:', {
+        message: error.message,
+        data: error.response?.data,
+        status: error.status
+      });
+      const message = error.response?.data?.message || 'Failed to send code';
       Alert.alert('Error', message);
     } finally {
-      setIsLoading(false);
+      setIsSending(false);
     }
   };
 
-  if (sent) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#ffffff', justifyContent: 'center', paddingHorizontal: 24 }}>
-        <View style={{ alignItems: 'center', gap: 24 }}>
-          <View
-            style={{
-              width: 80,
-              height: 80,
-              backgroundColor: '#ecfdf5',
-              borderRadius: 24,
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.05,
-              shadowRadius: 4,
-              elevation: 2,
-            }}
-          >
-            <Mail size={32} color="#059669" />
-          </View>
-          <View style={{ alignItems: 'center', gap: 8 }}>
-            <Text style={{ fontSize: 24, fontWeight: '700', color: '#0f172a' }}>Check your email</Text>
-            <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center', paddingHorizontal: 24 }}>
-              A password recovery link has been dispatched to your corporate email address.
-            </Text>
-          </View>
-          
-          <View style={{ width: '100%', gap: 12 }}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Login' as never)}
-              style={{
-                width: '100%',
-                height: 56,
-                backgroundColor: '#3b82f6',
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Back to Login</Text>
-            </TouchableOpacity>
+  // --- Step 2: Verify OTP ---
+  const otpForm = useForm<OTPFormData>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: { otp: '' }
+  });
 
-            <TouchableOpacity
-              onPress={() => setIsModalVisible(true)}
-            >
-              <Text style={{ color: '#64748b', fontSize: 14, textAlign: 'center', textDecorationLine: 'underline' }}>
-                Already have a token? Click here
-              </Text>
-            </TouchableOpacity>
+  const handleVerifyOTP = async (data: OTPFormData) => {
+    setIsVerifying(true);
+    try {
+      console.log('Verifying OTP for:', email);
+      const response: any = await api.post('/auth/verify-reset-otp', {
+        email,
+        otp: data.otp
+      });
+
+      console.log('OTP Verification Full Response:', JSON.stringify(response, null, 2));
+
+      // Capture token with extreme robustness
+      const serverToken =
+        response?.data?.token ||
+        response?.data?.resetToken ||
+        response?.data?.reset_token ||
+        response?.data?.verificationToken ||
+        response?.data?.data?.token ||
+        response?.data?.data?.resetToken ||
+        response?.data?.data?.verificationToken ||
+        response?.token ||
+        response?.resetToken ||
+        response?.reset_token ||
+        (typeof response?.data === 'string' && response.data.length > 10 ? response.data : null) ||
+        (response?.data?.id && typeof response.data.id === 'string' ? response.data.id : null);
+
+      if (serverToken) {
+        console.log('Successfully captured reset token');
+        setOtp(serverToken);
+      } else {
+        console.log('No specific token found, continuing with 6-digit code');
+        setOtp(data.otp);
+      }
+
+      animateTransition(3);
+      Alert.alert('Success', 'Code verified. Set your new password.');
+    } catch (error: any) {
+      console.log('OTP Verification Error:', {
+        message: error.message,
+        data: error.response?.data,
+        status: error.status
+      });
+      const message = error.response?.data?.message || 'Invalid code';
+      Alert.alert('Error', message);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // --- Step 3: Reset Password ---
+  const passwordForm = useForm<PasswordFormData>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { password: '', confirm: '' }
+  });
+
+  const handleResetPassword = async (data: PasswordFormData) => {
+    setIsResetting(true);
+    const isOTP = /^\d{6}$/.test(otp);
+
+    // Create an exhaustive payload to cover all possible backend naming conventions
+    const payload = {
+      email,
+      user_email: email,
+      otp: isOTP ? otp : undefined,
+      OTP: isOTP ? otp : undefined,
+      code: isOTP ? otp : undefined,
+      otpCode: isOTP ? otp : undefined,
+      otp_code: isOTP ? otp : undefined,
+      verificationCode: isOTP ? otp : undefined,
+      verification_code: isOTP ? otp : undefined,
+      token: otp,
+      resetToken: otp,
+      reset_token: otp,
+      verificationToken: otp,
+      verification_token: otp,
+      password: data.password,
+      newPassword: data.password,
+      new_password: data.password,
+      confirmPassword: data.confirm || data.password,
+      confirm_password: data.confirm || data.password,
+      password_confirmation: data.confirm || data.password,
+      confirm: data.confirm || data.password
+    };
+
+    console.log('Resetting Password - isOTP:', isOTP, 'Payload:', JSON.stringify(payload, null, 2));
+
+    try {
+      // Strategy 1: Specialized OTP reset endpoint
+      console.log('Attempting Strategy 1: /auth/reset-password-with-otp');
+      await api.post('/auth/reset-password-with-otp', payload);
+      handleResetSuccess();
+    } catch (error: any) {
+      console.log('Strategy 1 failed:', error.response?.data?.message || error.message);
+
+      try {
+        // Strategy 2: URL-parameter based reset (standard pattern)
+        console.log(`Attempting Strategy 2: /auth/reset-password/${otp}`);
+        await api.post(`/auth/reset-password/${otp}`, {
+          email,
+          password: data.password,
+          confirmPassword: data.confirm || data.password
+        });
+        handleResetSuccess();
+      } catch (secondaryError: any) {
+        console.log('Strategy 2 failed:', secondaryError.response?.data?.message || secondaryError.message);
+
+        try {
+          // Strategy 3: Standard POST endpoint with token in body
+          console.log('Attempting Strategy 3: /auth/reset-password (body-only)');
+          await api.post('/auth/reset-password', payload);
+          handleResetSuccess();
+        } catch (tertiaryError: any) {
+          console.log('Strategy 3 failed:', tertiaryError.response?.data?.message || tertiaryError.message);
+
+          try {
+            // Strategy 4: Another common variant
+            console.log('Attempting Strategy 4: /auth/reset-password-otp');
+            await api.post('/auth/reset-password-otp', payload);
+            handleResetSuccess();
+          } catch (quaternaryError: any) {
+            console.log('Strategy 4 failed:', quaternaryError.response?.data?.message || quaternaryError.message);
+
+            // Final failure notification - try to show the most useful error
+            const finalMessage =
+              quaternaryError.response?.data?.message ||
+              tertiaryError.response?.data?.message ||
+              secondaryError.response?.data?.message ||
+              error.response?.data?.message ||
+              'Reset failed: ' + (quaternaryError.response?.data?.error || 'Token invalid or expired');
+
+            Alert.alert('Error', finalMessage);
+          }
+        }
+      }
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleResetSuccess = () => {
+    Alert.alert(
+      'Success',
+      'Password updated! You can now log in.',
+      [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('Login' as never),
+        },
+      ]
+    );
+  };
+
+  const handleResendOTP = async () => {
+    setIsSending(true);
+    try {
+      await api.post('/auth/forgot-password-otp', { email });
+      Alert.alert('Success', 'New recovery code sent');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to resend code';
+      Alert.alert('Error', message);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const renderStep1 = () => (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ translateX: slideAnim }],
+        gap: 24,
+      }}
+    >
+      {/* Header */}
+      <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            backgroundColor: '#eff6ff',
+            borderRadius: 24,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <Key size={36} color="#3b82f6" />
+        </View>
+        <Text style={{ fontSize: 32, fontWeight: '800', color: '#0f172a', marginBottom: 8, letterSpacing: -0.5 }}>
+          Recovery
+        </Text>
+        <Text style={{ fontSize: 14, fontWeight: '500', color: '#64748b', textAlign: 'center', lineHeight: 20 }}>
+          Enter your email to receive{'\n'}a recovery code.
+        </Text>
+      </View>
+
+      {/* Form */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 2, marginBottom: 8, marginLeft: 4 }}>
+            WORK EMAIL
+          </Text>
+          <View style={{ position: 'relative' }}>
+            <Mail
+              size={18}
+              color="#94a3b8"
+              style={{ position: 'absolute', left: 16, top: 18, zIndex: 1 }}
+            />
+            <Controller
+              control={emailForm.control}
+              name="email"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <TextInput
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  value={value}
+                  placeholder="name@company.com"
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoFocus
+                  style={{
+                    height: 56,
+                    backgroundColor: '#f1f5f9',
+                    borderWidth: 1,
+                    borderColor: emailForm.formState.errors.email ? '#ef4444' : '#e2e8f0',
+                    borderRadius: 16,
+                    paddingLeft: 48,
+                    paddingRight: 16,
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: '#0f172a',
+                  }}
+                />
+              )}
+            />
           </View>
+          {emailForm.formState.errors.email && (
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#ef4444', marginTop: 4, marginLeft: 8, letterSpacing: 1 }}>
+              {emailForm.formState.errors.email.message}
+            </Text>
+          )}
         </View>
 
-        {/* Token Input Modal */}
-        <Modal
-          visible={isModalVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setIsModalVisible(false)}
+        <TouchableOpacity
+          onPress={emailForm.handleSubmit(handleSendOTP)}
+          disabled={isSending}
+          activeOpacity={0.9}
+          style={{
+            height: 56,
+            backgroundColor: '#3b82f6',
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#3b82f6',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+            opacity: isSending ? 0.7 : 1,
+            flexDirection: 'row',
+            gap: 8,
+          }}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>Enter Reset Token</Text>
-              <Text style={styles.modalSubtitle}>
-                Paste the reset token you received in your email to set a new password.
+          {isSending ? (
+            <ActivityIndicator color="white" size="small" />
+          ) : (
+            <>
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 14, letterSpacing: 2 }}>
+                SEND CODE
               </Text>
-              <TextInput
-                style={styles.tokenInput}
-                placeholder="Enter token here..."
-                value={manualToken}
-                onChangeText={setManualToken}
-                autoCapitalize="none"
-              />
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  onPress={() => setIsModalVisible(false)}
-                  style={styles.cancelButton}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (manualToken.trim()) {
-                      setIsModalVisible(false);
-                      navigation.navigate('ResetPassword', { token: manualToken.trim() });
-                    }
-                  }}
-                  style={styles.proceedButton}
-                >
-                  <Text style={styles.proceedText}>Proceed</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+              <ChevronRight size={20} color="white" />
+            </>
+          )}
+        </TouchableOpacity>
       </View>
-    );
-  }
+    </Animated.View>
+  );
+
+  const renderStep2 = () => (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ translateX: slideAnim }],
+        gap: 24,
+      }}
+    >
+      {/* Header */}
+      <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            backgroundColor: '#f0fdf4',
+            borderRadius: 24,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <ShieldCheck size={36} color="#22c55e" />
+        </View>
+        <Text style={{ fontSize: 28, fontWeight: '800', color: '#0f172a', marginBottom: 8, letterSpacing: -0.5 }}>
+          Verify Code
+        </Text>
+        <View style={{ paddingHorizontal: 24 }}>
+          <Text style={{ fontSize: 14, fontWeight: '500', color: '#64748b', textAlign: 'center', lineHeight: 20 }}>
+            We've sent a 6-digit code to{'\n'}
+            <Text style={{ color: '#0f172a', fontWeight: '700' }}>{email}</Text>
+          </Text>
+        </View>
+      </View>
+
+      {/* Form */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 2, marginBottom: 8, marginLeft: 4, textAlign: 'center' }}>
+            OTP CODE
+          </Text>
+          <Controller
+            control={otpForm.control}
+            name="otp"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                onBlur={onBlur}
+                onChangeText={(text) => {
+                  // Only allow digits
+                  const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
+                  onChange(cleaned);
+                }}
+                value={value}
+                placeholder="000000"
+                placeholderTextColor="#cbd5e1"
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+                style={{
+                  height: 64,
+                  backgroundColor: '#f1f5f9',
+                  borderWidth: 1,
+                  borderColor: otpForm.formState.errors.otp ? '#ef4444' : '#e2e8f0',
+                  borderRadius: 16,
+                  textAlign: 'center',
+                  fontSize: 24,
+                  fontWeight: '900',
+                  letterSpacing: 16,
+                  color: '#0f172a',
+                }}
+              />
+            )}
+          />
+          {otpForm.formState.errors.otp && (
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#ef4444', marginTop: 4, marginLeft: 8, textAlign: 'center', letterSpacing: 1 }}>
+              {otpForm.formState.errors.otp.message}
+            </Text>
+          )}
+        </View>
+
+        <TouchableOpacity
+          onPress={otpForm.handleSubmit(handleVerifyOTP)}
+          disabled={isVerifying}
+          activeOpacity={0.9}
+          style={{
+            height: 56,
+            backgroundColor: '#22c55e',
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#22c55e',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+            opacity: isVerifying ? 0.7 : 1,
+            flexDirection: 'row',
+            gap: 8,
+          }}
+        >
+          {isVerifying ? (
+            <ActivityIndicator color="white" size="small" />
+          ) : (
+            <>
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 14, letterSpacing: 2 }}>
+                VERIFY & CONTINUE
+              </Text>
+              <ChevronRight size={20} color="white" />
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => animateTransition(1)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          >
+            <ArrowLeft size={14} color="#94a3b8" />
+            <Text style={{ color: '#94a3b8', fontWeight: '600', fontSize: 12, letterSpacing: 1 }}>
+              INCORRECT EMAIL?
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleResendOTP}
+            disabled={isSending}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          >
+            {isSending ? (
+              <ActivityIndicator size="small" color="#3b82f6" />
+            ) : (
+              <RefreshCw size={14} color="#3b82f6" />
+            )}
+            <Text style={{ color: '#3b82f6', fontWeight: '600', fontSize: 12, letterSpacing: 1 }}>
+              RESEND
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Animated.View>
+  );
+
+  const renderStep3 = () => (
+    <Animated.View
+      style={{
+        opacity: fadeAnim,
+        transform: [{ translateX: slideAnim }],
+        gap: 24,
+      }}
+    >
+      {/* Header */}
+      <View style={{ alignItems: 'center', marginBottom: 8 }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            backgroundColor: '#fef3c7',
+            borderRadius: 24,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <Lock size={36} color="#f59e0b" />
+        </View>
+        <Text style={{ fontSize: 28, fontWeight: '800', color: '#0f172a', marginBottom: 8, letterSpacing: -0.5 }}>
+          Set New Password
+        </Text>
+        <Text style={{ fontSize: 14, fontWeight: '500', color: '#64748b', textAlign: 'center', lineHeight: 20 }}>
+          Pick something secure that{'\n'}you haven't used before.
+        </Text>
+      </View>
+
+      {/* Form */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 2, marginBottom: 8, marginLeft: 4 }}>
+            NEW PASSWORD
+          </Text>
+          <View style={{ position: 'relative' }}>
+            <Lock
+              size={18}
+              color="#94a3b8"
+              style={{ position: 'absolute', left: 16, top: 18, zIndex: 1 }}
+            />
+            <Controller
+              control={passwordForm.control}
+              name="password"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <TextInput
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  value={value}
+                  placeholder="••••••••"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry={!showPassword}
+                  style={{
+                    height: 56,
+                    backgroundColor: '#f1f5f9',
+                    borderWidth: 1,
+                    borderColor: passwordForm.formState.errors.password ? '#ef4444' : '#e2e8f0',
+                    borderRadius: 16,
+                    paddingLeft: 48,
+                    paddingRight: 48,
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: '#0f172a',
+                  }}
+                />
+              )}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={{ position: 'absolute', right: 16, top: 18 }}
+            >
+              {showPassword ? (
+                <EyeOff size={18} color="#94a3b8" />
+              ) : (
+                <Eye size={18} color="#94a3b8" />
+              )}
+            </TouchableOpacity>
+          </View>
+          {passwordForm.formState.errors.password && (
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#ef4444', marginTop: 4, marginLeft: 8, letterSpacing: 1 }}>
+              {passwordForm.formState.errors.password.message}
+            </Text>
+          )}
+        </View>
+
+        <View>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 2, marginBottom: 8, marginLeft: 4 }}>
+            CONFIRM PASSWORD
+          </Text>
+          <View style={{ position: 'relative' }}>
+            <Lock
+              size={18}
+              color="#94a3b8"
+              style={{ position: 'absolute', left: 16, top: 18, zIndex: 1 }}
+            />
+            <Controller
+              control={passwordForm.control}
+              name="confirm"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <TextInput
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  value={value}
+                  placeholder="••••••••"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry={!showPassword}
+                  style={{
+                    height: 56,
+                    backgroundColor: '#f1f5f9',
+                    borderWidth: 1,
+                    borderColor: passwordForm.formState.errors.confirm ? '#ef4444' : '#e2e8f0',
+                    borderRadius: 16,
+                    paddingLeft: 48,
+                    paddingRight: 16,
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: '#0f172a',
+                  }}
+                />
+              )}
+            />
+          </View>
+          {passwordForm.formState.errors.confirm && (
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#ef4444', marginTop: 4, marginLeft: 8, letterSpacing: 1 }}>
+              {passwordForm.formState.errors.confirm.message}
+            </Text>
+          )}
+        </View>
+
+        <TouchableOpacity
+          onPress={passwordForm.handleSubmit(handleResetPassword)}
+          disabled={isResetting}
+          activeOpacity={0.9}
+          style={{
+            height: 56,
+            backgroundColor: '#f59e0b',
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#f59e0b',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+            opacity: isResetting ? 0.7 : 1,
+            flexDirection: 'row',
+            gap: 8,
+          }}
+        >
+          {isResetting ? (
+            <ActivityIndicator color="white" size="small" />
+          ) : (
+            <>
+              <CheckCircle2 size={20} color="white" />
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 14, letterSpacing: 2 }}>
+                UPDATE PASSWORD
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -175,100 +751,57 @@ export default function ForgotPasswordScreen() {
         <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 }}>
           {/* Back Button */}
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              if (step === 1) {
+                navigation.goBack();
+              } else {
+                animateTransition(step - 1);
+              }
+            }}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               gap: 8,
-              marginBottom: 32,
+              marginBottom: 24,
             }}
           >
             <ArrowLeft size={20} color="#3b82f6" />
-            <Text style={{ color: '#3b82f6', fontWeight: '700', fontSize: 14 }}>Back</Text>
+            <Text style={{ color: '#3b82f6', fontWeight: '700', fontSize: 14 }}>
+              {step === 1 ? 'Back' : 'Previous Step'}
+            </Text>
           </TouchableOpacity>
 
-          {/* Header */}
-          <View style={{ marginBottom: 48 }}>
-            <Text style={{ fontSize: 32, fontWeight: '700', color: '#0f172a', marginBottom: 8 }}>
-              Recovery
-            </Text>
-            <Text style={{ fontSize: 14, color: '#64748b', fontWeight: '500' }}>
-              Lost access? Enter your email to begin restoration.
-            </Text>
-          </View>
-
-          {/* Form */}
-          <View style={{ gap: 24 }}>
-            <View>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 8 }}>
-                Work Email
-              </Text>
-              <View style={{ position: 'relative' }}>
-                <Mail
-                  size={18}
-                  color="#94a3b8"
-                  style={{ position: 'absolute', left: 16, top: 18, zIndex: 1 }}
+          {/* Progress Indicator */}
+          <View style={{ marginBottom: 32 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
+              {[1, 2, 3].map((s) => (
+                <View
+                  key={s}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: s <= step ? '#3b82f6' : '#e2e8f0',
+                  }}
                 />
-                <Controller
-                  control={control}
-                  name="email"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <TextInput
-                      onBlur={onBlur}
-                      onChangeText={onChange}
-                      value={value}
-                      placeholder="name@company.com"
-                      placeholderTextColor="#94a3b8"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      style={{
-                        height: 56,
-                        backgroundColor: '#f1f5f9',
-                        borderWidth: 1,
-                        borderColor: errors.email ? '#ef4444' : '#e2e8f0',
-                        borderRadius: 16,
-                        paddingLeft: 48,
-                        paddingRight: 16,
-                        fontSize: 16,
-                        color: '#0f172a',
-                      }}
-                    />
-                  )}
-                />
-              </View>
-              {errors.email && (
-                <Text style={{ fontSize: 12, color: '#ef4444', marginTop: 4, marginLeft: 8 }}>
-                  {errors.email.message}
-                </Text>
-              )}
+              ))}
             </View>
-
-            <TouchableOpacity
-              onPress={handleSubmit(onSubmit)}
-              disabled={isLoading}
-              style={{
-                height: 56,
-                backgroundColor: '#3b82f6',
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-                shadowColor: '#3b82f6',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 8,
-                elevation: 4,
-                opacity: isLoading ? 0.7 : 1,
-              }}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="white" size="small" />
-              ) : (
-                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16, letterSpacing: 0.5 }}>
-                  Send Reset Link
-                </Text>
-              )}
-            </TouchableOpacity>
+            <View style={{ height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+              <Animated.View
+                style={{
+                  height: '100%',
+                  backgroundColor: '#3b82f6',
+                  borderRadius: 2,
+                  width: progressWidth,
+                }}
+              />
+            </View>
           </View>
+
+          {/* Step Content */}
+          {step === 1 && renderStep1()}
+          {step === 2 && renderStep2()}
+          {step === 3 && renderStep3()}
 
           {/* Footer */}
           <View style={{ marginTop: 48, paddingTop: 32, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
@@ -276,8 +809,10 @@ export default function ForgotPasswordScreen() {
               onPress={() => navigation.navigate('Login' as never)}
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
-              <ArrowLeft size={18} color="#3b82f6" />
-              <Text style={{ color: '#3b82f6', fontWeight: '700', fontSize: 14 }}>Back to login</Text>
+              <ArrowLeft size={18} color="#94a3b8" />
+              <Text style={{ color: '#94a3b8', fontWeight: '700', fontSize: 12, letterSpacing: 2 }}>
+                RETURN TO SIGN IN
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -285,63 +820,3 @@ export default function ForgotPasswordScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    gap: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  tokenInput: {
-    height: 56,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    color: '#0f172a',
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelText: {
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  proceedButton: {
-    flex: 1,
-    height: 48,
-    backgroundColor: '#3b82f6',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  proceedText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-});

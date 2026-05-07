@@ -1,5 +1,5 @@
 // src/screens/settings/tabs/OrganizationTab.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,26 +13,48 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Switch,
+  ScrollView,
   Dimensions,
   StyleSheet,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Globe, Clock, Save, ChevronDown, X, Upload, Building2 } from 'lucide-react-native';
+import {
+  Globe,
+  Clock,
+  Save,
+  ChevronDown,
+  X,
+  Upload,
+  Building2,
+  Landmark,
+  MapPin,
+  Coins,
+  Calendar,
+  Info,
+  AlertCircle,
+  Search,
+} from 'lucide-react-native';
 import { settingsAPI } from '../../../services/endpoints';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useAuthStore } from '../../../store/authStore';
 import * as ImagePicker from 'react-native-image-picker';
-import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import Layout from '../../../components/common/Layout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Timezone data
+// ---------- Constants ----------
 const commonTimezones = [
-  'UTC', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Europe/London',
-  'Europe/Paris', 'America/New_York', 'America/Los_Angeles', 'Australia/Sydney',
-  'Africa/Cairo', 'Pacific/Auckland'
+  'UTC',
+  'Asia/Kolkata',
+  'Asia/Dubai',
+  'Asia/Singapore',
+  'Europe/London',
+  'Europe/Paris',
+  'America/New_York',
+  'America/Los_Angeles',
+  'Australia/Sydney',
+  'Africa/Cairo',
+  'Pacific/Auckland',
 ];
 
 const getFormattedTimezones = () => {
@@ -40,26 +62,31 @@ const getFormattedTimezones = () => {
     ? (Intl as any).supportedValuesOf('timeZone')
     : commonTimezones;
 
-  return timezones.map((tz: string) => {
-    try {
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        timeZoneName: 'shortOffset'
-      });
-      const parts = formatter.formatToParts(new Date());
-      const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+0';
-      let name = tz.replace(/_/g, ' ');
-      if (tz === 'UTC') name = 'UTC (Coordinated Universal Time)';
-      return { value: tz, label: `(${offsetPart}) ${name}` };
-    } catch (e) {
-      return { value: tz, label: tz.replace(/_/g, ' ') };
-    }
-  }).sort((a: any, b: any) => a.label.localeCompare(b.label));
+  return timezones
+    .map((tz: string) => {
+      try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          timeZoneName: 'shortOffset',
+        });
+        const parts = formatter.formatToParts(new Date());
+        const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+0';
+        let name = tz.replace(/_/g, ' ');
+        if (tz === 'UTC') name = 'UTC (Coordinated Universal Time)';
+        return { value: tz, label: `(${offsetPart}) ${name}` };
+      } catch (e) {
+        return { value: tz, label: tz.replace(/_/g, ' ') };
+      }
+    })
+    .sort((a: any, b: any) => a.label.localeCompare(b.label));
 };
 
 const TIMEZONES = getFormattedTimezones();
 const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 const CURRENCIES = [
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
   { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -67,78 +94,657 @@ const CURRENCIES = [
   { code: 'GBP', symbol: '£', name: 'British Pound' },
   { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
 ];
+const DAYS_OF_WEEK = [
+  { key: 'monday', label: 'M' },
+  { key: 'tuesday', label: 'T' },
+  { key: 'wednesday', label: 'W' },
+  { key: 'thursday', label: 'T' },
+  { key: 'friday', label: 'F' },
+  { key: 'saturday', label: 'S' },
+  { key: 'sunday', label: 'S' },
+];
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  scrollContent: { padding: 16, paddingBottom: 32 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  loadingText: { marginTop: 12, fontSize: 14, color: '#6b7280' },
-  header: { marginBottom: 24 },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 8 },
-  headerSubtitle: { fontSize: 13, color: '#6b7280', fontWeight: '500' },
-  planBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  planBadgeLabel: { fontSize: 10, fontWeight: '800', color: '#9ca3af', letterSpacing: 0.5 },
-  planBadgeGradient: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
-  planBadgeText: { fontSize: 10, fontWeight: '800', color: '#ffffff', letterSpacing: 0.5 },
-  card: { backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 20, overflow: 'hidden' },
-  cardHeader: { padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cardIconContainer: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 2 },
-  cardSubtitle: { fontSize: 12, color: '#6b7280' },
-  cardDivider: { height: 1, backgroundColor: '#f3f4f6' },
-  cardContent: { padding: 16 },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: { fontSize: 12, fontWeight: '700', color: '#374151', marginBottom: 8 },
-  input: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#111827' },
-  selectContainer: { marginBottom: 16 },
-  selectButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
-  selectText: { fontSize: 14, color: '#111827' },
-  placeholderText: { color: '#9ca3af' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#ffffff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  modalTitle: { fontSize: 18, fontWeight: '600', color: '#111827' },
-  modalItem: { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  modalItemText: { fontSize: 14, color: '#374151' },
-  logoContainer: { alignItems: 'center' },
-  logoUploadArea: { width: 120, height: 120, backgroundColor: '#f9fafb', borderWidth: 2, borderColor: '#e5e7eb', borderStyle: 'dashed', borderRadius: 60, overflow: 'hidden', marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
-  logoImage: { width: '100%', height: '100%' },
-  saveButtonContainer: { marginTop: 8, marginBottom: 32 },
-  saveButton: { borderRadius: 16, overflow: 'hidden' },
-  saveButtonGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
-  saveButtonText: { fontSize: 14, fontWeight: '800', color: '#ffffff', textTransform: 'uppercase' },
-  content: { flex: 1 },
-});
+// ---------- Helpers ----------
+const getSelectedDays = (workWeek: string) => {
+  if (!workWeek) return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  if (workWeek === 'Mon-Fri') return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  if (workWeek === 'Sun-Thu') return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+  if (workWeek === 'Mon-Sat')
+    return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const arr = workWeek.split(',').map((d: string) => d.trim().toLowerCase());
+  return arr.length === 7 ? arr : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+};
 
-const CustomSelect = ({ value, options, onSelect, placeholder, label }: any) => {
-  const [visible, setVisible] = useState(false);
-  const selected = options.find((opt: any) => opt.value === value);
+const daysToString = (days: string[]) => {
+  const sorted = [...days].sort(
+    (a, b) => DAYS_OF_WEEK.findIndex(d => d.key === a) - DAYS_OF_WEEK.findIndex(d => d.key === b)
+  );
+  if (sorted.length === 5 && sorted.join(',') === 'monday,tuesday,wednesday,thursday,friday')
+    return 'Mon-Fri';
+  if (sorted.length === 5 && sorted.join(',') === 'sunday,monday,tuesday,wednesday,thursday')
+    return 'Sun-Thu';
+  if (sorted.length === 6 && sorted.join(',') === 'monday,tuesday,wednesday,thursday,friday,saturday')
+    return 'Mon-Sat';
+  return sorted.join(',');
+};
+
+// ---------- Reusable Components ----------
+const SectionCard = ({
+  title,
+  subtitle,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon: any;
+  children: React.ReactNode;
+}) => (
+  <View style={styles.sectionCard}>
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionIconContainer}>
+        <Icon size={20} color="#6366f1" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+      </View>
+    </View>
+    <View style={styles.sectionDivider} />
+    <View style={styles.sectionBody}>{children}</View>
+  </View>
+);
+
+const DaySelector = ({
+  selectedDays,
+  onChange,
+}: {
+  selectedDays: string[];
+  onChange: (days: string[]) => void;
+}) => {
+  const toggleDay = (key: string) => {
+    const updated = selectedDays.includes(key)
+      ? selectedDays.filter(d => d !== key)
+      : [...selectedDays, key];
+    if (updated.length === 0) return; // prevent removing all days
+    onChange(updated);
+  };
 
   return (
-    <View style={styles.selectContainer}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TouchableOpacity style={styles.selectButton} onPress={() => setVisible(true)}>
-        <Text style={[styles.selectText, !selected && styles.placeholderText]}>
-          {selected ? selected.label : placeholder}
+    <View style={styles.daySelectorRow}>
+      {DAYS_OF_WEEK.map(day => (
+        <TouchableOpacity
+          key={day.key}
+          onPress={() => toggleDay(day.key)}
+          style={[
+            styles.dayButton,
+            selectedDays.includes(day.key) && styles.dayButtonActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.dayButtonText,
+              selectedDays.includes(day.key) && styles.dayButtonTextActive,
+            ]}
+          >
+            {day.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+const SliderWithDots = ({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  label,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (val: number) => void;
+  label: string;
+}) => {
+  const dots = Array.from({ length: max - min + 1 }, (_, i) => i + min);
+  return (
+    <View style={styles.sliderContainer}>
+      <Text style={styles.sliderLabel}>{label}: {value} hrs</Text>
+      <View style={styles.sliderTrack}>
+        {dots.map(hour => (
+          <View
+            key={hour}
+            style={[
+              styles.sliderDot,
+              {
+                backgroundColor: value >= hour ? '#6366f1' : '#d1d5db',
+                transform: [{ scale: value >= hour ? 1.2 : 1 }],
+              },
+            ]}
+          />
+        ))}
+      </View>
+      {/* We use a simple button-based control for simplicity, but a real slider via react-native-slider would be better */}
+      <View style={styles.sliderButtons}>
+        <TouchableOpacity onPress={() => onChange(Math.max(min, value - step))}>
+          <Text style={styles.sliderBtnText}>-</Text>
+        </TouchableOpacity>
+        <Text style={styles.sliderValue}>{value} hrs</Text>
+        <TouchableOpacity onPress={() => onChange(Math.min(max, value + step))}>
+          <Text style={styles.sliderBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+      {/* In a real app, use @react-native-community/slider */}
+    </View>
+  );
+};
+
+const ImpactPanel = ({ impacts }: { impacts: Array<{ title: string; description: string }> }) => (
+  <View style={styles.impactPanel}>
+    <Text style={styles.impactTitle}>Live Impact</Text>
+    {impacts.map((item, index) => (
+      <View key={index} style={styles.impactItem}>
+        <Info size={14} color="#6366f1" style={{ marginTop: 2 }} />
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.impactItemTitle}>{item.title}</Text>
+          <Text style={styles.impactItemDesc}>{item.description}</Text>
+        </View>
+      </View>
+    ))}
+  </View>
+);
+
+const TimezonePicker = ({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (tz: string) => void;
+}) => {
+  const [visible, setVisible] = useState(false);
+  const [search, setSearch] = useState('');
+  const selected = TIMEZONES.find((t: any) => t.value === value);
+  const filtered = search
+    ? TIMEZONES.filter((t: any) => t.label.toLowerCase().includes(search.toLowerCase()))
+    : TIMEZONES;
+
+  return (
+    <>
+      <TouchableOpacity style={styles.pickerButton} onPress={() => setVisible(true)}>
+        <Text style={styles.pickerText} numberOfLines={1}>
+          {selected ? selected.label : 'Select timezone'}
         </Text>
-        <ChevronDown size={20} color="#9ca3af" />
+        <ChevronDown size={18} color="#9ca3af" />
       </TouchableOpacity>
 
       <Modal visible={visible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{label}</Text>
-              <TouchableOpacity onPress={() => setVisible(false)}><X size={24} color="#64748b" /></TouchableOpacity>
+              <Text style={styles.modalTitle}>Select Timezone</Text>
+              <TouchableOpacity onPress={() => setVisible(false)}>
+                <X size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.searchContainer}>
+              <Search size={18} color="#9ca3af" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search timezone..."
+                value={search}
+                onChangeText={setSearch}
+                autoFocus
+                clearButtonMode="while-editing"
+              />
             </View>
             <FlatList
-              data={options}
-              keyExtractor={(item) => item.value}
+              data={filtered}
+              keyExtractor={item => item.value}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => { onSelect(item.value); setVisible(false); }}
+                  style={[styles.timezoneItem, item.value === value && styles.timezoneItemActive]}
+                  onPress={() => {
+                    onChange(item.value);
+                    setVisible(false);
+                    setSearch('');
+                  }}
+                >
+                  <Text style={styles.timezoneItemText}>{item.label}</Text>
+                </TouchableOpacity>
+              )}
+              style={{ maxHeight: Dimensions.get('window').height * 0.5 }}
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
+// ---------- Main Component ----------
+export default function OrganizationTab() {
+  const navigation = useNavigation();
+  const queryClient = useQueryClient();
+  const { user, subscription } = useAuthStore();
+  const { updateGeneralSettings } = useSettingsStore();
+
+  const [logoFile, setLogoFile] = useState<ImagePicker.Asset | null>(null);
+  const [form, setForm] = useState({
+    companyName: '',
+    timezone: 'Asia/Kolkata',
+    dateFormat: 'DD/MM/YYYY',
+    companyLogo: '',
+    address: '',
+    aboutInstitution: '',
+    phoneNumber: '',
+    country: '',
+    currency: 'INR',
+    fiscalYearStart: 'April',
+    fiscalYearEnd: 'March',
+    workWeek: 'Mon-Fri',
+    enableEnterpriseRBAC: false,
+    workingHoursPerDay: 8,
+    strictDailyHours: false,
+    isWeekendWorkable: false,
+    weekStartDay: 'monday',
+  });
+
+  // Fetch settings
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsAPI.getSettings().then((r: any) => r.data.data),
+  });
+
+  useEffect(() => {
+    if (settings) {
+      const org = settings.organization || {};
+      const general = settings.general || {};
+      setForm(prev => ({
+        ...prev,
+        companyName: org.companyName || general.companyName || '',
+        timezone: general.timezone || 'Asia/Kolkata',
+        dateFormat: general.dateFormat || 'DD/MM/YYYY',
+        companyLogo: org.companyLogo || '',
+        address: org.address || '',
+        aboutInstitution: org.aboutInstitution || '',
+        phoneNumber: org.phoneNumber || '',
+        country: org.country || '',
+        currency: org.currency || 'INR',
+        fiscalYearStart: org.fiscalYearStart || 'April',
+        fiscalYearEnd: org.fiscalYearEnd || 'March',
+        workWeek: general.workWeek || 'Mon-Fri',
+        enableEnterpriseRBAC: general.enableEnterpriseRBAC || false,
+        workingHoursPerDay: general.workingHoursPerDay || 8,
+        strictDailyHours: general.strictDailyHours || false,
+        isWeekendWorkable: general.isWeekendWorkable || false,
+        weekStartDay: general.weekStartDay || 'monday',
+      }));
+    }
+  }, [settings]);
+
+  // Save mutation
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (form.fiscalYearStart === form.fiscalYearEnd) {
+        throw new Error('Fiscal year start and end cannot be the same');
+      }
+
+      let finalLogoUrl = form.companyLogo;
+
+      if (logoFile) {
+        const fData = new FormData();
+        fData.append('file', {
+          uri: logoFile.uri,
+          type: logoFile.type || 'image/jpeg',
+          name: logoFile.fileName || 'logo.jpg',
+        } as any);
+        const res: any = await settingsAPI.uploadBranding(fData);
+        finalLogoUrl = res.data.url || res.data.data.url;
+      }
+
+      return settingsAPI.updateSettings({
+        organization: {
+          ...form,
+          companyLogo: finalLogoUrl,
+        },
+        general: {
+          companyName: form.companyName,
+          timezone: form.timezone,
+          workingHoursPerDay: form.workingHoursPerDay,
+          strictDailyHours: form.strictDailyHours,
+          isWeekendWorkable:
+            form.isWeekendWorkable ||
+            getSelectedDays(form.workWeek).includes('saturday') ||
+            getSelectedDays(form.workWeek).includes('sunday'),
+          workWeek: form.workWeek,
+          weekStartDay: form.weekStartDay,
+          dateFormat: form.dateFormat,
+          enableEnterpriseRBAC: form.enableEnterpriseRBAC,
+        },
+      });
+    },
+    onSuccess: () => {
+      Alert.alert('Success', 'Organization settings saved!');
+      updateGeneralSettings(form);
+      setLogoFile(null);
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.message || err.message || 'Save failed';
+      Alert.alert('Error', message);
+    },
+  });
+
+  // Impact analysis
+  const impacts = useMemo(() => {
+    const list = [];
+    const selectedDays = getSelectedDays(form.workWeek);
+    const hasWeekend = selectedDays.includes('saturday') || selectedDays.includes('sunday');
+    list.push({
+      title: hasWeekend ? 'Weekend Entries Allowed' : 'Business Week Enforcement',
+      description: hasWeekend
+        ? 'Users will be able to submit timesheets for Saturday and Sunday.'
+        : 'Timesheet entries will be restricted to Monday through Friday only.',
+    });
+    list.push({
+      title: `Financial Ledger in ${form.currency}`,
+      description: `All future invoices and payroll reports will be denominated in ${form.currency}.`,
+    });
+    if (form.strictDailyHours) {
+      list.push({
+        title: 'Strict Hour Validation',
+        description: `Timesheets will block entries that do not meet the standard ${form.workingHoursPerDay} hours.`,
+      });
+    }
+    return list;
+  }, [form]);
+
+  // Image picker
+  const pickImage = useCallback(() => {
+    ImagePicker.launchImageLibrary({ mediaType: 'photo', quality: 0.7 }, (response: any) => {
+      if (response.assets?.[0]) {
+        setLogoFile(response.assets[0]);
+        // Update preview locally
+        setForm(prev => ({ ...prev, companyLogo: response.assets[0].uri || '' }));
+      }
+    });
+  }, []);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={styles.loadingText}>Loading organization settings...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Organization Landscape</Text>
+            <Text style={styles.headerSubtitle}>
+              Manage institutional identity and operational governance
+            </Text>
+          </View>
+
+          {/* Section 1: Company Identity */}
+          <SectionCard title="Company Identity" subtitle="Core branding and location profile" icon={Building2}>
+            {/* Company Name */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Official Institution Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Acme Corporation"
+                value={form.companyName}
+                onChangeText={t => setForm(prev => ({ ...prev, companyName: t }))}
+              />
+            </View>
+
+            {/* Logo Upload */}
+            <TouchableOpacity style={styles.logoUpload} onPress={pickImage}>
+              {form.companyLogo || logoFile ? (
+                <Image
+                  source={{ uri: logoFile?.uri || form.companyLogo }}
+                  style={styles.logoImage}
+                />
+              ) : (
+                <View style={styles.logoPlaceholder}>
+                  <Upload size={24} color="#9ca3af" />
+                  <Text style={styles.logoText}>Tap to upload</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* About Institution */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>About Institution</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                multiline
+                numberOfLines={4}
+                placeholder="Brief overview..."
+                value={form.aboutInstitution}
+                onChangeText={t => setForm(prev => ({ ...prev, aboutInstitution: t }))}
+              />
+              <Text style={styles.charCounter}>
+                {form.aboutInstitution?.length || 0} / 500
+              </Text>
+            </View>
+
+            {/* Headquarters Address */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Primary Headquarters</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                multiline
+                numberOfLines={3}
+                placeholder="Physical address for correspondence..."
+                value={form.address}
+                onChangeText={t => setForm(prev => ({ ...prev, address: t }))}
+              />
+            </View>
+
+            {/* Country & Phone */}
+            <View style={styles.row}>
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <Text style={styles.inputLabel}>Operational Country</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="United States"
+                  value={form.country}
+                  onChangeText={t => setForm(prev => ({ ...prev, country: t }))}
+                />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <Text style={styles.inputLabel}>Phone Number</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="1234567890"
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  value={form.phoneNumber}
+                  onChangeText={t => {
+                    const cleaned = t.replace(/[^0-9]/g, '');
+                    setForm(prev => ({ ...prev, phoneNumber: cleaned }));
+                  }}
+                />
+              </View>
+            </View>
+          </SectionCard>
+
+          {/* Section 2: Financial Configuration */}
+          <SectionCard title="Financial Configuration" subtitle="Ledger currency and period rules" icon={Landmark}>
+            {/* Currency picker */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Default Currency</Text>
+              <View style={styles.pickerWrapper}>
+                <CustomSelect
+                  value={form.currency}
+                  options={CURRENCIES.map(c => ({ value: c.code, label: `${c.code} (${c.symbol})` }))}
+                  onValueChange={(val: string) => setForm(prev => ({ ...prev, currency: val }))}
+                />
+              </View>
+            </View>
+
+            {/* Fiscal Year */}
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>Fiscal Year Start</Text>
+                <PickerSelect
+                  value={form.fiscalYearStart}
+                  options={MONTHS}
+                  onValueChange={(val: string) => setForm(prev => ({ ...prev, fiscalYearStart: val }))}
+                />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>Fiscal Year End</Text>
+                <PickerSelect
+                  value={form.fiscalYearEnd}
+                  options={MONTHS}
+                  onValueChange={(val: string) => setForm(prev => ({ ...prev, fiscalYearEnd: val }))}
+                />
+              </View>
+            </View>
+            {form.fiscalYearStart === form.fiscalYearEnd && (
+              <Text style={styles.errorText}>
+                <AlertCircle size={12} color="#ef4444" /> Start and end months cannot be the same
+              </Text>
+            )}
+          </SectionCard>
+
+          {/* Section 3: Localization & Time */}
+          <SectionCard title="Localization & Time" subtitle="Regional standards and working hours" icon={Clock}>
+            {/* Week Day Selector */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Standard Work Week</Text>
+              <DaySelector
+                selectedDays={getSelectedDays(form.workWeek)}
+                onChange={(days) => setForm(prev => ({ ...prev, workWeek: daysToString(days) }))}
+              />
+            </View>
+
+            {/* Timezone with search */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Region Timezone</Text>
+              <TimezonePicker
+                value={form.timezone}
+                onChange={tz => setForm(prev => ({ ...prev, timezone: tz }))}
+              />
+            </View>
+
+            {/* Date Format */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Global Date Format</Text>
+              <PickerSelect
+                value={form.dateFormat}
+                options={DATE_FORMATS}
+                onValueChange={(val: string) => setForm(prev => ({ ...prev, dateFormat: val }))}
+              />
+            </View>
+
+            {/* Working Hours */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Standard Work Day Baseline</Text>
+              <SliderWithDots
+                value={form.workingHoursPerDay}
+                min={1}
+                max={12}
+                step={0.25}
+                onChange={(val) => setForm(prev => ({ ...prev, workingHoursPerDay: val }))}
+                label="Hours"
+              />
+            </View>
+
+            {/* Strict Enforcement Toggle */}
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleLabel}>Strict Enforcement</Text>
+                <Text style={styles.toggleHint}>
+                  Block timesheets that don't meet daily requirements
+                </Text>
+              </View>
+              <Switch
+                value={form.strictDailyHours}
+                onValueChange={(val) => setForm(prev => ({ ...prev, strictDailyHours: val }))}
+                trackColor={{ false: '#d1d5db', true: '#6366f1' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+          </SectionCard>
+
+          {/* Impact Panel */}
+          <ImpactPanel impacts={impacts} />
+
+          {/* Save Button */}
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <View style={styles.saveButtonContent}>
+                <Save size={20} color="white" />
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+// ---------- Internal micro-components ----------
+const PickerSelect = ({
+  value,
+  options,
+  onValueChange,
+}: {
+  value: string;
+  options: string[] | { value: string; label: string }[];
+  onValueChange: (val: string) => void;
+}) => {
+  const [visible, setVisible] = useState(false);
+  const optArray = typeof options[0] === 'string' ? (options as string[]).map(o => ({ value: o, label: o })) : options as any;
+  const selected = optArray.find((o: any) => o.value === value);
+
+  return (
+    <>
+      <TouchableOpacity style={styles.pickerButton} onPress={() => setVisible(true)}>
+        <Text style={styles.pickerText}>{selected ? selected.label : 'Select...'}</Text>
+        <ChevronDown size={18} color="#9ca3af" />
+      </TouchableOpacity>
+      <Modal visible={visible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select</Text>
+              <TouchableOpacity onPress={() => setVisible(false)}>
+                <X size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={optArray}
+              keyExtractor={item => item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.modalItem, item.value === value && styles.modalItemActive]}
+                  onPress={() => {
+                    onValueChange(item.value);
+                    setVisible(false);
+                  }}
                 >
                   <Text style={styles.modalItemText}>{item.label}</Text>
                 </TouchableOpacity>
@@ -147,157 +753,361 @@ const CustomSelect = ({ value, options, onSelect, placeholder, label }: any) => 
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 };
 
-const SectionCard = ({ title, subtitle, icon: Icon, children }: any) => (
-  <View style={styles.card}>
-    <View style={styles.cardHeader}>
-      <View style={styles.cardHeaderLeft}>
-        <View style={styles.cardIconContainer}><Icon size={20} color="#6366f1" /></View>
-        <View><Text style={styles.cardTitle}>{title}</Text><Text style={styles.cardSubtitle}>{subtitle}</Text></View>
-      </View>
-    </View>
-    <View style={styles.cardDivider} /><View style={styles.cardContent}>{children}</View>
-  </View>
-);
+const CustomSelect = PickerSelect; // alias
 
-export default function OrganizationTab() {
-  const navigation = useNavigation();
-  const queryClient = useQueryClient();
-  const { user, subscription } = useAuthStore();
-  const { updateGeneralSettings } = useSettingsStore();
-
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [logoFile, setLogoFile] = useState<any>(null);
-  const [form, setForm] = useState({
-    companyName: '', timezone: 'Asia/Kolkata', dateFormat: 'DD/MM/YYYY',
-    companyLogo: '', address: '', country: '', currency: 'INR',
-    fiscalYearStart: 'April', workWeek: 'Mon-Fri'
-  });
-
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => settingsAPI.getSettings(),
-  });
-
-  useEffect(() => {
-    const rawData = (settings as any)?.data?.data || (settings as any)?.data || settings;
-    if (rawData) {
-      setForm({
-        companyName: rawData.companyName || '', timezone: rawData.timezone || 'Asia/Kolkata',
-        dateFormat: rawData.dateFormat || 'DD/MM/YYYY', companyLogo: rawData.companyLogo || '',
-        address: rawData.address || '', country: rawData.country || '', currency: rawData.currency || 'INR',
-        fiscalYearStart: rawData.fiscalYearStart || 'April', workWeek: rawData.workWeek || 'Mon-Fri'
-      });
-    }
-  }, [settings]);
-
-  const saveMutation = useMutation({
-    mutationFn: () => settingsAPI.updateSettings({ general: form }),
-    onSuccess: () => {
-      Alert.alert('Success', 'Organization settings saved successfully!');
-      updateGeneralSettings(form);
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-    },
-  });
-
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibrary({ mediaType: 'photo', quality: 0.7 });
-    if (result.assets?.[0]) setLogoFile(result.assets[0]);
-  };
-
-  return (
-    <Layout
-      title="Organization"
-      user={user}
-      sidebarVisible={sidebarVisible}
-      setSidebarVisible={setSidebarVisible}
-      showBackButton
-      onBackPress={() => navigation.navigate('Dashboard' as never)}
-    >
-      <View style={styles.container}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#6366f1" />
-            <Text style={styles.loadingText}>Loading configurations...</Text>
-          </View>
-        ) : (
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Organization Landscape</Text>
-              <TouchableOpacity style={styles.planBadge} onPress={() => navigation.navigate('SubscriptionTab' as never)}>
-                <Text style={styles.planBadgeLabel}>Plan: </Text>
-                <View style={[styles.planBadgeGradient, { backgroundColor: '#10b981' }]}>
-                  <Text style={styles.planBadgeText}>{subscription?.planType || 'TRIAL'}</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <SectionCard title="Corporate Identity" subtitle="Manage your company basics" icon={Building2}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Company Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.companyName}
-                  onChangeText={t => setForm({ ...form, companyName: t })}
-                  placeholder="e.g. Acme Corp"
-                />
-              </View>
-              <View style={styles.logoContainer}>
-                <TouchableOpacity style={styles.logoUploadArea} onPress={pickImage}>
-                  {logoFile || form.companyLogo ? (
-                    <Image source={{ uri: logoFile?.uri || form.companyLogo }} style={styles.logoImage} />
-                  ) : (
-                    <Upload size={24} color="#9ca3af" />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </SectionCard>
-
-            <SectionCard title="Localization" subtitle="Regional and time preferences" icon={Globe}>
-              <CustomSelect
-                label="Timezone"
-                value={form.timezone}
-                options={TIMEZONES}
-                onSelect={(v: string) => setForm({ ...form, timezone: v })}
-              />
-              <CustomSelect
-                label="Date Format"
-                value={form.dateFormat}
-                options={DATE_FORMATS.map(f => ({ label: f, value: f }))}
-                onSelect={(v: string) => setForm({ ...form, dateFormat: v })}
-              />
-              <CustomSelect
-                label="Currency"
-                value={form.currency}
-                options={CURRENCIES.map(c => ({ label: `${c.code} (${c.symbol})`, value: c.code }))}
-                onSelect={(v: string) => setForm({ ...form, currency: v })}
-              />
-            </SectionCard>
-
-            <View style={styles.saveButtonContainer}>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-              >
-                <View style={[styles.saveButtonGradient, { backgroundColor: '#6366f1', height: 56, width: '100%', borderRadius: 16 }]}>
-                  {saveMutation.isPending ? (
-                    <ActivityIndicator color="white" />
-                  ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Save size={20} color="white" />
-                      <Text style={styles.saveButtonText}>Apply Settings</Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </View>
-    </Layout>
-  );
-}
+// ---------- Styles ----------
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  header: {
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  sectionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  sectionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#f3f4f6',
+  },
+  sectionBody: {
+    padding: 16,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#111827',
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  charCounter: {
+    fontSize: 10,
+    color: '#6b7280',
+    alignSelf: 'flex-end',
+    marginTop: 4,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  pickerButton: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pickerText: {
+    fontSize: 14,
+    color: '#111827',
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  modalItemActive: {
+    backgroundColor: '#eef2ff',
+  },
+  modalItemText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+  },
+  timezoneItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  timezoneItemActive: {
+    backgroundColor: '#eef2ff',
+  },
+  timezoneItemText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  logoUpload: {
+    alignSelf: 'center',
+    marginBottom: 20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  logoPlaceholder: {
+    alignItems: 'center',
+  },
+  logoText: {
+    fontSize: 10,
+    color: '#9ca3af',
+    marginTop: 4,
+  },
+  daySelectorRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  dayButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+  },
+  dayButtonActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  dayButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  dayButtonTextActive: {
+    color: 'white',
+  },
+  sliderContainer: {
+    marginBottom: 24,
+  },
+  sliderLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  sliderTrack: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sliderDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sliderButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  sliderBtnText: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#6366f1',
+    paddingHorizontal: 12,
+  },
+  sliderValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  toggleHint: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  impactPanel: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  impactTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#166534',
+    marginBottom: 12,
+  },
+  impactItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  impactItemTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#14532d',
+  },
+  impactItemDesc: {
+    fontSize: 12,
+    color: '#166534',
+    marginTop: 2,
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginTop: 4,
+  },
+  saveButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+  pickerWrapper: {
+    // just for consistency
+  },
+});

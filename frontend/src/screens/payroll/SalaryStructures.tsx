@@ -301,10 +301,11 @@ export const SalaryStructures = () => {
 
   const fetchProfiles = async () => {
     try {
-      const response: any = await payrollAPI.getProfiles();
+      const response: any = await payrollAPI.getProfiles({ limit: 1000 });
       setProfiles(response.data?.data || response.data || []);
-    } catch (error) {
-      console.error('Error fetching profiles:', error);
+    } catch (error: any) {
+      console.warn('Error fetching profiles:', error.message);
+      setProfiles([]);
     }
   };
 
@@ -1150,6 +1151,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 12,
     color: COLORS.dark,
+  },
+  componentSelector: {
+    flex: 1.5,
   },
   componentPicker: {
     flex: 1.5,

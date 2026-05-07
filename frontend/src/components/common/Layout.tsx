@@ -17,6 +17,7 @@ interface LayoutProps {
   showSidebar?: boolean;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  scrollable?: boolean;
 }
 
 export default function Layout({
@@ -31,6 +32,7 @@ export default function Layout({
   showSidebar = true,
   showBackButton = false,
   onBackPress,
+  scrollable = true,
 }: LayoutProps) {
   return (
     <SafeAreaView style={styles.container}>
@@ -43,19 +45,25 @@ export default function Layout({
         user={user}
       />
       
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#3b82f6']} />
-          ) : undefined
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
+      {scrollable ? (
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#3b82f6']} />
+            ) : undefined
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            {children}
+          </View>
+        </ScrollView>
+      ) : (
+        <View style={[styles.container, styles.content]}>
           {children}
         </View>
-      </ScrollView>
+      )}
 
       {showFooter && <Footer showCopyright={true} />}
       

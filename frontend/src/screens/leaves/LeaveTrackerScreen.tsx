@@ -142,16 +142,26 @@ const LeaveRequestCard = ({
 };
 
 // Cancel Modal
-const CancelModal = ({
+const ActionReasonModal = ({
     visible,
     onClose,
     onSubmit,
-    isSubmitting
+    isSubmitting,
+    title = "Action Request",
+    message = "Please provide a reason for this action.",
+    placeholder = "Enter reason...",
+    buttonText = "Submit",
+    buttonColor = "#10b981"
 }: {
     visible: boolean;
     onClose: () => void;
     onSubmit: (reason: string) => void;
     isSubmitting: boolean;
+    title?: string;
+    message?: string;
+    placeholder?: string;
+    buttonText?: string;
+    buttonColor?: string;
 }) => {
     const [reason, setReason] = useState('');
 
@@ -160,7 +170,7 @@ const CancelModal = ({
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContainer}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Cancel Leave Request</Text>
+                        <Text style={styles.modalTitle}>{title}</Text>
                         <TouchableOpacity onPress={onClose}>
                             <X size={24} color="#64748b" />
                         </TouchableOpacity>
@@ -168,13 +178,11 @@ const CancelModal = ({
                     <View style={styles.modalContent}>
                         <View style={styles.warningBox}>
                             <AlertCircle size={20} color="#f59e0b" />
-                            <Text style={styles.warningText}>
-                                Once cancelled, this request will be moved to history and cannot be reopened.
-                            </Text>
+                            <Text style={styles.warningText}>{message}</Text>
                         </View>
                         <TextInput
                             style={styles.reasonInput}
-                            placeholder="Reason for cancellation *"
+                            placeholder={placeholder}
                             placeholderTextColor="#94a3b8"
                             multiline
                             numberOfLines={3}
@@ -187,7 +195,7 @@ const CancelModal = ({
                             <Text style={styles.cancelButtonText}>Back</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.submitButton, (!reason.trim() || isSubmitting) && styles.disabledButton]}
+                            style={[styles.approveButton, { backgroundColor: buttonColor }]}
                             onPress={() => onSubmit(reason)}
                             disabled={!reason.trim() || isSubmitting}
                         >
@@ -195,8 +203,8 @@ const CancelModal = ({
                                 <ActivityIndicator size="small" color="white" />
                             ) : (
                                 <>
-                                    <Ban size={16} color="white" />
-                                    <Text style={styles.submitButtonText}>Cancel Leave</Text>
+                                    <CheckCircle2 size={16} color="white" />
+                                    <Text style={styles.approveButtonText}>{buttonText}</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -208,7 +216,23 @@ const CancelModal = ({
 };
 
 // Leave Details Modal
-const LeaveDetailModal = ({ leave, visible, onClose }: { leave: LeaveRequest | null; visible: boolean; onClose: () => void }) => {
+const LeaveDetailModal = ({ 
+    leave, 
+    visible, 
+    onClose,
+    isAdmin,
+    onApprove,
+    onReject,
+    isProcessing
+}: { 
+    leave: LeaveRequest | null; 
+    visible: boolean; 
+    onClose: () => void;
+    isAdmin: boolean;
+    onApprove: (id: string) => void;
+    onReject: (id: string, reason: string) => void;
+    isProcessing: boolean;
+}) => {
     if (!leave) return null;
 
     return (
@@ -216,63 +240,97 @@ const LeaveDetailModal = ({ leave, visible, onClose }: { leave: LeaveRequest | n
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContainer, styles.detailModal]}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Leave Details</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <View style={{ backgroundColor: '#8b5cf6', padding: 10, borderRadius: 12 }}>
+                                <Eye size={24} color="white" />
+                            </View>
+                            <View>
+                                <Text style={styles.modalTitle}>Leave Details</Text>
+                                <Text style={{ fontSize: 13, color: '#94a3b8' }}>{leave.leaveType} Leave</Text>
+                            </View>
+                        </View>
                         <TouchableOpacity onPress={onClose}>
                             <X size={24} color="#64748b" />
                         </TouchableOpacity>
                     </View>
+
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <View style={styles.detailContent}>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Leave ID</Text>
-                                <Text style={styles.detailValue}>{leave.leaveId}</Text>
+                            {[
+                                { label: 'LEAVE ID', value: leave.leaveId },
+                                { label: 'LEAVE TYPE', value: leave.leaveType, capitalize: true },
+                                { label: 'FROM', value: format(new Date(leave.startDate), 'MMMM d, yyyy') },
+                                { label: 'TO', value: format(new Date(leave.endDate), 'MMMM d, yyyy') },
+                                { label: 'DURATION', value: `${leave.totalDays} day(s)` },
+                                { label: 'APPLIED ON', value: format(new Date(leave.createdAt), 'MMMM d, yyyy') },
+                            ].map((item, idx) => (
+                                <View key={idx} style={styles.gridItem}>
+                                    <Text style={styles.gridLabel}>{item.label}</Text>
+                                    <Text style={[styles.gridValue, item.capitalize && styles.capitalize]}>{item.value}</Text>
+                                </View>
+                            ))}
+
+                            <View style={styles.gridItem}>
+                                <Text style={styles.gridLabel}>APPLICATION REASON</Text>
+                                <Text style={styles.gridValue}>{leave.reason || 'No reason provided'}</Text>
                             </View>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Leave Type</Text>
-                                <Text style={[styles.detailValue, styles.capitalize]}>{leave.leaveType}</Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Duration</Text>
-                                <Text style={styles.detailValue}>{leave.totalDays} day(s)</Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>From</Text>
-                                <Text style={styles.detailValue}>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>To</Text>
-                                <Text style={styles.detailValue}>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</Text>
-                            </View>
-                            <View style={styles.detailRow}>
-                                <Text style={styles.detailLabel}>Applied On</Text>
-                                <Text style={styles.detailValue}>{format(new Date(leave.createdAt), 'MMM dd, yyyy')}</Text>
-                            </View>
-                            {leave.reason && (
-                                <View style={styles.detailSection}>
-                                    <Text style={styles.detailLabel}>Reason</Text>
-                                    <Text style={styles.detailText}>{leave.reason}</Text>
+
+                            {leave.status === 'rejected' && leave.rejectionReason && (
+                                <View style={[styles.gridItem, { backgroundColor: '#fef2f2' }]}>
+                                    <Text style={[styles.gridLabel, { color: '#ef4444' }]}>REJECTION REASON</Text>
+                                    <Text style={[styles.gridValue, { color: '#ef4444' }]}>{leave.rejectionReason}</Text>
                                 </View>
                             )}
-                            {leave.rejectionReason && (
-                                <View style={[styles.detailSection, styles.rejectionSection]}>
-                                    <Text style={[styles.detailLabel, styles.rejectionLabel]}>Rejection Reason</Text>
-                                    <Text style={styles.rejectionText}>{leave.rejectionReason}</Text>
-                                </View>
-                            )}
-                            {leave.cancellationReason && (
-                                <View style={[styles.detailSection, styles.cancellationSection]}>
-                                    <Text style={[styles.detailLabel, styles.cancellationLabel]}>Cancellation Reason</Text>
-                                    <Text style={styles.cancellationText}>{leave.cancellationReason}</Text>
-                                </View>
-                            )}
-                            {leave.approvedBy && (
-                                <View style={styles.detailRow}>
-                                    <Text style={styles.detailLabel}>Processed By</Text>
-                                    <Text style={styles.detailValue}>{leave.approvedBy.name}</Text>
+                            
+                            {leave.status === 'cancelled' && leave.cancellationReason && (
+                                <View style={[styles.gridItem, { backgroundColor: '#f1f5f9' }]}>
+                                    <Text style={[styles.gridLabel, { color: '#64748b' }]}>CANCELLATION REASON</Text>
+                                    <Text style={[styles.gridValue, { color: '#64748b' }]}>{leave.cancellationReason}</Text>
                                 </View>
                             )}
                         </View>
                     </ScrollView>
+
+                    <View style={styles.modalFooter}>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <View style={{ backgroundColor: leave.status === 'approved' ? '#ecfdf5' : leave.status === 'pending' ? '#fffbeb' : '#fef2f2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: leave.status === 'approved' ? '#10b981' : leave.status === 'pending' ? '#f59e0b' : '#ef4444' }} />
+                                    <Text style={{ fontSize: 13, fontWeight: '600', color: leave.status === 'approved' ? '#10b981' : leave.status === 'pending' ? '#f59e0b' : '#ef4444', textTransform: 'capitalize' }}>
+                                        {leave.status}
+                                    </Text>
+                                </View>
+                                {leave.approvedBy && (
+                                    <Text style={{ fontSize: 13, color: '#64748b' }}>
+                                        By <Text style={{ fontWeight: '600', color: '#1e293b' }}>{leave.approvedBy.name}</Text>
+                                    </Text>
+                                )}
+                            </View>
+
+                            {isAdmin && leave.status === 'pending' && (
+                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                    <TouchableOpacity 
+                                        style={[styles.actionButton, { backgroundColor: '#fef2f2' }]} 
+                                        onPress={() => onReject(leave.id, '')}
+                                        disabled={isProcessing}
+                                    >
+                                        <X size={16} color="#ef4444" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={[styles.actionButton, { backgroundColor: '#ecfdf5' }]} 
+                                        onPress={() => onApprove(leave.id)}
+                                        disabled={isProcessing}
+                                    >
+                                        {isProcessing ? (
+                                            <ActivityIndicator size="small" color="#10b981" />
+                                        ) : (
+                                            <CheckCircle2 size={16} color="#10b981" />
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    </View>
                 </View>
             </View>
         </Modal>
@@ -476,10 +534,12 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
     const [leaveTypes, setLeaveTypes] = useState<string[]>(['annual', 'casual', 'sick']);
     const [showApplyModal, setShowApplyModal] = useState(false);
     const [showDetailModal, setShowDetailModal] = useState(false);
-    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showActionModal, setShowActionModal] = useState(false);
+    const [actionConfig, setActionConfig] = useState<any>({});
     const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [pagination, setPagination] = useState<any>(null);
@@ -601,13 +661,43 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
         try {
             await leaveAPI.cancel(selectedLeave.id, reason);
             Alert.alert('Success', 'Leave cancelled successfully');
-            setShowCancelModal(false);
+            setShowActionModal(false);
             setSelectedLeave(null);
             fetchAllData();
         } catch (error: any) {
             Alert.alert('Error', error?.message || 'Failed to cancel leave');
         } finally {
             setIsCancelling(false);
+        }
+    };
+    
+    const handleApproveLeave = async (id: string) => {
+        setIsProcessing(true);
+        try {
+            await leaveAPI.approve(id);
+            Alert.alert('Success', 'Leave request approved');
+            setShowDetailModal(false);
+            setSelectedLeave(null);
+            fetchAllData();
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to approve leave');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleRejectLeave = async (id: string, reason: string) => {
+        setIsProcessing(true);
+        try {
+            await leaveAPI.reject(id, reason);
+            Alert.alert('Success', 'Leave request rejected');
+            setShowDetailModal(false);
+            setSelectedLeave(null);
+            fetchAllData();
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to reject leave');
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -618,7 +708,38 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
 
     const handleCancelRequest = (leave: LeaveRequest) => {
         setSelectedLeave(leave);
-        setShowCancelModal(true);
+        setActionConfig({
+            title: "Cancel Leave Request",
+            message: "Once cancelled, this request will be moved to history and cannot be reopened.",
+            placeholder: "Reason for cancellation *",
+            buttonText: "Cancel Leave",
+            buttonColor: "#ef4444",
+            type: 'cancel'
+        });
+        setShowActionModal(true);
+    };
+
+    const handleRejectRequest = (id: string) => {
+        setActionConfig({
+            title: "Reject Leave Request",
+            message: "Please provide a reason for rejecting this leave request.",
+            placeholder: "Reason for rejection *",
+            buttonText: "Reject Leave",
+            buttonColor: "#ef4444",
+            type: 'reject'
+        });
+        setShowActionModal(true);
+    };
+
+    const handleActionSubmit = async (reason: string) => {
+        if (!selectedLeave) return;
+        
+        if (actionConfig.type === 'cancel') {
+            await handleCancelLeave(reason);
+        } else {
+            await handleRejectLeave(selectedLeave.id, reason);
+        }
+        setShowActionModal(false);
     };
 
     const stats = {
@@ -772,16 +893,21 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
                     setShowDetailModal(false);
                     setSelectedLeave(null);
                 }}
+                isAdmin={user?.role === 'admin' || user?.role === 'manager'}
+                onApprove={handleApproveLeave}
+                onReject={handleRejectRequest}
+                isProcessing={isProcessing}
             />
 
-            <CancelModal
-                visible={showCancelModal}
+            <ActionReasonModal
+                visible={showActionModal}
                 onClose={() => {
-                    setShowCancelModal(false);
-                    setSelectedLeave(null);
+                    setShowActionModal(false);
+                    if (!showDetailModal) setSelectedLeave(null);
                 }}
-                onSubmit={handleCancelLeave}
-                isSubmitting={isCancelling}
+                onSubmit={handleActionSubmit}
+                isSubmitting={isCancelling || isProcessing}
+                {...actionConfig}
             />
         </Layout>
     );
@@ -878,16 +1004,16 @@ const styles = StyleSheet.create({
     submitButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
     disabledButton: { opacity: 0.5 },
     submitButtonText: { fontSize: 14, fontWeight: '700', color: 'white' },
+    approveButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10b981', paddingVertical: 12, borderRadius: 12 },
+    approveButtonText: { fontSize: 14, fontWeight: '700', color: 'white' },
 
     warningBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', padding: 12, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#fef3c7' },
     warningText: { flex: 1, fontSize: 12, color: '#f59e0b', lineHeight: 16 },
 
-    detailContent: { padding: 20, gap: 16 },
-    detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-    detailLabel: { fontSize: 12, color: '#64748b' },
-    detailValue: { fontSize: 13, fontWeight: '500', color: '#1e293b' },
-    detailSection: { padding: 12, backgroundColor: '#f8fafc', borderRadius: 12 },
-    detailText: { fontSize: 13, color: '#475569', marginTop: 4, lineHeight: 18 },
+    detailContent: { padding: 20, gap: 12 },
+    gridItem: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 16 },
+    gridLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginBottom: 4, letterSpacing: 0.5 },
+    gridValue: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
     rejectionSection: { backgroundColor: '#fef2f2' },
     rejectionLabel: { color: '#ef4444' },
     rejectionText: { fontSize: 13, color: '#ef4444', marginTop: 4 },

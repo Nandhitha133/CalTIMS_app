@@ -48,6 +48,7 @@ import { projectAPI, userAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import { exportFile } from '../../utils/exportHelper';
 
 interface User {
   _id: string;
@@ -274,10 +275,14 @@ const TeamMemberRow = memo(({
 });
 
 // Stat Card Component
-const StatCard = memo(({ title, value, icon: Icon, color, bgColor }: any) => (
-  <View style={[styles.statCard, { backgroundColor: bgColor }]}>
-    <Icon size={20} color={color} />
-    <Text style={[styles.statValue, { color }]}>{value}</Text>
+const StatCard = memo(({ title, value, icon: Icon, color }: any) => (
+  <View style={styles.statCard}>
+    <View style={styles.statCardHeader}>
+      <View style={[styles.statIcon, { backgroundColor: `${color}15` }]}>
+        <Icon size={20} color={color} />
+      </View>
+      <Text style={[styles.statValue, { color: '#1e293b' }]}>{value}</Text>
+    </View>
     <Text style={styles.statLabel}>{title}</Text>
   </View>
 ));
@@ -401,7 +406,7 @@ const ExportModal = memo(({
                   ]}
                   onPress={() => setSelectedFormat('csv')}
                 >
-                  <FileSpreadsheet size={20} color={selectedFormat === 'csv' ? '#3b82f6' : '#64748b'} />
+                  <FileSpreadsheet size={20} color={selectedFormat === 'csv' ? '#10b981' : '#64748b'} />
                   <Text style={[
                     exportModalStyles.formatText,
                     selectedFormat === 'csv' && exportModalStyles.formatTextSelected
@@ -415,7 +420,7 @@ const ExportModal = memo(({
                   ]}
                   onPress={() => setSelectedFormat('excel')}
                 >
-                  <FileSpreadsheet size={20} color={selectedFormat === 'excel' ? '#3b82f6' : '#64748b'} />
+                  <FileSpreadsheet size={20} color={selectedFormat === 'excel' ? '#10b981' : '#64748b'} />
                   <Text style={[
                     exportModalStyles.formatText,
                     selectedFormat === 'excel' && exportModalStyles.formatTextSelected
@@ -688,51 +693,6 @@ export default function ProjectsScreen() {
     }
   };
 
-  const handleExportCSV = async () => {
-    try {
-      const params: any = {};
-      if (searchQuery.length >= 2) params.search = searchQuery;
-      if (statusFilter) params.status = statusFilter;
-      if (managerFilter) params.managerId = managerFilter;
-      if (projectCodeFilter) params.code = projectCodeFilter;
-
-      const csvData = await projectAPI.export(params);
-      
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
-        const url = globalAny.URL.createObjectURL(blob);
-        const a = globalAny.document.createElement('a');
-        a.href = url;
-        a.download = `projects_${format(new Date(), 'yyyyMMdd')}.csv`;
-        a.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `projects_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Export Projects',
-          message: `Projects exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
-      }
-      Alert.alert('Success', 'Projects exported successfully!');
-    } catch (error) {
-      console.error('Export failed:', error);
-      Alert.alert('Error', 'Failed to export CSV. Please try again.');
-    }
-  };
 
   const resetForm = () => {
     setFormData({
@@ -1071,48 +1031,12 @@ export default function ProjectsScreen() {
       .replace(/'/g, '&#39;');
   };
 
-  const saveFileToDevice = async (content: string, fileName: string): Promise<string> => {
-    const downloadPath = Platform.OS === 'android'
-      ? RNFS.DownloadDirectoryPath
-      : RNFS.DocumentDirectoryPath;
 
-    const filePath = `${downloadPath}/${fileName}`;
 
-    try {
-      await RNFS.writeFile(filePath, content, 'utf8');
-      return filePath;
-    } catch (error) {
-      console.error('Error saving file:', error);
-      throw error;
-    }
-  };
-
-  const shareFile = async (filePath: string, fileName: string) => {
-    try {
-      await Share.share({
-        title: 'Export Projects',
-        message: `Projects exported as ${fileName}`,
-        url: `file://${filePath}`,
-      });
-    } catch (error) {
-      console.error('Error sharing file:', error);
-      throw error;
-    }
-  };
 
   const handleExport = async (formatType: 'csv' | 'excel') => {
     try {
       setIsExporting(true);
-
-      const hasPermission = await requestStoragePermission();
-      if (!hasPermission) {
-        Alert.alert(
-          'Permission Required',
-          'Storage permission is needed to save exported files. Please grant permission in settings.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
 
       const response = await projectAPI.getAll({ limit: 10000 });
       const allProjectsData = (response as any)?.data?.data || (response as any).data || [];
@@ -1122,35 +1046,20 @@ export default function ProjectsScreen() {
         return;
       }
 
-      let content: string;
-      let fileName: string;
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      const fileName = formatType === 'csv' 
+        ? `projects_export_${timestamp}.csv` 
+        : `projects_export_${timestamp}.xls`;
 
-      if (formatType === 'csv') {
-        content = convertToCSV(allProjectsData);
-        fileName = `projects_export_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-      } else {
-        content = generateExcelHTML(allProjectsData);
-        fileName = `projects_export_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
-      }
+      const content = formatType === 'csv' 
+        ? convertToCSV(allProjectsData) 
+        : generateExcelHTML(allProjectsData);
 
-      const filePath = await saveFileToDevice(content, fileName);
-
-      Alert.alert(
-        'Export Successful',
-        `File saved to:\n${filePath}\n\nWould you like to share it?`,
-        [
-          { text: 'Close', style: 'cancel' },
-          {
-            text: 'Share',
-            onPress: () => shareFile(filePath, fileName)
-          },
-        ]
-      );
-
+      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
       setShowExportModal(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Export error:', error);
-      Alert.alert('Export Failed', 'Failed to export projects. Please try again.');
+      Alert.alert('Export Failed', error.message || 'An error occurred during export.');
     } finally {
       setIsExporting(false);
     }
@@ -1202,10 +1111,10 @@ export default function ProjectsScreen() {
 
       {/* Stats Row */}
       <View style={styles.statsContainer}>
-        <StatCard title="Total" value={stats.total} icon={Briefcase} color="#3b82f6" bgColor="#eff6ff" />
-        <StatCard title="Active" value={stats.active} icon={TrendingUp} color="#10b981" bgColor="#ecfdf5" />
-        <StatCard title="On Hold" value={stats.onHold} icon={AlertCircle} color="#f59e0b" bgColor="#fffbeb" />
-        <StatCard title="Completed" value={stats.completed} icon={CheckCircle2} color="#3b82f6" bgColor="#eff6ff" />
+        <StatCard title="Total" value={stats.total} icon={Briefcase} color="#3b82f6" />
+        <StatCard title="Active" value={stats.active} icon={TrendingUp} color="#10b981" />
+        <StatCard title="On Hold" value={stats.onHold} icon={AlertCircle} color="#f59e0b" />
+        <StatCard title="Completed" value={stats.completed} icon={CheckCircle2} color="#3b82f6" />
       </View>
 
       {/* Search and Filter */}
@@ -1886,10 +1795,24 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 16 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  statsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  statCard: { flex: 1, minWidth: '22%', borderRadius: 16, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  statValue: { fontSize: 20, fontWeight: '800', marginTop: 8 },
-  statLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 4 },
+  statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 24, paddingHorizontal: 16 },
+  statCard: { 
+    flex: 1, 
+    borderRadius: 16, 
+    padding: 16, 
+    backgroundColor: 'white',
+    borderWidth: 1, 
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2
+  },
+  statCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  statValue: { fontSize: 22, fontWeight: '800' },
+  statLabel: { fontSize: 13, fontWeight: '700', color: '#64748b' },
 
   searchContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
@@ -2114,8 +2037,8 @@ const exportModalStyles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   formatOptionSelected: {
-    borderColor: '#3b82f6',
-    backgroundColor: '#eff6ff',
+    borderColor: '#10b981',
+    backgroundColor: '#ecfdf5',
   },
   formatText: {
     fontSize: 14,
@@ -2123,7 +2046,7 @@ const exportModalStyles = StyleSheet.create({
     fontWeight: '500',
   },
   formatTextSelected: {
-    color: '#3b82f6',
+    color: '#10b981',
     fontWeight: '600',
   },
   infoBox: {

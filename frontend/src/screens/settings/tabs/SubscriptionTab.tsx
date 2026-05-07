@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// screens/subscription/SubscriptionPage.tsx
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,102 +10,88 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import LinearGradient from 'react-native-linear-gradient';
-import {
-  Zap,
-  ShieldCheck,
-  Crown,
-  Sparkles,
-  Check,
-  X,
-  ArrowRight,
-  Mail,
-} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { 
+  Check, 
+  X, 
+  Crown, 
+  Zap, 
+  ShieldCheck, 
+  ArrowRight, 
+  Sparkles, 
+  Users, 
+  Calendar, 
+  CreditCard, 
+  History, 
+  Info, 
+  AlertCircle,
+  TrendingUp, 
+  Layers, 
+  HelpCircle, 
+  FileText,
+  Clock, 
+  ShieldAlert, 
+  BadgeCheck,
+  ArrowLeft,
+  ChevronRight,
+  Mail,
+  Phone,
+} from 'lucide-react-native';
+import api from '../../../services/api';
 import Layout from '../../../components/common/Layout';
-import { useAuthStore } from '../../../store/authStore';
+import PageHeader from '../../../components/common/PageHeader';
+
+const { width } = Dimensions.get('window');
+
+// Types
+interface SubscriptionData {
+  planType: string;
+  status: string;
+  userCount: number;
+  totalMonthlyCost: number;
+  trialStartDate: string;
+  trialEndDate: string;
+  createdAt: string;
+  expiryDate: string;
+}
+
+interface BillingRecord {
+  planName: string;
+  startDate: string;
+  endDate: string;
+  totalCost: number;
+  status: string;
+}
 
 interface Plan {
   name: string;
-  price: string;
-  description: string;
-  period?: string;
-  features: Array<{ name: string; included: boolean }>;
-  color: string;
-  icon: React.ComponentType<any>;
-  recommended?: boolean;
-  popular?: boolean;
+  price: number;
 }
 
-const plans: Plan[] = [
-  {
-    name: 'TRIAL',
-    price: '0',
-    description: 'Ideal for small teams trying CALTIMS.',
-    features: [
-      { name: 'Timesheet Entry', included: true },
-      { name: 'Weekly Timesheet Submission', included: true },
-      { name: 'Project-based Logging', included: true },
-      { name: 'Dashboard Overview', included: true },
-      { name: 'Holiday Calendar', included: true },
-      { name: 'Timesheet History', included: false },
-      { name: 'Advanced Reports', included: false },
-      { name: 'Payroll Automation', included: false },
-      { name: 'Leave Management', included: false },
-    ],
-    color: 'slate',
-    icon: Zap,
-  },
-  {
-    name: 'BASIC',
-    price: '29',
-    description: 'Enhanced features for growing businesses.',
-    period: '/ user / month',
-    features: [
-      { name: 'Everything in Trial', included: true },
-      { name: 'Unlimited Projects', included: true },
-      { name: 'Timesheet History', included: true },
-      { name: 'Weekly Reports', included: true },
-      { name: 'Holiday Management', included: true },
-      { name: 'Advanced Dashboard', included: true },
-      { name: 'Payroll Automation', included: false },
-      { name: 'Leave Management', included: false },
-      { name: 'Role Based Access', included: false },
-    ],
-    color: 'primary',
-    icon: ShieldCheck,
-    recommended: true,
-  },
-  {
-    name: 'PRO',
-    price: '49',
-    description: 'The ultimate workforce management suite.',
-    period: '/ user / month',
-    features: [
-      { name: 'Everything in Basic', included: true },
-      { name: 'Full Payroll Automation', included: true },
-      { name: 'Leave Management', included: true },
-      { name: 'Advanced Analytics', included: true },
-      { name: 'Custom Reports', included: true },
-      { name: 'Audit Logs', included: true },
-      { name: 'Single Sign On (SSO)', included: true },
-      { name: 'Priority 24/7 Support', included: true },
-      { name: 'Dedicated Manager', included: true },
-    ],
-    color: 'rose',
-    icon: Crown,
-    popular: true,
-  },
+const COMPARISON_FEATURES = [
+  { name: 'Employee Management', basic: true, pro: true },
+  { name: 'Timesheet Entry & Tasks', basic: true, pro: true },
+  { name: 'Payroll Processing', basic: false, pro: true },
+  { name: 'Leave Management', basic: false, pro: true },
+  { name: 'Reports & Analytics', basic: false, pro: true },
+  { name: 'Audit Logs & Security', basic: false, pro: true },
+  { name: 'Compliance Controls', basic: false, pro: true },
 ];
 
-const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
+const BASIC_PRICE = 29;
+const PRO_PRICE = 49;
+
+const UpgradeContactModal = ({ visible, onClose, plan, currencySymbol }: any) => {
   const [formData, setFormData] = useState({
     name: '',
     company: '',
     email: '',
+    phone: '',
     message: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -117,7 +104,8 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
         name: '',
         company: '',
         email: '',
-        message: `I'm interested in upgrading to the ${plan.name} plan (₹${plan.price} / user / month). Please contact me with more details.`,
+        phone: '',
+        message: `Interested in upgrading to ${plan.name} plan (${currencySymbol}${plan.price}/user/month).`,
       });
       loadUserData();
     }
@@ -133,6 +121,7 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
           name: user.name || '',
           company: user.organizationName || '',
           email: user.email || '',
+          phone: user.phone || '',
         }));
       }
     } catch (error) {
@@ -141,13 +130,25 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
   };
 
   const handleSubmit = async () => {
+    if (!formData.name || !formData.email) {
+      Alert.alert('Error', 'Name and email are required');
+      return;
+    }
+
     setSubmitting(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await api.post('/subscriptions/upgrade-request', {
+        ...formData,
+        plan: plan.name,
+        price: plan.price,
+      });
       setSubmitted(true);
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to send request';
+      Alert.alert('Error', message);
+    } finally {
       setSubmitting(false);
-      Alert.alert('Success', 'Upgrade request sent successfully!');
-    }, 1500);
+    }
   };
 
   if (!visible) return null;
@@ -161,58 +162,69 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
     >
       <View style={modalStyles.overlay}>
         <View style={modalStyles.container}>
-          {!submitted ? (
-            <>
-              <View style={modalStyles.header}>
-                <View style={modalStyles.iconContainer}>
-                  <Sparkles size={24} color="#4f46e5" />
-                </View>
-                <Text style={modalStyles.title}>Upgrade to {plan?.name}</Text>
-                <Text style={modalStyles.subtitle}>
-                  Contact our accounts team to finalize your professional plan transition
-                </Text>
-                <TouchableOpacity onPress={onClose} style={modalStyles.closeButton}>
-                  <X size={20} color="#64748b" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={modalStyles.form}>
-                  <View style={modalStyles.row}>
-                    <View style={modalStyles.halfField}>
-                      <Text style={modalStyles.label}>Full Name</Text>
-                      <TextInput
-                        style={modalStyles.input}
-                        placeholder="Enter your name"
-                        value={formData.name}
-                        onChangeText={(text) => setFormData({ ...formData, name: text })}
-                      />
-                    </View>
-                    <View style={modalStyles.halfField}>
-                      <Text style={modalStyles.label}>Organization</Text>
-                      <TextInput
-                        style={modalStyles.input}
-                        placeholder="Company Name"
-                        value={formData.company}
-                        onChangeText={(text) => setFormData({ ...formData, company: text })}
-                      />
-                    </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {!submitted ? (
+              <>
+                <View style={modalStyles.header}>
+                  <View style={modalStyles.iconContainer}>
+                    <Sparkles size={28} color="#4f46e5" />
                   </View>
+                  <Text style={modalStyles.title}>Upgrade to {plan?.name}</Text>
+                  <Text style={modalStyles.subtitle}>
+                    Contact our accounts team to finalize your professional plan transition
+                  </Text>
+                  <TouchableOpacity onPress={onClose} style={modalStyles.closeButton}>
+                    <X size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
 
+                <View style={modalStyles.form}>
                   <View style={modalStyles.field}>
-                    <Text style={modalStyles.label}>Work Email</Text>
+                    <Text style={modalStyles.label}>FULL NAME *</Text>
                     <TextInput
                       style={modalStyles.input}
-                      placeholder="name@company.com"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      value={formData.email}
-                      onChangeText={(text) => setFormData({ ...formData, email: text })}
+                      placeholder="Enter your name"
+                      value={formData.name}
+                      onChangeText={(text) => setFormData({ ...formData, name: text })}
                     />
                   </View>
 
                   <View style={modalStyles.field}>
-                    <Text style={modalStyles.label}>Additional Notes</Text>
+                    <Text style={modalStyles.label}>ORGANIZATION</Text>
+                    <TextInput
+                      style={modalStyles.input}
+                      placeholder="Company Name"
+                      value={formData.company}
+                      onChangeText={(text) => setFormData({ ...formData, company: text })}
+                    />
+                  </View>
+
+                  <View style={modalStyles.row}>
+                    <View style={modalStyles.halfField}>
+                      <Text style={modalStyles.label}>WORK EMAIL *</Text>
+                      <TextInput
+                        style={modalStyles.input}
+                        placeholder="name@company.com"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={formData.email}
+                        onChangeText={(text) => setFormData({ ...formData, email: text })}
+                      />
+                    </View>
+                    <View style={modalStyles.halfField}>
+                      <Text style={modalStyles.label}>PHONE</Text>
+                      <TextInput
+                        style={modalStyles.input}
+                        placeholder="+91 1234567890"
+                        keyboardType="phone-pad"
+                        value={formData.phone}
+                        onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={modalStyles.field}>
+                    <Text style={modalStyles.label}>ADDITIONAL NOTES</Text>
                     <TextInput
                       style={[modalStyles.input, modalStyles.textArea]}
                       placeholder="Any specific requirements?"
@@ -224,7 +236,7 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
                   </View>
 
                   <TouchableOpacity
-                    style={modalStyles.submitButton}
+                    style={[modalStyles.submitButton, submitting && { opacity: 0.7 }]}
                     onPress={handleSubmit}
                     disabled={submitting}
                   >
@@ -232,7 +244,7 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
                       <ActivityIndicator color="white" size="small" />
                     ) : (
                       <>
-                        <Text style={modalStyles.submitText}>Send Upgrade Request</Text>
+                        <Text style={modalStyles.submitText}>SEND UPGRADE REQUEST</Text>
                         <ArrowRight size={18} color="white" />
                       </>
                     )}
@@ -240,54 +252,115 @@ const UpgradeContactModal = ({ visible, onClose, plan }: any) => {
 
                   <TouchableOpacity style={modalStyles.emailButton}>
                     <Mail size={16} color="#64748b" />
-                    <Text style={modalStyles.emailText}>Direct Email Support</Text>
+                    <Text style={modalStyles.emailText}>Contact Support Directly</Text>
                   </TouchableOpacity>
                 </View>
-              </ScrollView>
-            </>
-          ) : (
-            <View style={modalStyles.successContainer}>
-              <View style={modalStyles.successIcon}>
-                <Check size={48} color="#10b981" />
+              </>
+            ) : (
+              <View style={modalStyles.successContainer}>
+                <View style={modalStyles.successIcon}>
+                  <Check size={48} color="#10b981" />
+                </View>
+                <Text style={modalStyles.successTitle}>Request Received!</Text>
+                <Text style={modalStyles.successText}>
+                  Our team will contact you shortly to finalize your upgrade to the{' '}
+                  <Text style={modalStyles.planHighlight}>{plan?.name}</Text> plan.
+                </Text>
+                <TouchableOpacity style={modalStyles.doneButton} onPress={onClose}>
+                  <Text style={modalStyles.doneText}>DONE</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={modalStyles.successTitle}>Request Received!</Text>
-              <Text style={modalStyles.successText}>
-                Our team will contact you shortly to finalize your upgrade to the{' '}
-                <Text style={modalStyles.planName}>{plan?.name}</Text> plan.
-              </Text>
-              <TouchableOpacity style={modalStyles.doneButton} onPress={onClose}>
-                <Text style={modalStyles.doneText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            )}
+          </ScrollView>
         </View>
       </View>
     </Modal>
   );
 };
 
-export default function SubscriptionTab() {
+export default function SubscriptionPage() {
   const navigation = useNavigation();
-  const { user } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState('TRIAL');
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [history, setHistory] = useState<BillingRecord[]>([]);
+  const [userCount, setUserCount] = useState(10);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [currencySymbol, setCurrencySymbol] = useState('₹');
+  const [settings, setSettings] = useState<any>(null);
+
+  const currentPlan = subscription?.planType || 'TRIAL';
+  const isTrial = currentPlan === 'TRIAL';
 
   useEffect(() => {
-    loadCurrentPlan();
+    loadUserData();
+    fetchData();
   }, []);
 
-  const loadCurrentPlan = async () => {
+  const loadUserData = async () => {
     try {
-      const subStr = await AsyncStorage.getItem('subscription');
-      if (subStr) {
-        const sub = JSON.parse(subStr);
-        setCurrentPlan(sub.planType || 'TRIAL');
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setUser(JSON.parse(userData));
       }
     } catch (error) {
-      console.error('Error loading plan:', error);
+      console.error('Error loading user data:', error);
     }
+  };
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [subRes, histRes, settingsRes] = await Promise.all([
+        api.get('/subscriptions/current'),
+        api.get('/subscriptions/history'),
+        api.get('/settings'),
+      ]) as any[];
+
+      if (subRes.success) {
+        setSubscription(subRes.data);
+        setUserCount(subRes.data.userCount || 10);
+      }
+
+      if (histRes.success) {
+        setHistory(histRes.data);
+      }
+
+      if (settingsRes.data) {
+        setSettings(settingsRes.data);
+        const currency = settingsRes.data.organization?.currency || 'INR';
+        setCurrencySymbol(getCurrencySymbol(currency));
+      }
+
+      // Cache subscription data
+      await AsyncStorage.setItem('subscription', JSON.stringify(subRes.data));
+    } catch (error: any) {
+      console.error('Error fetching subscription data:', error);
+      // Fallback to cached data
+      try {
+        const cachedSub = await AsyncStorage.getItem('subscription');
+        if (cachedSub) {
+          setSubscription(JSON.parse(cachedSub));
+        }
+      } catch (cacheError) {
+        console.error('Cache error:', cacheError);
+      }
+      Alert.alert('Error', 'Failed to load subscription data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrencySymbol = (currency: string) => {
+    const symbols: { [key: string]: string } = {
+      INR: '₹',
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+    };
+    return symbols[currency] || '₹';
   };
 
   const handlePlanAction = (plan: Plan) => {
@@ -296,400 +369,762 @@ export default function SubscriptionTab() {
     setModalVisible(true);
   };
 
-  const getColorStyle = (color: string) => {
-    switch (color) {
-      case 'primary': return '#3b82f6';
-      case 'rose': return '#f43f5e';
-      default: return '#64748b';
-    }
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
 
   return (
     <Layout
-      title="Plan & Subscription"
+      title="Subscription"
       user={user}
       sidebarVisible={sidebarVisible}
       setSidebarVisible={setSidebarVisible}
-      showBackButton={true}
-      onBackPress={() => navigation.navigate('Dashboard' as never)}
+      onRefresh={fetchData}
+      refreshing={loading}
     >
-      <View style={styles.scrollContent}>
-        <View style={styles.heroSection}>
-          <View style={styles.badge}>
-            <Sparkles size={14} color="#f59e0b" />
-            <Text style={styles.badgeText}>Transparent SaaS Pricing</Text>
-          </View>
-          <Text style={styles.title}>
-            Choose the right plan{' '}
-            <Text style={styles.titleHighlight}>for your organization.</Text>
-          </Text>
-          <Text style={styles.subtitle}>
-            Scale your productivity with automated timesheets and payroll.{' '}
-            <Text 
-              style={{ color: '#4f46e5', fontWeight: '700', textDecorationLine: 'underline' }}
-              onPress={() => navigation.navigate('Signup' as never)}
-            >
-              Start your 28-day free trial today.
-            </Text>
-          </Text>
-        </View>
+      <View style={styles.container}>
+        <PageHeader 
+          title="Plans & Subscription"
+          subtitle="Manage your organization's workspace, billing, and growth"
+          icon={Sparkles}
+          iconColor="#f59e0b"
+          iconBgColor="#fffbeb"
+        />
 
-        {/* Pricing Cards */}
-        <View style={styles.pricingContainer}>
-          {plans.map((plan, index) => {
-            const isCurrentPlan = currentPlan === plan.name;
-            const isPopular = plan.popular;
-            const isRecommended = plan.recommended;
-            const Icon = plan.icon;
-
-            return (
-              <View
-                key={plan.name}
-                style={[
-                  styles.card,
-                  isPopular && styles.popularCard,
-                ]}
-              >
-                {isPopular && (
-                  <View style={styles.popularBadge}>
-                    <Text style={styles.popularText}>⭐ Most Popular</Text>
-                  </View>
-                )}
-                {isRecommended && !isPopular && (
-                  <View style={styles.recommendedBadge}>
-                    <Text style={styles.recommendedText}>Recommended</Text>
-                  </View>
-                )}
-
-                <View style={styles.cardContent}>
-                  <View style={styles.cardHeader}>
-                    <View style={[styles.iconBox, { backgroundColor: `${getColorStyle(plan.color)}15` }]}>
-                      <Icon size={28} color={getColorStyle(plan.color)} />
-                    </View>
-                    {isCurrentPlan && (
-                      <View style={styles.activeBadge}>
-                        <Check size={12} color="#10b981" />
-                        <Text style={styles.activeText}>Active</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.planInfo}>
-                    <Text style={styles.planName}>{plan.name}</Text>
-                    <Text style={styles.planDescription}>{plan.description}</Text>
-                  </View>
-
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.price}>₹{plan.price}</Text>
-                    {plan.period ? (
-                      <View>
-                        <Text style={styles.periodText}>per user</Text>
-                        <Text style={styles.periodTextSmall}>per month</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.periodText}>28 Days Free Trial</Text>
-                    )}
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  <View style={styles.featuresContainer}>
-                    {plan.features.map((feature, idx) => (
-                      <View key={idx} style={styles.featureItem}>
-                        <View style={[styles.featureIcon, feature.included && styles.featureIconIncluded]}>
-                          {feature.included ? (
-                            <Check size={12} strokeWidth={3} color="#3b82f6" />
-                          ) : (
-                            <View style={styles.featureDot} />
-                          )}
-                        </View>
-                        <Text style={[styles.featureText, !feature.included && styles.featureTextDisabled]}>
-                          {feature.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.upgradeButton,
-                      isCurrentPlan && styles.disabledButton,
-                      isPopular && styles.popularButton,
-                    ]}
-                    onPress={() => handlePlanAction(plan)}
-                    disabled={isCurrentPlan}
-                  >
-                    <Text style={[
-                      styles.upgradeButtonText,
-                      isPopular && styles.popularButtonText,
-                      isCurrentPlan && styles.disabledButtonText,
+        {/* Current Plan Card */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>MY SUBSCRIPTION</Text>
+          <View style={styles.card}>
+            <View style={styles.currentPlanHeader}>
+              <View style={styles.planInfoRow}>
+                <View style={[styles.planIcon, isTrial ? styles.trialIcon : styles.proIcon]}>
+                  {currentPlan === 'PRO' ? (
+                    <Crown size={24} color="white" />
+                  ) : (
+                    <Zap size={24} color="#f59e0b" />
+                  )}
+                </View>
+                <View style={styles.planDetails}>
+                  <Text style={styles.planName}>
+                    {isTrial ? 'Trial Membership' : `${currentPlan} Enterprise`}
+                  </Text>
+                  <View style={styles.statusRow}>
+                    <View style={[
+                      styles.statusBadge,
+                      subscription?.status === 'ACTIVE' ? styles.statusActive : styles.statusExpired
                     ]}>
-                      {isCurrentPlan ? 'Your Current Plan' : plan.name === 'TRIAL' ? 'Get Started Free' : `Upgrade to ${plan.name}`}
-                    </Text>
-                    {!isCurrentPlan && <ArrowRight size={14} color={isPopular ? 'white' : '#1e293b'} />}
-                  </TouchableOpacity>
+                      <Text style={[
+                        styles.statusText,
+                        subscription?.status === 'ACTIVE' ? styles.statusActiveText : styles.statusExpiredText
+                      ]}>
+                        {subscription?.status || 'Active'}
+                      </Text>
+                    </View>
+                    {isTrial && (
+                      <View style={styles.trialBadge}>
+                        <Text style={styles.trialBadgeText}>PHASE 1: TRIAL</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
               </View>
-            );
-          })}
+              
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.upgradeButton, currentPlan === 'PRO' && styles.disabledButton]}
+                  onPress={() => handlePlanAction({ name: 'PRO', price: PRO_PRICE })}
+                  disabled={currentPlan === 'PRO'}
+                >
+                  <Text style={styles.upgradeButtonText}>UPGRADE PLAN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>CANCEL</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>ACTIVE USERS</Text>
+                <Text style={styles.statValue}>{subscription?.userCount || 0} Members</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>MONTHLY COST</Text>
+                <Text style={styles.statValue}>{currencySymbol}{subscription?.totalMonthlyCost || 0}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>STARTED DATE</Text>
+                <Text style={styles.statValue}>
+                  {formatDate(subscription?.trialStartDate || subscription?.createdAt)}
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>{isTrial ? 'EXPIRES ON' : 'NEXT RENEWAL'}</Text>
+                <Text style={styles.statValue}>
+                  {formatDate(subscription?.trialEndDate || subscription?.expiryDate)}
+                </Text>
+              </View>
+            </View>
+
+            {isTrial && (
+              <View style={styles.infoBanner}>
+                <Info size={16} color="#64748b" />
+                <Text style={styles.infoText}>
+                  Your estimated cost after trial:{' '}
+                  <Text style={styles.infoHighlight}>
+                    {currencySymbol}{userCount * PRO_PRICE} / month
+                  </Text>
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Plan Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>CHANGE PLAN</Text>
+          
+          {/* User Count Slider */}
+          <View style={styles.sliderCard}>
+            <View style={styles.sliderHeader}>
+              <Users size={16} color="#64748b" />
+              <Text style={styles.sliderText}>Calculate for your team size:</Text>
+            </View>
+            <View style={styles.sliderContainer}>
+              <Text style={styles.sliderValue}>{userCount} Users</Text>
+            </View>
+          </View>
+
+          {/* Plan Cards */}
+          <View style={styles.planCards}>
+            {/* Basic Plan */}
+            <TouchableOpacity
+              style={[styles.planCard, currentPlan === 'BASIC' && styles.activePlanCard]}
+              onPress={() => handlePlanAction({ name: 'BASIC', price: BASIC_PRICE })}
+            >
+              <Text style={styles.planCardTitle}>BASIC</Text>
+              <View style={styles.planPriceRow}>
+                <Text style={styles.planPrice}>{currencySymbol}{BASIC_PRICE}</Text>
+                <Text style={styles.planPeriod}>/ user</Text>
+              </View>
+              <View style={styles.featureList}>
+                <FeatureItem text="Essential Time Tracking" />
+                <FeatureItem text="Team Management" />
+                <FeatureItem text="Basic Reporting" />
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.selectButton,
+                  currentPlan === 'BASIC' && styles.currentPlanButton
+                ]}
+                disabled={currentPlan === 'BASIC'}
+              >
+                <Text style={[
+                  styles.selectButtonText,
+                  currentPlan === 'BASIC' && styles.currentPlanButtonText
+                ]}>
+                  {currentPlan === 'BASIC' ? 'Current Plan' : 'Select Basic'}
+                </Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+
+            {/* Pro Plan */}
+            <TouchableOpacity
+              style={[styles.planCard, styles.proCard, currentPlan === 'PRO' && styles.activePlanCard]}
+              onPress={() => handlePlanAction({ name: 'PRO', price: PRO_PRICE })}
+            >
+              <View style={styles.recommendedBadge}>
+                <Text style={styles.recommendedText}>RECOMMENDED</Text>
+              </View>
+              <Text style={styles.planCardTitle}>PRO</Text>
+              <View style={styles.planPriceRow}>
+                <Text style={styles.planPrice}>{currencySymbol}{PRO_PRICE}</Text>
+                <Text style={styles.planPeriod}>/ user</Text>
+              </View>
+              <View style={styles.featureList}>
+                <FeatureItem text="Advanced Payroll" />
+                <FeatureItem text="Compliance Controls" />
+                <FeatureItem text="Strategic Insights" />
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.selectButton,
+                  styles.proSelectButton,
+                  currentPlan === 'PRO' && styles.currentPlanButton
+                ]}
+                disabled={currentPlan === 'PRO'}
+              >
+                <Text style={[
+                  styles.selectButtonText,
+                  styles.proSelectButtonText,
+                  currentPlan === 'PRO' && styles.currentPlanButtonText
+                ]}>
+                  {currentPlan === 'PRO' ? 'Current Plan' : 'Select Pro'}
+                </Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Feature Comparison */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>FEATURE COMPARISON</Text>
+          <View style={styles.comparisonTable}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, { flex: 2 }]}>Platform Feature</Text>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Basic</Text>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Pro</Text>
+            </View>
+            {COMPARISON_FEATURES.map((feature, index) => (
+              <View key={index} style={[styles.tableRow, index % 2 === 0 && styles.tableRowAlt]}>
+                <Text style={[styles.tableCell, styles.featureName, { flex: 2 }]}>{feature.name}</Text>
+                <View style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+                  {feature.basic ? (
+                    <Check size={16} color="#10b981" />
+                  ) : (
+                    <X size={16} color="#e2e8f0" />
+                  )}
+                </View>
+                <View style={[styles.tableCell, { flex: 1, alignItems: 'center' }]}>
+                  {feature.pro ? (
+                    <Check size={16} color="#10b981" />
+                  ) : (
+                    <X size={16} color="#e2e8f0" />
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Billing History */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SUBSCRIPTION LEDGER</Text>
+          {history.length > 0 ? (
+            <View style={styles.historyList}>
+              {history.map((record, index) => (
+                <View key={index} style={styles.historyItem}>
+                  <View style={styles.historyLeft}>
+                    <View style={styles.historyIcon}>
+                      {record.planName.toLowerCase().includes('pro') ? (
+                        <Crown size={18} color="#f59e0b" />
+                      ) : (
+                        <Zap size={18} color="#3b82f6" />
+                      )}
+                    </View>
+                    <View>
+                      <Text style={styles.historyPlanName}>{record.planName}</Text>
+                      <Text style={styles.historyDate}>
+                        {formatDate(record.startDate)} - {formatDate(record.endDate)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.historyRight}>
+                    <Text style={styles.historyCost}>{currencySymbol}{record.totalCost}</Text>
+                    <Text style={[
+                      styles.historyStatus,
+                      record.status === 'ACTIVE' ? styles.historyStatusActive : {}
+                    ]}>
+                      {record.status}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No previous billing records found.</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Plan Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>EXPLORE PLANS</Text>
         </View>
       </View>
+
       <UpgradeContactModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         plan={selectedPlan}
+        currencySymbol={currencySymbol}
       />
     </Layout>
   );
 }
+
+const FeatureItem = ({ text }: { text: string }) => (
+  <View style={styles.featureItem}>
+    <Check size={14} color="#10b981" />
+    <Text style={styles.featureItemText}>{text}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  scrollContainer: {
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 40,
   },
-  heroSection: {
-    alignItems: 'center',
+  header: {
     marginBottom: 32,
   },
-  badge: {
+  backButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginBottom: 16,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#64748b',
-    letterSpacing: 1,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1e293b',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  titleHighlight: {
-    color: '#3b82f6',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  pricingContainer: {
-    gap: 20,
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: '#f1f5f9',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  popularCard: {
-    borderColor: '#3b82f6',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -1,
-    right: 20,
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    zIndex: 10,
-  },
-  popularText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: 'white',
-    letterSpacing: 0.5,
-  },
-  recommendedBadge: {
-    position: 'absolute',
-    top: -1,
-    left: 20,
-    backgroundColor: '#1e293b',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    zIndex: 10,
-  },
-  recommendedText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: 'white',
-    letterSpacing: 0.5,
-  },
-  cardContent: {
-    padding: 24,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 20,
   },
-  iconBox: {
-    width: 56,
-    height: 56,
+  backText: {
+    color: '#3b82f6',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  headerContent: {
+    gap: 8,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+    lineHeight: 20,
+  },
+  section: {
+    marginBottom: 40,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: 2,
+    marginBottom: 16,
+    marginLeft: 4,
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    padding: 24,
+  },
+  currentPlanHeader: {
+    gap: 24,
+  },
+  planInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  planIcon: {
+    width: 48,
+    height: 48,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
   },
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  trialIcon: {
+    backgroundColor: '#fef3c7',
+  },
+  proIcon: {
+    backgroundColor: '#0f172a',
+  },
+  planDetails: {
+    flex: 1,
     gap: 4,
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#d1fae5',
-  },
-  activeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#10b981',
-  },
-  planInfo: {
-    marginBottom: 16,
   },
   planName: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1e293b',
+    color: '#0f172a',
     letterSpacing: 1,
-    marginBottom: 4,
   },
-  planDescription: {
-    fontSize: 13,
-    color: '#94a3b8',
-    lineHeight: 18,
-  },
-  priceContainer: {
+  statusRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
+    gap: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusActive: {
+    backgroundColor: '#ecfdf5',
+  },
+  statusExpired: {
+    backgroundColor: '#fef2f2',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  statusActiveText: {
+    color: '#10b981',
+  },
+  statusExpiredText: {
+    color: '#ef4444',
+  },
+  trialBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  trialBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#f59e0b',
+    letterSpacing: 1,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  upgradeButton: {
+    flex: 1,
+    height: 48,
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledButton: {
+    backgroundColor: '#f1f5f9',
+  },
+  upgradeButtonText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 2,
+  },
+  cancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: 2,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  statItem: {
+    width: '50%',
+    marginBottom: 16,
+    gap: 4,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#94a3b8',
+    letterSpacing: 2,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#64748b',
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  infoHighlight: {
+    fontWeight: '800',
+    color: '#0f172a',
+    fontStyle: 'normal',
+  },
+  sliderCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    padding: 16,
     marginBottom: 20,
   },
-  price: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1e293b',
+  sliderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
-  periodText: {
+  sliderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  sliderContainer: {
+    alignItems: 'center',
+  },
+  sliderValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  planCards: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  planCard: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#f1f5f9',
+    padding: 20,
+    position: 'relative',
+  },
+  activePlanCard: {
+    borderColor: '#3b82f6',
+  },
+  proCard: {
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: -1,
+    right: 12,
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    zIndex: 1,
+  },
+  recommendedText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 2,
+  },
+  planCardTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: 1,
+    marginBottom: 4,
+    marginTop: 24,
+  },
+  planPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginBottom: 20,
+  },
+  planPrice: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  planPeriod: {
     fontSize: 10,
     fontWeight: '700',
     color: '#94a3b8',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
-  periodTextSmall: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#94a3b8',
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#f1f5f9',
-    marginVertical: 20,
-  },
-  featuresContainer: {
-    gap: 12,
-    marginBottom: 24,
+  featureList: {
+    gap: 8,
+    marginBottom: 20,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  featureIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureIconIncluded: {
-    backgroundColor: '#eff6ff',
-  },
-  featureDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#cbd5e1',
-  },
-  featureText: {
+  featureItemText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#475569',
-    letterSpacing: -0.3,
   },
-  featureTextDisabled: {
-    color: '#cbd5e1',
-    fontStyle: 'italic',
-  },
-  upgradeButton: {
-    flexDirection: 'row',
+  selectButton: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#0f172a',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: '#1e293b',
+    backgroundColor: '#ffffff',
   },
-  popularButton: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
+  proSelectButton: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
   },
-  disabledButton: {
+  currentPlanButton: {
     backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
   },
-  upgradeButtonText: {
-    fontSize: 11,
+  selectButtonText: {
+    fontSize: 10,
     fontWeight: '800',
-    color: '#1e293b',
+    color: '#0f172a',
+    letterSpacing: 2,
+  },
+  proSelectButtonText: {
+    color: '#ffffff',
+  },
+  currentPlanButtonText: {
+    color: '#94a3b8',
+  },
+  comparisonTable: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  tableRowAlt: {
+    backgroundColor: '#fafafa',
+  },
+  tableCell: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  tableHeaderCell: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748b',
     letterSpacing: 1,
   },
-  popularButtonText: {
-    color: 'white',
+  featureName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
   },
-  disabledButtonText: {
+  historyList: {
+    gap: 8,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  historyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  historyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyPlanName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  historyDate: {
+    fontSize: 10,
+    fontWeight: '700',
     color: '#94a3b8',
+    letterSpacing: 1,
+  },
+  historyRight: {
+    alignItems: 'flex-end',
+  },
+  historyCost: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  historyStatus: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94a3b8',
+    letterSpacing: 1,
+  },
+  historyStatusActive: {
+    color: '#10b981',
+  },
+  emptyState: {
+    paddingVertical: 48,
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    borderStyle: 'dashed',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#94a3b8',
+    fontStyle: 'italic',
+    fontWeight: '500',
   },
 });
 
@@ -698,14 +1133,12 @@ const modalStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
-    alignItems: 'center',
+    padding: 20,
   },
   container: {
-    backgroundColor: 'white',
+    backgroundColor: '#ffffff',
     borderRadius: 32,
-    width: '90%',
     maxHeight: '80%',
-    overflow: 'hidden',
   },
   header: {
     padding: 24,
@@ -732,14 +1165,19 @@ const modalStyles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     textAlign: 'center',
+    lineHeight: 18,
   },
   closeButton: {
     position: 'absolute',
     top: 20,
     right: 20,
+    padding: 4,
   },
   form: {
     padding: 24,
+  },
+  field: {
+    marginBottom: 16,
   },
   row: {
     flexDirection: 'row',
@@ -748,9 +1186,6 @@ const modalStyles = StyleSheet.create({
   },
   halfField: {
     flex: 1,
-  },
-  field: {
-    marginBottom: 16,
   },
   label: {
     fontSize: 10,
@@ -807,20 +1242,20 @@ const modalStyles = StyleSheet.create({
     color: '#64748b',
   },
   successContainer: {
-    padding: 40,
+    padding: 48,
     alignItems: 'center',
   },
   successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: '#ecfdf5',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
   },
   successTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: '#1e293b',
     marginBottom: 12,
@@ -829,21 +1264,21 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
+    marginBottom: 24,
+    lineHeight: 20,
   },
-  planName: {
-    color: '#3b82f6',
-    fontWeight: '700',
+  planHighlight: {
+    fontWeight: '800',
+    color: '#4f46e5',
   },
   doneButton: {
     backgroundColor: '#1e293b',
-    paddingHorizontal: 48,
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 30,
   },
   doneText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     color: 'white',
     letterSpacing: 1,

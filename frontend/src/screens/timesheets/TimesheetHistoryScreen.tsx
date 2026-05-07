@@ -622,19 +622,8 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         status: filters.status === 'All Status' ? '' : filters.status
       });
 
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData], { type: 'text/csv' } as any);
-        const url = globalAny.URL.createObjectURL(blob);
-        const link = globalAny.document.createElement('a');
-        link.href = url;
-        link.download = `timesheet_history_${format(new Date(), 'yyyyMMdd')}.csv`;
-        link.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const fileName = `timesheet_history_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        await exportFile(csvData as string, fileName, 'text/csv');
-      }
+      const fileName = `timesheet_history_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
+      await exportFile(csvData as string, fileName, 'text/csv');
     } catch (error) {
       console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to export CSV');

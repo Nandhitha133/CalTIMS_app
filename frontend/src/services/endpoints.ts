@@ -28,18 +28,18 @@ export const timesheetAPI = {
   // User History
   getHistory: (params: any) => 
     apiService.get('/timesheets/history', params),
-  getDetails: (weekStartDate: string, userId: string) => 
-    apiService.get('/timesheets/details', { weekStartDate, userId }),
+  getDetails: (weekStartDate: string, userId: string, params: any = {}) => 
+    apiService.get('/timesheets/details', { weekStartDate, userId, ...params }),
   delete: (id: string) => 
     apiService.delete(`/timesheets/${id}`),
   
   // Admin Manage
-  getAdminStats: () => 
-    apiService.get('/timesheets/admin/stats'),
+  getAdminStats: (params?: any) => 
+    apiService.get('/timesheets/admin-summary', params),
   getAdminFilters: () => 
-    apiService.get('/timesheets/admin/filters'),
+    apiService.get('/timesheets/admin-filters'),
   getAdminList: (params: any) => 
-    apiService.get('/timesheets/admin/list', params),
+    apiService.get('/timesheets/admin-list', params),
   approve: (id: string) => 
     apiService.patch(`/timesheets/${id}/approve`),
   reject: (id: string, reason: string) => 
@@ -187,13 +187,13 @@ export const reportAPI = {
   getComplianceSummary: (params: any) => 
     apiService.get('/reports/compliance-summary', params),
   getSmartInsights: (params: any) => 
-    apiService.get('/reports/insights', params),
+    apiService.get('/reports/smart-insights', params),
   getTimesheetDetails: (params: any) => 
     apiService.get('/reports/timesheet-details', params),
   exportPDF: (params: any) => 
-    apiService.get('/reports/export/pdf', params),
+    apiService.get('/reports/pdf-export', params, { headers: { 'Accept': 'application/pdf' } }),
   exportCSV: (params: any) => 
-    apiService.get('/reports/export/csv', params),
+    apiService.get('/reports/csv-export', params, { headers: { 'Accept': 'text/csv' } }),
 };
 
 // ==================== SETTINGS API ====================
@@ -215,25 +215,27 @@ export const settingsAPI = {
   uploadBranding: (data: FormData) => 
     apiService.post('/settings/branding/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateSettings: (data: any) => 
-    apiService.patch('/settings', data),
+    apiService.put('/settings', data),
 };
 
 // ==================== PAYROLL API ====================
 export const payrollAPI = {
-  getMyPayslips: () => 
-    apiService.get('/payroll/history'),
+  getMyPayslips: (params?: any) => 
+    apiService.get('/payroll/history', params),
   downloadPayslip: (id: string) => 
     apiService.get(`/payroll/payslip/${id}/download`),
   sendPayslipEmail: (id: string) => 
     apiService.post(`/payroll/payslip/${id}/send-email`),
-  getProfiles: () => 
-    apiService.get('/payroll/profiles'),
+  getProfiles: (params?: any) => 
+    apiService.get('/payroll/profiles', params),
   getRoleStructures: () => 
     apiService.get('/payroll/role-structures'),
-  updateProfile: (userId: string, data: any) => 
-    apiService.post('/payroll/profiles', { ...data, userId }),
+  updateProfile: (id: string, data: any) => 
+    apiService.patch(`/payroll/profiles/${id}`, data),
   deleteProfile: (id: string) => 
     apiService.delete(`/payroll/profiles/${id}`),
+  setupFullProfile: (data: any) => 
+    apiService.post('/payroll/profiles', data),
   getDashboard: (params?: any) => 
     apiService.get('/payroll/dashboard', params),
   getBatches: (params?: any) => 
@@ -255,11 +257,11 @@ export const payrollAPI = {
   markPaid: (data: any) => 
     apiService.post('/payroll/mark-paid', data),
   updateRoleStructure: (data: any) => 
-    data._id ? apiService.patch(`/payroll/structures/${data._id}`, data) : apiService.post('/payroll/structures', data),
+    data._id ? apiService.patch(`/payroll/role-structures/${data._id}`, data) : apiService.post('/payroll/role-structures', data),
   toggleStructureStatus: (id: string) => 
-    apiService.patch(`/payroll/structures/${id}/toggle-status`),
+    apiService.patch(`/payroll/role-structures/${id}/toggle`),
   deleteStructure: (id: string) => 
-    apiService.delete(`/payroll/structures/${id}`),
+    apiService.delete(`/payroll/role-structures/${id}`),
 };
 
 // ==================== POLICY API ====================

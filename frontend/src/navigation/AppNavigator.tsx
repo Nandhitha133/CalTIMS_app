@@ -38,6 +38,7 @@ import NotificationsTab from '../screens/settings/tabs/NotificationsTab';
 import LeaveTrackerScreen from '../screens/leaves/LeaveTrackerScreen';
 import LeaveManagementScreen from '../screens/leaves/LeaveManagementScreen';
 import ReportsScreen from '../screens/reports/ReportsScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -135,6 +136,8 @@ export default function AppNavigator() {
       <Stack.Screen name="LeaveTracker" component={LeaveTrackerScreen} />
       <Stack.Screen name="LeaveManagement" component={LeaveManagementScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Profile" component={SettingsScreen} />
 
 
     </Stack.Navigator>

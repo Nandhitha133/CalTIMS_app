@@ -285,14 +285,76 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
     await fetchDetailRecords(run.month, run.year);
   };
 
+  const handleDownloadRunCSV = async () => {
+    if (!selectedRun || detailRecords.length === 0) {
+      Alert.alert('No Data', 'No employee records found to export.');
+      return;
+    }
+
+    try {
+      const fileName = `Payroll_Details_${selectedRun.year}_${String(selectedRun.month).padStart(2, '0')}.csv`;
+      const headers = ['Employee ID', 'Name', 'Gross Pay', 'Deductions', 'Net Pay', 'Status'];
+      
+      const rows = detailRecords.map(record => [
+        `"${record.user?.employeeId || 'N/A'}"`,
+        `"${record.user?.name || 'Unknown'}"`,
+        record.breakdown?.grossEarnings || 0,
+        record.breakdown?.totalDeductions || 0,
+        record.breakdown?.netPay || 0,
+        record.isPaid ? '"Paid"' : '"Pending"'
+      ]);
+
+      const content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      await exportFile(content, fileName, 'text/csv', false);
+    } catch (error) {
+      console.error('CSV Export failed:', error);
+      Alert.alert('Error', 'Failed to export CSV. Please try again.');
+    }
+  };
+
+  const handleDownloadRunPDF = async () => {
+    if (!selectedRun) return;
+    
+    try {
+      // In a real app, we might call an API that returns a PDF blob/base64
+      // For now, let's try to get a summary report from the API
+      setLoading(true);
+      const response = await payrollAPI.getSummaryReport({ 
+        month: selectedRun.month, 
+        year: selectedRun.year,
+        format: 'pdf'
+      });
+      
+      const data = extractData(response);
+      if (data) {
+        const fileName = `Payroll_Summary_${selectedRun.year}_${String(selectedRun.month).padStart(2, '0')}.pdf`;
+        await exportFile(data, fileName, 'application/pdf', true);
+      } else {
+        Alert.alert('Info', 'PDF generation is currently being processed on the server. Please try again in a few minutes.');
+      }
+    } catch (error) {
+      console.error('PDF Export failed:', error);
+      Alert.alert('Error', 'Failed to generate PDF report.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleExport = async (type: string) => {
     setShowExportMenu(false);
+    if (type === 'Bank') {
+      // Navigate to Bank Transfer Export screen instead of showing "Coming Soon"
+      navigation.navigate('BankTransferExport', { month: selectedRun?.month, year: selectedRun?.year });
+      return;
+    }
+
     try {
+      setLoading(true);
       // Fetch all records from the API to ensure we have ALL data for the export
-      const response = await payrollAPI.getHistory({ limit: 1000 }); // Fetch up to 1000 records
+      const response = await payrollAPI.getHistory({ limit: 1000 });
       const allRuns = extractData(response, []);
 
-      if (allRuns.length === 0) {
+      if (!allRuns || allRuns.length === 0) {
         Alert.alert('No Data', 'No payroll records found to export.');
         return;
       }
@@ -311,23 +373,25 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
       // Format records for CSV
       const rows = allRuns.map((run: any) => [
         `"${run.runId || 'N/A'}"`,
-        run.month,
-        run.year,
-        run.employeeCount || 0,
+        run.month || '-',
+        run.year || '-',
+        run.totalEmployees || 0,
         run.totalGross || 0,
         run.totalDeductions || 0,
-        run.netPay || 0,
+        run.totalNet || 0,
         `"${run.status || 'Processed'}"`,
-        `"${run.createdAt ? new Date(run.createdAt).toLocaleDateString() : 'N/A'}"`
+        `"${run.processedAt ? new Date(run.processedAt).toLocaleDateString() : 'N/A'}"`
       ]);
 
       const content = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
       
       const fileType = isExcel ? 'application/vnd.ms-excel' : 'text/csv';
-      await exportFile(content, fileName, fileType);
+      await exportFile(content, fileName, fileType, false);
     } catch (error) {
       console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to fetch and export all records. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -514,11 +578,11 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
             </ScrollView>
 
             <View style={styles.drawerFooter}>
-              <TouchableOpacity style={styles.drawerButton}>
+              <TouchableOpacity style={styles.drawerButton} onPress={handleDownloadRunCSV}>
                 <Download size={16} color={COLORS.white} />
                 <Text style={styles.drawerButtonText}>Download CSV</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.drawerButton, styles.drawerButtonSecondary]}>
+              <TouchableOpacity style={[styles.drawerButton, styles.drawerButtonSecondary]} onPress={handleDownloadRunPDF}>
                 <FileText size={16} color={COLORS.primary} />
                 <Text style={[styles.drawerButtonText, { color: COLORS.primary }]}>PDF Report</Text>
               </TouchableOpacity>

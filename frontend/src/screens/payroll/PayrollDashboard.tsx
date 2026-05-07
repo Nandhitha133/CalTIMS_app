@@ -124,23 +124,7 @@ const DepartmentItem = ({ name, percentage, color, isActive, onPress }: Departme
   </TouchableOpacity>
 );
 
-// Module Card Component
-interface ModuleCardProps {
-  label: string;
-  icon: any;
-  color: string;
-  onPress: () => void;
-}
 
-const ModuleCard = ({ label, icon: Icon, color, onPress }: ModuleCardProps) => (
-  <TouchableOpacity style={styles.moduleCard} onPress={onPress}>
-    <View style={[styles.moduleIconContainer, { backgroundColor: color + '15' }]}>
-      <Icon size={22} color={color} />
-    </View>
-    <Text style={styles.moduleLabel} numberOfLines={2}>{label}</Text>
-    <ChevronRight size={14} color={COLORS.gray} />
-  </TouchableOpacity>
-);
 
 // Recent Batch Row Component
 interface RecentBatchRowProps {
@@ -355,45 +339,7 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
           </View>
         </View>
 
-        {/* Module Navigation Grid - New Section */}
-        <View style={styles.moduleGrid}>
-          <ModuleCard
-            label="Run Payroll"
-            icon={Play}
-            color={COLORS.primary}
-            onPress={() => navigation.navigate('PayrollProcessing')}
-          />
-          <ModuleCard
-            label="Employee Profiles"
-            icon={Users}
-            color={COLORS.success}
-            onPress={() => navigation.navigate('PayrollProfiles')}
-          />
-          <ModuleCard
-            label="Payroll History"
-            icon={History}
-            color={COLORS.info}
-            onPress={() => navigation.navigate('PayrollHistory')}
-          />
-          <ModuleCard
-            label="Reports & Analytics"
-            icon={BarChart3}
-            color={COLORS.warning}
-            onPress={() => navigation.navigate('PayrollReports')}
-          />
-          <ModuleCard
-            label="Bank Transfer"
-            icon={Landmark}
-            color={COLORS.primary}
-            onPress={() => navigation.navigate('BankTransferExport')}
-          />
-          <ModuleCard
-            label="Payslips"
-            icon={FileText}
-            color={COLORS.error}
-            onPress={() => navigation.navigate('PayrollPayslip')}
-          />
-        </View>
+
 
 
         {/* KPI Grid */}
@@ -643,37 +589,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderWidth: 2,
   },
-  moduleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 24,
-  },
-  moduleCard: {
-    width: '48.5%', // Slightly less than 50% to account for gap
-    backgroundColor: COLORS.white,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  moduleIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  moduleLabel: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.dark,
-    lineHeight: 16,
-  },
+
   kpiIconContainer: {
     width: 44,
     height: 44,

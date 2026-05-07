@@ -14,6 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Menu, Bell, X, User, LayoutDashboard, Calendar, ClipboardList, Briefcase, Users, FileText, Settings, LogOut, ChevronRight, ReceiptText, ShieldAlert, History } from 'lucide-react-native';
+import { notificationAPI } from '../../services/endpoints';
 import TrialBanner from './TrialBanner';
 
 interface Notification {
@@ -61,6 +62,7 @@ export default function Header({
   const [unreadCount, setUnreadCount] = useState(0);
   const [user, setUser] = useState<any>(initialUser || null);
   const [bannerVisible, setBannerVisible] = useState(true);
+  const [showProfile, setShowProfile] = useState(false);
 
   const sidebarItems: SidebarItem[] = [
     { id: 'dashboard', title: 'Dashboard', icon: LayoutDashboard, screen: 'Dashboard' },
@@ -94,27 +96,39 @@ export default function Header({
   };
 
   const loadNotifications = async () => {
-    // Mock notifications - replace with API call
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        title: 'Timesheet Reminder',
-        message: 'Please submit your timesheet for this week',
-        type: 'warning',
-        read: false,
-        createdAt: new Date(),
-      },
-      {
-        id: '2',
-        title: 'Leave Approved',
-        message: 'Your leave request has been approved',
-        type: 'success',
-        read: false,
-        createdAt: new Date(),
-      },
-    ];
-    setNotifications(mockNotifications);
-    setUnreadCount(mockNotifications.filter(n => !n.read).length);
+    try {
+      if (!notificationAPI?.getAll) {
+        console.warn('notificationAPI.getAll is not defined');
+        return;
+      }
+      const response: any = await notificationAPI.getAll({ limit: 20 });
+      
+      // Robust data extraction
+      let rawData = [];
+      if (response) {
+        if (Array.isArray(response.data?.data)) {
+          rawData = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          rawData = response.data;
+        } else if (Array.isArray(response)) {
+          rawData = response;
+        }
+      }
+      
+      const formattedNotifications: Notification[] = rawData.map((n: any) => ({
+        id: n._id || n.id || String(Math.random()),
+        title: n.title || 'Notification',
+        message: n.message || n.content || '',
+        type: n.type || 'info',
+        read: n.read || n.isRead || false,
+        createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+      }));
+
+      setNotifications(formattedNotifications);
+      setUnreadCount(formattedNotifications.filter(n => !n.read).length);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    }
   };
 
   const handleMenuPress = () => {
@@ -144,17 +158,31 @@ export default function Header({
   };
 
   const markAsRead = async (notificationId: string) => {
-    const updatedNotifications = notifications.map(notif =>
-      notif.id === notificationId ? { ...notif, read: true } : notif
-    );
-    setNotifications(updatedNotifications);
-    setUnreadCount(updatedNotifications.filter(n => !n.read).length);
+    try {
+      if (notificationAPI?.markRead) {
+        await notificationAPI.markRead(notificationId);
+      }
+      const updatedNotifications = notifications.map(notif =>
+        notif.id === notificationId ? { ...notif, read: true } : notif
+      );
+      setNotifications(updatedNotifications);
+      setUnreadCount(updatedNotifications.filter(n => !n.read).length);
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
   const markAllAsRead = async () => {
-    const updatedNotifications = notifications.map(notif => ({ ...notif, read: true }));
-    setNotifications(updatedNotifications);
-    setUnreadCount(0);
+    try {
+      if (notificationAPI?.markAllRead) {
+        await notificationAPI.markAllRead();
+      }
+      const updatedNotifications = notifications.map(notif => ({ ...notif, read: true }));
+      setNotifications(updatedNotifications);
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
   };
 
   const getNotificationColor = (type: string) => {
@@ -299,6 +327,87 @@ export default function Header({
     </Modal>
   );
 
+  const ProfileModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={showProfile}
+      onRequestClose={() => setShowProfile(false)}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={() => setShowProfile(false)}
+      >
+        <View style={styles.profileModalContainer}>
+          <TouchableOpacity activeOpacity={1} style={styles.profileModalCard}>
+            {/* Close Button */}
+            <TouchableOpacity 
+              onPress={() => setShowProfile(false)}
+              style={styles.profileCloseButton}
+            >
+              <X size={20} color="#94a3b8" />
+            </TouchableOpacity>
+
+            {/* Avatar Section */}
+            <View style={styles.profileHeader}>
+              <View style={styles.largeAvatar}>
+                <Text style={styles.largeAvatarInitial}>
+                  {(user?.name || 'U').split(' ').map((n: any) => n[0]).join('').toUpperCase().substring(0, 2)}
+                </Text>
+              </View>
+              
+              <Text style={styles.profileName}>{user?.name || 'User'}</Text>
+              <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
+              
+              <View style={styles.roleBadge}>
+                <Text style={styles.roleBadgeText}>{user?.role || 'Employee'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.profileDivider} />
+
+            {/* Actions Section */}
+            <View style={styles.profileActions}>
+              <TouchableOpacity 
+                style={styles.profileActionItem}
+                onPress={() => {
+                  setShowProfile(false);
+                  navigation.navigate('Profile');
+                }}
+              >
+                <User size={18} color="#64748b" />
+                <Text style={styles.profileActionText}>My Profile</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.profileActionItem}
+                onPress={() => {
+                  setShowProfile(false);
+                  navigation.navigate('Settings');
+                }}
+              >
+                <Settings size={18} color="#64748b" />
+                <Text style={styles.profileActionText}>Account Settings</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.profileActionItem, styles.signOutAction]}
+                onPress={() => {
+                  setShowProfile(false);
+                  handleLogout();
+                }}
+              >
+                <LogOut size={18} color="#ef4444" />
+                <Text style={styles.signOutText}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -310,7 +419,7 @@ export default function Header({
         <View style={styles.leftSection}>
           {showBackButton ? (
             <TouchableOpacity onPress={onBackPress || (() => navigation.goBack())} style={styles.iconButton}>
-              <X size={24} color="#1e293b" />
+              <ChevronRight size={24} color="#1e293b" style={{ transform: [{ rotate: '180deg' }] }} />
             </TouchableOpacity>
           ) : showSidebarButton ? (
             <TouchableOpacity onPress={handleMenuPress} style={styles.iconButton}>
@@ -339,7 +448,7 @@ export default function Header({
           )}
           
           <TouchableOpacity 
-            onPress={() => navigation.navigate('Profile')}
+            onPress={() => setShowProfile(true)}
             style={styles.profileButton}
           >
             <View style={styles.avatar}>
@@ -353,6 +462,7 @@ export default function Header({
 
       <NotificationModal />
       <SidebarModal />
+      <ProfileModal />
     </View>
   );
 }
@@ -363,6 +473,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
     paddingTop: Platform.OS === 'ios' ? 44 : 0,
+    zIndex: 1000,
   },
   headerContent: {
     height: 60,
@@ -427,15 +538,18 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   modalContent: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '80%',
     paddingBottom: 20,
+    width: '100%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -584,5 +698,107 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     color: '#94a3b8',
+  },
+
+  // Profile Modal Styles
+  profileModalContainer: {
+    width: '90%',
+    maxWidth: 340,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    position: 'relative',
+  },
+  profileModalCard: {
+    alignItems: 'center',
+  },
+  profileCloseButton: {
+    position: 'absolute',
+    top: -12,
+    right: -12,
+    padding: 8,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  largeAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#8b5cf6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  largeAvatarInitial: {
+    color: '#ffffff',
+    fontSize: 32,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 16,
+  },
+  roleBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  roleBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    textTransform: 'capitalize',
+  },
+  profileDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 12,
+  },
+  profileActions: {
+    width: '100%',
+  },
+  profileActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 12,
+  },
+  profileActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  signOutAction: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 16,
+  },
+  signOutText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ef4444',
   },
 });

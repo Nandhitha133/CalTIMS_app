@@ -411,7 +411,7 @@ export function PayrollRun({ navigation }: { navigation: any }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.successButtonPrimary}
-                onPress={() => navigation.navigate('PayrollHistory')}
+                onPress={() => navigation.navigate('PayrollPayslip')}
               >
                 <Receipt size={16} color={COLORS.white} />
                 <Text style={styles.successButtonPrimaryText}>Generate Payslips</Text>

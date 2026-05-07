@@ -410,6 +410,10 @@ export function PayrollReports({ navigation }: { navigation: any }) {
     }, [])
   );
 
+  const getPeriodData = (month: number, year: number) => {
+    return history.filter(h => h.month === month && h.year === year);
+  };
+
   const safe = (val: any) => Number(val || 0);
 
   const processedData = useMemo(() => {
@@ -422,15 +426,15 @@ export function PayrollReports({ navigation }: { navigation: any }) {
       };
     }
 
-    // Trends Calculation
+    // Trends Calculation (Last X months based on selection)
     const monthMap: any = {};
     const allMonths = [];
-    const now = new Date();
+    const selectedDate = new Date(reportPeriod.year, reportPeriod.month - 1, 1);
 
     for (let i = 0; i < timeRange; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const d = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - (timeRange - 1 - i), 1);
       const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      allMonths.unshift({
+      allMonths.push({
         key,
         label: `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear().toString().slice(-2)}`,
         month: d.getMonth() + 1,
@@ -443,10 +447,10 @@ export function PayrollReports({ navigation }: { navigation: any }) {
       if (!monthMap[key]) {
         monthMap[key] = { grossPay: 0, netPay: 0, deductions: 0, employees: new Set() };
       }
-      monthMap[key].grossPay += safe(p.breakdown?.earnings?.grossEarnings);
-      monthMap[key].netPay += safe(p.breakdown?.netPay);
-      monthMap[key].deductions += safe(p.breakdown?.deductions?.totalDeductions);
-      monthMap[key].employees.add(p.user?._id || p.user);
+      monthMap[key].grossPay += safe(p.breakdown?.summary?.gross || p.grossYield || p.breakdown?.earnings?.grossEarnings);
+      monthMap[key].netPay += safe(p.breakdown?.summary?.net || p.netPay || p.breakdown?.netPay);
+      monthMap[key].deductions += safe(p.breakdown?.summary?.deductions || p.liability || p.breakdown?.deductions?.totalDeductions);
+      monthMap[key].employees.add(p.user?._id || p.user || p.employeeInfo?.employeeId);
     });
 
     const trends = allMonths.map((m) => {
@@ -461,12 +465,22 @@ export function PayrollReports({ navigation }: { navigation: any }) {
       };
     });
 
-    // Department Distribution
+    // Current Selected Period Data
+    const currentPeriodKey = `${reportPeriod.year}-${reportPeriod.month}`;
+    const prevDate = new Date(reportPeriod.year, reportPeriod.month - 2, 1);
+    const prevPeriodKey = `${prevDate.getFullYear()}-${prevDate.getMonth() + 1}`;
+
+    const curr = monthMap[currentPeriodKey] || { grossPay: 0, netPay: 0, deductions: 0, employees: new Set() };
+    const prev = monthMap[prevPeriodKey] || { grossPay: 0, netPay: 0 };
+    
+    // Department Distribution for selected period
     const depts: any = {};
-    history.forEach((p: any) => {
-      const d = p.user?.department || 'Operations';
-      depts[d] = (depts[d] || 0) + safe(p.breakdown?.earnings?.grossEarnings);
+    const periodHistory = history.filter(h => h.month === reportPeriod.month && h.year === reportPeriod.year);
+    periodHistory.forEach((p: any) => {
+      const d = p.employeeInfo?.department || p.user?.department || 'General';
+      depts[d] = (depts[d] || 0) + safe(p.breakdown?.summary?.gross || p.grossYield);
     });
+    
     const deptColors = [COLORS.primary, COLORS.success, COLORS.warning, COLORS.error, COLORS.purple, COLORS.pink];
     const deptList = Object.entries(depts).map(([name, value], i) => ({
       name,
@@ -474,28 +488,14 @@ export function PayrollReports({ navigation }: { navigation: any }) {
       color: deptColors[i % deptColors.length],
     })).sort((a, b) => b.value - a.value);
 
-    // Current Month Stats
-    const sortedMonths = Object.keys(monthMap).sort((a, b) => {
-      const [y1, m1] = a.split('-').map(Number);
-      const [y2, m2] = b.split('-').map(Number);
-      return y2 - y1 || m2 - m1;
-    });
-    const latestMonthKey = sortedMonths[0];
-    const prevMonthKey = sortedMonths[1];
-
-    const curr = monthMap[latestMonthKey] || { grossPay: 0, netPay: 0, deductions: 0, employees: new Set() };
-    const prev = monthMap[prevMonthKey] || { grossPay: 0, netPay: 0 };
     const growth = prev.grossPay > 0 ? ((curr.grossPay - prev.grossPay) / prev.grossPay) * 100 : 0;
     const highDept = deptList[0]?.name || 'N/A';
     const netGrossRatio = curr.grossPay > 0 ? (curr.netPay / curr.grossPay) * 100 : 0;
 
-    const [lYear, lMonth] = (latestMonthKey || '').split('-').map(Number);
-    const anomalies = history.filter(
+    const anomalies = periodHistory.filter(
       (h: any) =>
-        h.month === lMonth &&
-        h.year === lYear &&
-        (safe(h.breakdown?.deductions?.totalDeductions) > safe(h.breakdown?.earnings?.grossEarnings) * 0.3 ||
-          safe(h.breakdown?.netPay) === 0)
+        (safe(h.breakdown?.summary?.deductions || h.liability) > safe(h.breakdown?.summary?.gross || h.grossYield) * 0.4 ||
+          safe(h.breakdown?.summary?.net || h.netPay) === 0)
     );
 
     const insights = [
@@ -507,13 +507,13 @@ export function PayrollReports({ navigation }: { navigation: any }) {
       },
       {
         title: 'Growth',
-        message: `Payroll ${growth >= 0 ? 'increased' : 'decreased'} by ${Math.abs(growth).toFixed(2)}%`,
+        message: `Payroll ${growth >= 0 ? 'increased' : 'decreased'} by ${Math.abs(growth).toFixed(2)}% vs prev month`,
         icon: growth >= 0 ? TrendingUp : TrendingDown,
         color: growth >= 0 ? COLORS.success : COLORS.error,
       },
       {
         title: 'Anomalies',
-        message: anomalies.length > 0 ? `${anomalies.length} employees flagged` : 'No anomalies detected',
+        message: anomalies.length > 0 ? `${anomalies.length} employees flagged in ${reportPeriod.month}/${reportPeriod.year}` : 'No anomalies detected',
         icon: anomalies.length > 0 ? AlertCircle : CheckCircle2,
         color: anomalies.length > 0 ? COLORS.error : COLORS.success,
       },
@@ -529,25 +529,25 @@ export function PayrollReports({ navigation }: { navigation: any }) {
     };
 
     return { trends, depts: deptList, insights, summary };
-  }, [history, timeRange, selectedMetric]);
+  }, [history, timeRange, selectedMetric, reportPeriod]);
 
   const filteredTableData = useMemo(() => {
     if (!history.length) return [];
     let data = history.filter(
-      (h: any) => h.month === new Date().getMonth() + 1 && h.year === new Date().getFullYear()
+      (h: any) => h.month === reportPeriod.month && h.year === reportPeriod.year
     );
     if (tableFilter !== 'All') {
-      data = data.filter((h: any) => h.user?.department === tableFilter);
+      data = data.filter((h: any) => (h.employeeInfo?.department || h.user?.department) === tableFilter);
     }
     return data.map((h: any) => ({
-      name: h.user?.name || h.employeeInfo?.name,
-      employeeId: h.user?.employeeId || h.employeeInfo?.employeeId,
-      department: h.user?.department || h.employeeInfo?.department || 'Unassigned',
-      gross: safe(h.breakdown?.earnings?.grossEarnings),
-      deductions: safe(h.breakdown?.deductions?.totalDeductions),
-      net: safe(h.breakdown?.netPay),
+      name: h.employeeInfo?.name || h.user?.name || 'Unknown',
+      employeeId: h.employeeInfo?.employeeId || h.user?.employeeId || 'N/A',
+      department: h.employeeInfo?.department || h.user?.department || 'General',
+      gross: safe(h.breakdown?.summary?.gross || h.grossYield || h.breakdown?.earnings?.grossEarnings),
+      deductions: safe(h.breakdown?.summary?.deductions || h.liability || h.breakdown?.deductions?.totalDeductions),
+      net: safe(h.breakdown?.summary?.net || h.netPay || h.breakdown?.netPay),
     }));
-  }, [history, tableFilter]);
+  }, [history, tableFilter, reportPeriod]);
 
   const downloadReport = async (type: string) => {
     setIsExporting(true);
@@ -561,10 +561,10 @@ export function PayrollReports({ navigation }: { navigation: any }) {
         const data = extractData(response);
         const headers = ['Metric', 'Value'];
         const rows = [
-          ['Total Employees', data.totalEmployees],
-          ['Total Gross Disbursement', data.totalGrossEarnings],
-          ['Total Statutory Deductions', data.totalDeductions],
-          ['Total Net Liquidity (Payout)', data.totalNetPay],
+          ['Total Employees', data.totalEmployees || 0],
+          ['Total Gross Disbursement', data.totalGrossEarnings || data.totalGross || 0],
+          ['Total Statutory Deductions', data.totalDeductions || 0],
+          ['Total Net Liquidity (Payout)', data.totalNetPay || data.totalNet || 0],
         ];
         content = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
         fileName = `Payroll_Summary_${reportPeriod.month}_${reportPeriod.year}.csv`;
@@ -587,12 +587,12 @@ export function PayrollReports({ navigation }: { navigation: any }) {
         );
         const headers = ['Employee Name', 'PAN Number', 'Period', 'Total Gross', 'Statutory Deductions', 'Taxable Net'];
         const rows = relevantHistory.map((h: any) => [
-          h.user?.name || h.employeeInfo?.name,
-          h.user?.pan || 'N/A',
+          h.user?.name || h.employeeInfo?.name || 'Unknown',
+          h.user?.pan || h.employeeInfo?.pan || 'N/A',
           `${h.month}/${h.year}`,
-          safe(h.breakdown?.earnings?.grossEarnings),
-          safe(h.breakdown?.deductions?.totalDeductions),
-          safe(h.breakdown?.earnings?.grossEarnings) - safe(h.breakdown?.deductions?.totalDeductions),
+          safe(h.breakdown?.summary?.gross || h.grossYield || h.breakdown?.earnings?.grossEarnings),
+          safe(h.breakdown?.summary?.deductions || h.liability || h.breakdown?.deductions?.totalDeductions),
+          safe(h.breakdown?.summary?.net || h.netPay || h.breakdown?.netPay),
         ]);
         content = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
         fileName = `Tax_Compliance_${reportPeriod.month}_${reportPeriod.year}.csv`;
@@ -607,18 +607,18 @@ export function PayrollReports({ navigation }: { navigation: any }) {
           'Bank Name', 'Account Number', 'IFSC Code', 'PAN', 'UAN',
         ];
         const rows = relevantHistory.map((h: any) => [
-          h.user?.name || h.employeeInfo?.name,
-          h.user?.employeeId || h.employeeInfo?.employeeId,
-          h.user?.department || 'Unassigned',
+          h.employeeInfo?.name || h.user?.name || 'Unknown',
+          h.employeeInfo?.employeeId || h.user?.employeeId || 'N/A',
+          h.employeeInfo?.department || h.user?.department || 'General',
           `${h.month}/${h.year}`,
-          safe(h.breakdown?.earnings?.grossEarnings),
-          safe(h.breakdown?.deductions?.totalDeductions),
-          safe(h.breakdown?.netPay),
-          h.user?.bankName || 'N/A',
-          `'${h.user?.accountNumber || 'N/A'}`,
-          h.user?.ifscCode || 'N/A',
-          h.user?.pan || 'N/A',
-          h.user?.uan || 'N/A',
+          safe(h.breakdown?.summary?.gross || h.grossYield || h.breakdown?.earnings?.grossEarnings),
+          safe(h.breakdown?.summary?.deductions || h.liability || h.breakdown?.deductions?.totalDeductions),
+          safe(h.breakdown?.summary?.net || h.netPay || h.breakdown?.netPay),
+          h.employeeInfo?.bankName || h.user?.bankName || 'N/A',
+          `'${h.employeeInfo?.accountNumber || h.user?.accountNumber || 'N/A'}`,
+          h.employeeInfo?.ifscCode || h.user?.ifscCode || 'N/A',
+          h.employeeInfo?.pan || h.user?.pan || 'N/A',
+          h.employeeInfo?.uan || h.user?.uan || 'N/A',
         ]);
         content = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
         fileName = `Full_Payroll_Ledger_${reportPeriod.month}_${reportPeriod.year}.csv`;
@@ -680,6 +680,40 @@ export function PayrollReports({ navigation }: { navigation: any }) {
         />
 
         <View style={styles.content}>
+          {/* Global Period Selector */}
+          <View style={styles.globalPeriodContainer}>
+            <View style={styles.periodPickerGroup}>
+              <View style={[styles.pickerWrapper, { flex: 1 }]}>
+                <SafeSelector
+                  options={[...Array(12)].map((_, i) => ({
+                    label: new Date(2024, i).toLocaleString('default', { month: 'long' }),
+                    value: i + 1,
+                  }))}
+                  selectedValue={reportPeriod.month}
+                  onValueChange={(v) => setReportPeriod({ ...reportPeriod, month: v })}
+                  visible={activeSelector === 'globalMonth'}
+                  onOpen={() => setActiveSelector('globalMonth')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                />
+              </View>
+              <View style={[styles.pickerWrapper, { flex: 1 }]}>
+                <SafeSelector
+                  options={[2024, 2025, 2026].map((y) => ({
+                    label: String(y),
+                    value: y,
+                  }))}
+                  selectedValue={reportPeriod.year}
+                  onValueChange={(v) => setReportPeriod({ ...reportPeriod, year: v })}
+                  visible={activeSelector === 'globalYear'}
+                  onOpen={() => setActiveSelector('globalYear')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                />
+              </View>
+            </View>
+          </View>
+
           {/* Controls */}
           <View style={styles.controlsContainer}>
             <View style={styles.chartTypeSelector}>
@@ -863,44 +897,13 @@ export function PayrollReports({ navigation }: { navigation: any }) {
             )}
           </View>
 
-          {/* Report Archive Section */}
+          {/* Archive Info */}
           <View style={styles.archiveCard}>
             <View style={styles.archiveHeader}>
               <Archive size={28} color={COLORS.gray} />
               <View>
-                <Text style={styles.archiveTitle}>Report Archive Extraction</Text>
-                <Text style={styles.archiveSubtitle}>Generate point-in-time compliance artifacts</Text>
-              </View>
-            </View>
-
-            <View style={styles.archivePeriod}>
-              <View style={styles.pickerWrapper}>
-                <SafeSelector
-                  options={[...Array(12)].map((_, i) => ({
-                    label: new Date(2024, i).toLocaleString('default', { month: 'long' }),
-                    value: i + 1,
-                  }))}
-                  selectedValue={reportPeriod.month}
-                  onValueChange={(v) => setReportPeriod({ ...reportPeriod, month: v })}
-                  visible={activeSelector === 'reportMonth'}
-                  onOpen={() => setActiveSelector('reportMonth')}
-                  onClose={() => setActiveSelector(null)}
-                  style={styles.safeSelector}
-                />
-              </View>
-              <View style={styles.pickerWrapper}>
-                <SafeSelector
-                  options={[2024, 2025, 2026].map((y) => ({
-                    label: String(y),
-                    value: y,
-                  }))}
-                  selectedValue={reportPeriod.year}
-                  onValueChange={(v) => setReportPeriod({ ...reportPeriod, year: v })}
-                  visible={activeSelector === 'reportYear'}
-                  onOpen={() => setActiveSelector('reportYear')}
-                  onClose={() => setActiveSelector(null)}
-                  style={styles.safeSelector}
-                />
+                <Text style={styles.archiveTitle}>Report Generation</Text>
+                <Text style={styles.archiveSubtitle}>Download compliance artifacts for the selected period</Text>
               </View>
             </View>
 
@@ -944,6 +947,8 @@ const styles = StyleSheet.create({
 
   exportHeaderButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
   exportHeaderText: { color: COLORS.white, fontWeight: '600', fontSize: 13 },
+  globalPeriodContainer: { backgroundColor: COLORS.white, borderRadius: 16, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border },
+  periodPickerGroup: { flexDirection: 'row', gap: 12 },
 
   controlsContainer: { backgroundColor: COLORS.white, borderRadius: 16, padding: 12, marginBottom: 20, borderWidth: 1, borderColor: COLORS.border, gap: 12 },
   chartTypeSelector: { flexDirection: 'row', backgroundColor: COLORS.light, borderRadius: 8, padding: 2 },

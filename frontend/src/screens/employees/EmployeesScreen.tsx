@@ -44,11 +44,13 @@ import {
   Download,
 } from 'lucide-react-native';
 import { userAPI, auditAPI } from '../../services/endpoints';
+import { exportFile } from '../../utils/exportHelper';
 import Layout from '../../components/common/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
 import DropdownModal from '../../components/common/DropdownModal';
 import EmployeeCard from '../../components/employees/EmployeeCard';
 import EmployeeHistory from '../../components/employees/EmployeeHistory';
+import { FileSpreadsheet } from 'lucide-react-native';
 
 // Helper to extract data from API response
 const extractData = (response: any, defaultValue: any = null): any => {
@@ -69,7 +71,22 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
   filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
-  exportButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  exportButtonText: {
+    color: '#3b82f6',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#3b82f6', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   filterBadgeText: { color: 'white', fontSize: 10, fontWeight: '700' },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
@@ -100,6 +117,30 @@ const styles = StyleSheet.create({
   pageButtonDisabled: { opacity: 0.5 },
   pageButtonText: { fontSize: 13, fontWeight: '600', color: '#3b82f6' },
   pageInfo: { fontSize: 13, color: '#64748b' },
+});
+
+const exportModalStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  container: { backgroundColor: 'white', borderRadius: 24, width: '90%', maxHeight: '85%', overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  title: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
+  content: { padding: 20 },
+  description: { fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 18 },
+  formatSection: { marginBottom: 20 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
+  formatOptions: { gap: 12 },
+  formatOption: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  formatOptionSelected: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
+  formatText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  formatTextSelected: { color: '#3b82f6' },
+  infoBox: { flexDirection: 'row', gap: 8, backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, alignItems: 'center' },
+  infoText: { fontSize: 12, color: '#64748b', flex: 1 },
+  footer: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
+  cancelButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  exportButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
+  exportButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
+  disabledButton: { opacity: 0.6 },
 });
 
 const modalStyles = StyleSheet.create({
@@ -249,6 +290,79 @@ const INITIAL_FORM: EmployeeForm = {
 
 
 
+// Export Modal Component
+const ExportModal = memo(({ visible, onClose, onExport, isExporting }: any) => {
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'excel'>('csv');
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={exportModalStyles.overlay}>
+        <View style={exportModalStyles.container}>
+          <View style={exportModalStyles.header}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Download size={24} color="#3b82f6" />
+              <Text style={exportModalStyles.title}>Export Employees</Text>
+            </View>
+            <TouchableOpacity onPress={onClose}><X size={24} color="#64748b" /></TouchableOpacity>
+          </View>
+
+          <View style={exportModalStyles.content}>
+            <Text style={exportModalStyles.description}>
+              Export your employee directory to your device. The file will include contact information, department, designation, and joining details.
+            </Text>
+
+            <View style={exportModalStyles.formatSection}>
+              <Text style={exportModalStyles.sectionTitle}>Select Format</Text>
+              <View style={exportModalStyles.formatOptions}>
+                <TouchableOpacity
+                  style={[exportModalStyles.formatOption, selectedFormat === 'csv' && exportModalStyles.formatOptionSelected]}
+                  onPress={() => setSelectedFormat('csv')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'csv' ? '#3b82f6' : '#64748b'} />
+                  <Text style={[exportModalStyles.formatText, selectedFormat === 'csv' && exportModalStyles.formatTextSelected]}>CSV Format</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[exportModalStyles.formatOption, selectedFormat === 'excel' && exportModalStyles.formatOptionSelected]}
+                  onPress={() => setSelectedFormat('excel')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'excel' ? '#3b82f6' : '#64748b'} />
+                  <Text style={[exportModalStyles.formatText, selectedFormat === 'excel' && exportModalStyles.formatTextSelected]}>Excel Format (.xls)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={exportModalStyles.infoBox}>
+              <Users size={14} color="#64748b" />
+              <Text style={exportModalStyles.infoText}>Export will include all employees based on current filters.</Text>
+            </View>
+          </View>
+
+          <View style={exportModalStyles.footer}>
+            <TouchableOpacity style={exportModalStyles.cancelButton} onPress={onClose}>
+              <Text style={exportModalStyles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[exportModalStyles.exportButton, isExporting && exportModalStyles.disabledButton]}
+              onPress={() => onExport(selectedFormat)}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Download size={16} color="white" />
+                  <Text style={exportModalStyles.exportButtonText}>Export</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
 export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -293,6 +407,8 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const roleOptions = useMemo(() => [
     { value: 'admin', label: 'Admin' }, { value: 'manager', label: 'Manager' },
@@ -455,50 +571,86 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  const handleExportCSV = async () => {
+  const handleExport = async (formatType: 'csv' | 'excel') => {
     try {
+      setIsExporting(true);
       const params = {
         role: roleFilter,
         status: statusFilter,
         department: departmentFilter,
         employeeId: employeeIdFilter,
-        search: searchQuery.trim().length >= 2 ? searchQuery.trim() : ''
+        search: searchQuery.trim().length >= 2 ? searchQuery.trim() : '',
+        limit: 10000
       };
-      const csvData = await userAPI.export(params);
       
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
-        const url = globalAny.URL.createObjectURL(blob);
-        const a = globalAny.document.createElement('a');
-        a.href = url;
-        a.download = `employees_${format(new Date(), 'yyyyMMdd')}.csv`;
-        a.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `employees_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Export Employees',
-          message: `Employees exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
+      const response = await userAPI.getAll(params);
+      const employeesList = extractData(response, []);
+
+      if (!employeesList || employeesList.length === 0) {
+        Alert.alert('No Data', 'No employees found to export.');
+        return;
       }
-      Alert.alert('Success', 'Employees exported successfully!');
+
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      const fileName = formatType === 'csv' 
+        ? `employees_export_${timestamp}.csv` 
+        : `employees_export_${timestamp}.xls`;
+
+      let content = '';
+      if (formatType === 'csv') {
+        const headers = ['Employee ID', 'Name', 'Email', 'Phone', 'Role', 'Department', 'Designation', 'Join Date', 'Status'];
+        const rows = employeesList.map((emp: User) => [
+          `"${emp.employeeId || ''}"`,
+          `"${emp.name.replace(/"/g, '""')}"`,
+          `"${emp.email}"`,
+          `"${emp.phone || ''}"`,
+          emp.role,
+          `"${(emp.department || '').replace(/"/g, '""')}"`,
+          `"${(emp.designation || '').replace(/"/g, '""')}"`,
+          emp.joinDate ? format(new Date(emp.joinDate), 'yyyy-MM-dd') : '',
+          emp.isActive ? 'Active' : 'Inactive'
+        ].join(','));
+        content = [headers.join(','), ...rows].join('\n');
+      } else {
+        // Simple HTML table for Excel
+        const rows = employeesList.map((emp: User) => `
+          <tr>
+            <td>${emp.employeeId || ''}</td>
+            <td>${emp.name}</td>
+            <td>${emp.email}</td>
+            <td>${emp.phone || ''}</td>
+            <td>${emp.role}</td>
+            <td>${emp.department || ''}</td>
+            <td>${emp.designation || ''}</td>
+            <td>${emp.joinDate ? format(new Date(emp.joinDate), 'yyyy-MM-dd') : ''}</td>
+            <td>${emp.isActive ? 'Active' : 'Inactive'}</td>
+          </tr>
+        `).join('');
+        
+        content = `
+          <html>
+            <head><meta charset="UTF-8"></head>
+            <body>
+              <table border="1">
+                <thead>
+                  <tr style="background-color: #3b82f6; color: white;">
+                    <th>Employee ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Department</th><th>Designation</th><th>Join Date</th><th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </body>
+          </html>
+        `;
+      }
+      
+      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
+      setShowExportModal(false);
     } catch (error) {
       console.error('Export failed:', error);
-      Alert.alert('Error', 'Failed to export CSV. Please try again.');
+      Alert.alert('Error', 'Failed to export employees. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -627,8 +779,9 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
               <Filter size={16} color={showFilters || activeFilterCount > 0 ? '#3b82f6' : '#64748b'} />
               {activeFilterCount > 0 && <View style={styles.filterBadge}><Text style={styles.filterBadgeText}>{activeFilterCount}</Text></View>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
-              <Download size={16} color="#64748b" />
+            <TouchableOpacity style={styles.exportButton} onPress={() => setShowExportModal(true)}>
+              <Download size={16} color="#3b82f6" />
+              <Text style={styles.exportButtonText}>Export</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.addButton} onPress={() => { setFormData(INITIAL_FORM); setFormErrors({}); setShowCreateModal(true); }}>
               <Plus size={16} color="white" /><Text style={styles.addButtonText}>Add</Text>
@@ -786,6 +939,12 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
           </View>
         </View>
       </Modal>
+      <ExportModal
+        visible={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
     </Layout>
   );
 }

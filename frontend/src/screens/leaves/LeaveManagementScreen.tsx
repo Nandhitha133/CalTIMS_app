@@ -1,5 +1,5 @@
 // screens/leaves/LeaveManagementScreen.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -36,10 +36,12 @@ import {
   Check,
 } from 'lucide-react-native';
 import { leaveAPI, userAPI, settingsAPI } from '../../services/endpoints';
+import { exportFile } from '../../utils/exportHelper';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import StatusBadge from '../../components/common/StatusBadge';
 import ProGuard from '../../components/common/ProGuard';
+import { FileSpreadsheet } from 'lucide-react-native';
 
 // Helper function to safely extract data from API response
 const extractData = (response: any, defaultValue: any = null) => {
@@ -553,88 +555,174 @@ const LeaveDetailModal = ({
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContainer, styles.detailModal]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Leave Details</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ backgroundColor: '#8b5cf6', padding: 10, borderRadius: 12 }}>
+                <Eye size={24} color="white" />
+              </View>
+              <View>
+                <Text style={styles.modalTitle}>Leave Details</Text>
+                <Text style={{ fontSize: 13, color: '#94a3b8' }}>{leave.leaveType} Leave</Text>
+              </View>
+            </View>
             <TouchableOpacity onPress={onClose}>
               <X size={24} color="#64748b" />
             </TouchableOpacity>
           </View>
+
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.detailContent}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Leave ID</Text>
-                <Text style={styles.detailValue}>{leave.leaveId}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Employee</Text>
-                <Text style={styles.detailValue}>{leave.userId?.name}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Employee ID</Text>
-                <Text style={styles.detailValue}>{leave.userId?.employeeId || '—'}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Leave Type</Text>
-                <Text style={[styles.detailValue, styles.capitalize]}>{leave.leaveType}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>From</Text>
-                <Text style={styles.detailValue}>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>To</Text>
-                <Text style={styles.detailValue}>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Duration</Text>
-                <Text style={styles.detailValue}>{leave.totalDays} day(s)</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Applied On</Text>
-                <Text style={styles.detailValue}>{format(new Date(leave.createdAt), 'MMM dd, yyyy')}</Text>
-              </View>
-              {leave.reason && (
-                <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Reason</Text>
-                  <Text style={styles.detailText}>{leave.reason}</Text>
+              {[
+                { label: 'EMPLOYEE ID', value: leave.userId?.employeeId || '—' },
+                { label: 'LEAVE TYPE', value: leave.leaveType, capitalize: true },
+                { label: 'FROM', value: format(new Date(leave.startDate), 'MMMM d, yyyy') },
+                { label: 'TO', value: format(new Date(leave.endDate), 'MMMM d, yyyy') },
+                { label: 'DURATION', value: `${leave.totalDays} day(s)` },
+                { label: 'APPLIED ON', value: format(new Date(leave.createdAt), 'MMMM d, yyyy') },
+              ].map((item, idx) => (
+                <View key={idx} style={styles.gridItem}>
+                  <Text style={styles.gridLabel}>{item.label}</Text>
+                  <Text style={[styles.gridValue, item.capitalize && styles.capitalize]}>{item.value}</Text>
                 </View>
-              )}
+              ))}
+
+              <View style={styles.gridItem}>
+                <Text style={styles.gridLabel}>APPLICATION REASON</Text>
+                <Text style={styles.gridValue}>{leave.reason || 'No reason provided'}</Text>
+              </View>
+
               {leave.rejectionReason && (
-                <View style={[styles.detailSection, styles.rejectionSection]}>
-                  <Text style={[styles.detailLabel, styles.rejectionLabel]}>Rejection Reason</Text>
-                  <Text style={styles.rejectionText}>{leave.rejectionReason}</Text>
-                </View>
-              )}
-              {leave.approvedBy && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Processed By</Text>
-                  <Text style={styles.detailValue}>{leave.approvedBy.name}</Text>
+                <View style={[styles.gridItem, { backgroundColor: '#fef2f2' }]}>
+                  <Text style={[styles.gridLabel, { color: '#ef4444' }]}>REJECTION REASON</Text>
+                  <Text style={[styles.gridValue, { color: '#ef4444' }]}>{leave.rejectionReason}</Text>
                 </View>
               )}
             </View>
           </ScrollView>
-          {leave.status === 'pending' && (
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.rejectButton}
-                onPress={() => onReject(leave)}
-              >
-                <XCircle size={16} color="#ef4444" />
-                <Text style={styles.rejectButtonText}>Reject</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.approveButton}
-                onPress={() => onApprove(leave.id)}
-              >
-                <CheckCircle2 size={16} color="white" />
-                <Text style={styles.approveButtonText}>Approve</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+
+          <View style={styles.modalFooter}>
+            {leave.status?.toLowerCase() === 'pending' ? (
+              <>
+                <TouchableOpacity
+                  style={styles.rejectButton}
+                  onPress={() => onReject(leave)}
+                  disabled={isRejecting}
+                >
+                  {isRejecting ? <ActivityIndicator size="small" color="#ef4444" /> : (
+                    <>
+                      <XCircle size={16} color="#ef4444" />
+                      <Text style={styles.rejectButtonText}>Reject</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.approveButton}
+                  onPress={() => onApprove(leave.id)}
+                  disabled={isApproving}
+                >
+                  {isApproving ? <ActivityIndicator size="small" color="white" /> : (
+                    <>
+                      <CheckCircle2 size={16} color="white" />
+                      <Text style={styles.approveButtonText}>Approve</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ backgroundColor: leave.status?.toLowerCase() === 'approved' ? '#ecfdf5' : leave.status?.toLowerCase() === 'pending' ? '#fffbeb' : '#fef2f2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: leave.status?.toLowerCase() === 'approved' ? '#10b981' : leave.status?.toLowerCase() === 'pending' ? '#f59e0b' : '#ef4444' }} />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: leave.status?.toLowerCase() === 'approved' ? '#10b981' : leave.status?.toLowerCase() === 'pending' ? '#f59e0b' : '#ef4444', textTransform: 'capitalize' }}>
+                      {leave.status}
+                    </Text>
+                  </View>
+                  {leave.approvedBy && (
+                    <Text style={{ fontSize: 13, color: '#64748b' }}>
+                      By <Text style={{ fontWeight: '600', color: '#1e293b' }}>{leave.approvedBy.name}</Text>
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
         </View>
       </View>
     </Modal>
   );
 };
+
+// Export Modal Component
+const ExportModal = memo(({ visible, onClose, onExport, isExporting }: any) => {
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'excel'>('csv');
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={exportModalStyles.overlay}>
+        <View style={exportModalStyles.container}>
+          <View style={exportModalStyles.header}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Download size={24} color="#3b82f6" />
+              <Text style={exportModalStyles.title}>Export Leave Data</Text>
+            </View>
+            <TouchableOpacity onPress={onClose}><X size={24} color="#64748b" /></TouchableOpacity>
+          </View>
+
+          <View style={exportModalStyles.content}>
+            <Text style={exportModalStyles.description}>
+              Export the leave application list to your device. The file will include all request details, employee names, status, and duration information.
+            </Text>
+
+            <View style={exportModalStyles.formatSection}>
+              <Text style={exportModalStyles.sectionTitle}>Select Format</Text>
+              <View style={exportModalStyles.formatOptions}>
+                <TouchableOpacity
+                  style={[exportModalStyles.formatOption, selectedFormat === 'csv' && exportModalStyles.formatOptionSelected]}
+                  onPress={() => setSelectedFormat('csv')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'csv' ? '#3b82f6' : '#64748b'} />
+                  <Text style={[exportModalStyles.formatText, selectedFormat === 'csv' && exportModalStyles.formatTextSelected]}>CSV Format</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[exportModalStyles.formatOption, selectedFormat === 'excel' && exportModalStyles.formatOptionSelected]}
+                  onPress={() => setSelectedFormat('excel')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'excel' ? '#3b82f6' : '#64748b'} />
+                  <Text style={[exportModalStyles.formatText, selectedFormat === 'excel' && exportModalStyles.formatTextSelected]}>Excel Format (.xls)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.infoBox}>
+              <CheckCircle2 size={14} color="#64748b" />
+              <Text style={styles.infoText}>Export will include all records based on current filters.</Text>
+            </View>
+          </View>
+
+          <View style={exportModalStyles.footer}>
+            <TouchableOpacity style={exportModalStyles.cancelButton} onPress={onClose}>
+              <Text style={exportModalStyles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[exportModalStyles.exportButton, isExporting && exportModalStyles.disabledButton]}
+              onPress={() => onExport(selectedFormat)}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Download size={16} color="white" />
+                  <Text style={exportModalStyles.exportButtonText}>Export</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
 
 export default function LeaveManagementScreen({ navigation }: { navigation: any }) {
   const [user, setUser] = useState<any>(null);
@@ -658,9 +746,11 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showEligibilityModal, setShowEligibilityModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [eligibilityPage, setEligibilityPage] = useState(1);
@@ -875,47 +965,93 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
     }
   };
 
-  const handleExportCSV = async () => {
+  const handleExport = async (formatType: 'csv' | 'excel') => {
     try {
-      const params: any = { isAdminView: true, limit: 1000 };
+      setIsExporting(true);
+      const params: any = { isAdminView: true, limit: 10000 };
       if (filters.status) params.status = filters.status;
       if (filters.leaveType) params.leaveType = filters.leaveType;
+      if (filters.userId) params.userId = filters.userId;
+      if (filters.leaveId) params.leaveId = filters.leaveId;
 
-      const csvData = await leaveAPI.export(params);
-      
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
-        const url = globalAny.URL.createObjectURL(blob);
-        const a = globalAny.document.createElement('a');
-        a.href = url;
-        a.download = `leave_applications_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        a.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `leave_applications_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Export Leaves',
-          message: `Leaves exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
+      const response = await leaveAPI.getAll(params);
+      const extracted = extractData(response);
+      const leavesList = Array.isArray(extracted) ? extracted : (extracted?.data || []);
+
+      if (!leavesList.length) {
+        Alert.alert('No Data', 'No leave applications available to export.');
+        return;
       }
-      Alert.alert('Success', 'Leaves exported successfully!');
+
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      const fileName = formatType === 'csv' 
+        ? `leaves_export_${timestamp}.csv` 
+        : `leaves_export_${timestamp}.xls`;
+
+      let content = '';
+      if (formatType === 'csv') {
+        const headers = ['Employee', 'Employee ID', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Applied On', 'Reason'];
+        const rows = leavesList.map((l: any) => {
+          const empName = l.userId?.name || '—';
+          const empId = l.userId?.employeeId || '—';
+          return [
+            `"${empName.replace(/"/g, '""')}"`,
+            `"${empId.replace(/"/g, '""')}"`,
+            l.leaveType,
+            format(new Date(l.startDate), 'yyyy-MM-dd'),
+            format(new Date(l.endDate), 'yyyy-MM-dd'),
+            l.totalDays,
+            l.status,
+            format(new Date(l.createdAt), 'yyyy-MM-dd'),
+            `"${(l.reason || '').replace(/"/g, '""')}"`
+          ].join(',');
+        });
+        content = [headers.join(','), ...rows].join('\n');
+      } else {
+        // Simple HTML table for Excel
+        const rows = leavesList.map((l: any) => {
+          const empName = l.userId?.name || '—';
+          const empId = l.userId?.employeeId || '—';
+          return `
+            <tr>
+              <td>${empName}</td>
+              <td>${empId}</td>
+              <td>${l.leaveType}</td>
+              <td>${format(new Date(l.startDate), 'yyyy-MM-dd')}</td>
+              <td>${format(new Date(l.endDate), 'yyyy-MM-dd')}</td>
+              <td>${l.totalDays}</td>
+              <td>${l.status}</td>
+              <td>${format(new Date(l.createdAt), 'yyyy-MM-dd')}</td>
+              <td>${l.reason || ''}</td>
+            </tr>
+          `;
+        }).join('');
+
+        content = `
+          <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head><meta charset="UTF-8"></head>
+            <body>
+              <table>
+                <thead>
+                  <tr style="font-weight: bold; background-color: #f1f5f9;">
+                    <th>Employee</th><th>Employee ID</th><th>Leave Type</th><th>Start Date</th><th>End Date</th><th>Days</th><th>Status</th><th>Applied On</th><th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </body>
+          </html>
+        `;
+      }
+      
+      const fileType = formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel';
+      await exportFile(content, fileName, fileType);
+      setShowExportModal(false);
     } catch (error: any) {
       console.error('Export failed:', error);
-      Alert.alert('Error', error?.message || 'Failed to export CSV. Please try again.');
+      Alert.alert('Error', error?.message || 'Failed to export data. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -925,37 +1061,9 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       if (eligibilityFilters.department) params.department = eligibilityFilters.department;
 
       const csvData = await userAPI.export(params);
+      const fileName = `leave_eligibility_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
       
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
-        const url = globalAny.URL.createObjectURL(blob);
-        const a = globalAny.document.createElement('a');
-        a.href = url;
-        a.download = `leave_eligibility_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        a.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `leave_eligibility_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Export Leave Eligibility',
-          message: `Leave eligibility exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
-      }
-      Alert.alert('Success', 'Eligibility exported successfully!');
+      await exportFile(csvData as string, fileName, 'text/csv');
     } catch (error: any) {
       console.error('Export failed:', error);
       Alert.alert('Error', error?.message || 'Failed to export CSV. Please try again.');
@@ -1048,7 +1156,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
                       </View>
                     )}
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.exportButton} onPress={handleExportCSV}>
+                  <TouchableOpacity style={styles.exportButton} onPress={() => setShowExportModal(true)}>
                     <Download size={16} color="#10b981" />
                     <Text style={styles.exportButtonText}>Export</Text>
                   </TouchableOpacity>
@@ -1245,6 +1353,13 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
           isRejecting={isRejecting}
         />
 
+        <ExportModal
+          visible={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+          isExporting={isExporting}
+        />
+
         <RejectModal
           visible={showRejectModal}
           leave={selectedLeave}
@@ -1374,6 +1489,9 @@ const styles = StyleSheet.create({
 
   disabledButton: { opacity: 0.5 },
 
+  infoBox: { flexDirection: 'row', gap: 8, backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, alignItems: 'center' },
+  infoText: { fontSize: 12, color: '#64748b', flex: 1 },
+
   leaveInfoBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, marginBottom: 16 },
   leaveInfoName: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
   leaveInfoType: { fontSize: 11, color: '#64748b', marginTop: 2 },
@@ -1384,16 +1502,36 @@ const styles = StyleSheet.create({
   balanceFieldLabel: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8 },
   balanceInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, backgroundColor: '#f8fafc' },
 
-  detailContent: { padding: 20, gap: 16 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  detailLabel: { fontSize: 12, color: '#64748b' },
-  detailValue: { fontSize: 13, fontWeight: '500', color: '#1e293b' },
-  detailSection: { padding: 12, backgroundColor: '#f8fafc', borderRadius: 12 },
-  detailText: { fontSize: 13, color: '#475569', marginTop: 4, lineHeight: 18 },
+  detailContent: { padding: 20, gap: 12 },
+  gridItem: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 16 },
+  gridLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginBottom: 4, letterSpacing: 0.5 },
+  gridValue: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
   rejectionSection: { backgroundColor: '#fef2f2' },
   rejectionLabel: { color: '#ef4444' },
   rejectionText: { fontSize: 13, color: '#ef4444', marginTop: 4 },
 
   mono: { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   capitalize: { textTransform: 'capitalize' },
+});
+
+const exportModalStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  container: { backgroundColor: 'white', borderRadius: 24, width: '90%', maxHeight: '85%', overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  title: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
+  content: { padding: 20 },
+  description: { fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 18 },
+  formatSection: { marginBottom: 20 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
+  formatOptions: { gap: 12 },
+  formatOption: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  formatOptionSelected: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
+  formatText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  formatTextSelected: { color: '#3b82f6' },
+  footer: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
+  cancelButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  exportButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
+  exportButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
+  disabledButton: { opacity: 0.6 },
 });

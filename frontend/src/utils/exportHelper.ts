@@ -13,7 +13,40 @@ export async function exportFile(
   fileType: 'text/csv' | 'application/pdf' | 'application/vnd.ms-excel',
   isBase64: boolean = false
 ): Promise<boolean> {
+  console.log(`[exportFile] Exporting ${fileName} (Type: ${fileType}, isBase64: ${isBase64}, Length: ${content?.length || 0})`);
+  if (!content || content.length === 0) {
+    Alert.alert('Export Failed', 'The report content is empty. Please check your data.');
+    return false;
+  }
+
   try {
+    // 0. Handle Web Export
+    if (Platform.OS === 'web') {
+      const globalAny = globalThis as any;
+      let blob: any;
+      
+      if (isBase64) {
+        // Convert base64 to blob
+        const byteCharacters = globalAny.atob(content);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        blob = new globalAny.Blob([byteArray], { type: fileType });
+      } else {
+        blob = new globalAny.Blob([content], { type: fileType });
+      }
+      
+      const url = globalAny.URL.createObjectURL(blob);
+      const link = globalAny.document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      globalAny.URL.revokeObjectURL(url);
+      return true;
+    }
+
     // 1. Request Permissions for Android (only for older versions)
     if (Platform.OS === 'android' && Platform.Version < 33) {
       const granted = await PermissionsAndroid.request(
@@ -25,44 +58,84 @@ export async function exportFile(
       }
     }
 
-    // 2. Determine path (Use Downloads on Android for better persistence)
-    const targetPath = Platform.OS === 'android' 
-      ? `${RNFS.DownloadDirectoryPath}/${fileName}`
+    // 2. Determine paths
+    const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+    const downloadPath = Platform.OS === 'android' 
+      ? `${RNFS.ExternalStorageDirectoryPath}/Download/${fileName}`
       : `${RNFS.DocumentDirectoryPath}/${fileName}`;
 
+    const targetPath = Platform.OS === 'android' ? downloadPath : cachePath;
+
     // 3. Write file
+    console.log(`[exportFile] Writing to: ${targetPath}`);
     if (isBase64) {
       await RNFS.writeFile(targetPath, content, 'base64');
     } else {
       await RNFS.writeFile(targetPath, content, 'utf8');
     }
 
-    // 4. Share/Save file
-    // On Android, we share a message with the path as a fallback 
-    // and try to share the data URI for immediate opening.
-    let base64Content = '';
-    if (isBase64) {
-      base64Content = content;
-    } else {
-      base64Content = await RNFS.readFile(targetPath, 'base64');
-    }
-
-    const shareOptions: any = {
-      title: fileName,
-      url: `data:${fileType};base64,${base64Content}`,
-    };
-
+    // 4. Handle Android Download Notification/Indexing
     if (Platform.OS === 'android') {
-      shareOptions.message = `File saved to Downloads: ${fileName}`;
+      try {
+        await RNFS.scanFile(targetPath);
+        console.log('[exportFile] File scanned successfully');
+      } catch (e) {
+        console.warn('[exportFile] Scan file failed', e);
+      }
+      
+      Alert.alert(
+        'Download Complete',
+        `File has been saved to your Downloads folder:\n\n${fileName}`,
+        [
+          { text: 'OK' },
+          { 
+            text: 'Share', 
+            onPress: async () => {
+              const base64 = isBase64 ? content : await RNFS.readFile(targetPath, 'base64');
+              const dataUri = `data:${fileType};base64,${base64.replace(/\s/g, '')}`;
+              Share.share({ title: fileName, message: dataUri, url: dataUri });
+            }
+          }
+        ]
+      );
+      return true;
     }
 
-    await Share.share(shareOptions);
+    // 5. iOS Sharing (Works well with file:// URIs)
+    if (Platform.OS === 'ios') {
+      const shareResult = await Share.share({
+        title: fileName,
+        url: `file://${targetPath}`,
+      });
+      return shareResult.action === Share.sharedAction;
+    }
 
     return true;
   } catch (error: any) {
     console.error('Export error:', error);
-    Alert.alert('Export Failed', 'An error occurred while sharing the file.');
-    return false;
+    
+    // Fallback: If public directory fails, try cache directory
+    if (Platform.OS !== 'web') {
+      try {
+        const fallbackPath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+        if (isBase64) {
+          await RNFS.writeFile(fallbackPath, content, 'base64');
+        } else {
+          await RNFS.writeFile(fallbackPath, content, 'utf8');
+        }
+        
+        const base64 = isBase64 ? content : await RNFS.readFile(fallbackPath, 'base64');
+        const dataUri = `data:${fileType};base64,${base64.replace(/\s/g, '')}`;
+        await Share.share({ title: fileName, message: dataUri, url: dataUri });
+        return true;
+      } catch (innerError) {
+        Alert.alert('Export Failed', 'An error occurred while saving the file.');
+        return false;
+      }
+    } else {
+      Alert.alert('Export Failed', 'An error occurred during download.');
+      return false;
+    }
   }
 }
 

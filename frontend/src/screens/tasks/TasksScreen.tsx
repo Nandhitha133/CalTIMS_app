@@ -19,6 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { exportFile } from '../../utils/exportHelper';
 import RNFS from 'react-native-fs';
 import {
   Plus,
@@ -41,6 +42,7 @@ import {
 import { taskAPI, projectAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import { FileSpreadsheet } from 'lucide-react-native';
 
 // ==================== Styles ====================
 const styles = StyleSheet.create({
@@ -48,10 +50,24 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  statsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  statCard: { flex: 1, minWidth: '22%', borderRadius: 16, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: 'white' },
-  statValue: { fontSize: 20, fontWeight: '800', marginTop: 8 },
-  statLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 4 },
+  statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  statCard: { 
+    flex: 1, 
+    borderRadius: 16, 
+    padding: 16, 
+    backgroundColor: 'white',
+    borderWidth: 1, 
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2
+  },
+  statCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  statValue: { fontSize: 22, fontWeight: '800' },
+  statLabel: { fontSize: 13, fontWeight: '700', color: '#64748b' },
 
   searchContainer: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
@@ -63,6 +79,22 @@ const styles = StyleSheet.create({
   bulkButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#bfdbfe' },
   bulkButtonText: { color: '#3b82f6', fontWeight: '600', fontSize: 12 },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+  },
+  exportButtonText: {
+    color: '#3b82f6',
+    fontWeight: '600',
+    fontSize: 13,
+  },
   addButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
 
   filterPanel: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
@@ -109,6 +141,30 @@ const styles = StyleSheet.create({
   pageButtonDisabled: { opacity: 0.5 },
   pageButtonText: { fontSize: 13, fontWeight: '600', color: '#3b82f6' },
   pageInfo: { fontSize: 13, color: '#64748b' },
+});
+
+const exportModalStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  container: { backgroundColor: 'white', borderRadius: 24, width: '90%', maxHeight: '85%', overflow: 'hidden' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  title: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
+  content: { padding: 20 },
+  description: { fontSize: 13, color: '#64748b', marginBottom: 20, lineHeight: 18 },
+  formatSection: { marginBottom: 20 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
+  formatOptions: { gap: 12 },
+  formatOption: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  formatOptionSelected: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
+  formatText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  formatTextSelected: { color: '#3b82f6' },
+  infoBox: { flexDirection: 'row', gap: 8, backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, alignItems: 'center' },
+  infoText: { fontSize: 12, color: '#64748b', flex: 1 },
+  footer: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
+  cancelButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  exportButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
+  exportButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
+  disabledButton: { opacity: 0.6 },
 });
 
 const modalStyles = StyleSheet.create({
@@ -369,9 +425,13 @@ interface StatCardProps {
 }
 
 const StatCard = memo(({ title, value, icon: Icon, color }: StatCardProps) => (
-  <View style={[styles.statCard, { backgroundColor: 'white' }]}>
-    <Icon size={20} color={color} />
-    <Text style={[styles.statValue, { color }]}>{value}</Text>
+  <View style={styles.statCard}>
+    <View style={styles.statCardHeader}>
+      <View style={[styles.statIcon, { backgroundColor: `${color}15` }]}>
+        <Icon size={20} color={color} />
+      </View>
+      <Text style={[styles.statValue, { color: '#1e293b' }]}>{value}</Text>
+    </View>
     <Text style={styles.statLabel}>{title}</Text>
   </View>
 ));
@@ -415,6 +475,79 @@ const TaskCard = memo(({ task, onView, onEdit, onDelete, getStatusStyle, getPrio
   );
 });
 
+// Export Modal Component
+const ExportModal = memo(({ visible, onClose, onExport, isExporting }: any) => {
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'excel'>('csv');
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={exportModalStyles.overlay}>
+        <View style={exportModalStyles.container}>
+          <View style={exportModalStyles.header}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Download size={24} color="#3b82f6" />
+              <Text style={exportModalStyles.title}>Export Tasks</Text>
+            </View>
+            <TouchableOpacity onPress={onClose}><X size={24} color="#64748b" /></TouchableOpacity>
+          </View>
+
+          <View style={exportModalStyles.content}>
+            <Text style={exportModalStyles.description}>
+              Export your task list to your device. The file will include all task details, project names, status, and priority information.
+            </Text>
+
+            <View style={exportModalStyles.formatSection}>
+              <Text style={exportModalStyles.sectionTitle}>Select Format</Text>
+              <View style={exportModalStyles.formatOptions}>
+                <TouchableOpacity
+                  style={[exportModalStyles.formatOption, selectedFormat === 'csv' && exportModalStyles.formatOptionSelected]}
+                  onPress={() => setSelectedFormat('csv')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'csv' ? '#3b82f6' : '#64748b'} />
+                  <Text style={[exportModalStyles.formatText, selectedFormat === 'csv' && exportModalStyles.formatTextSelected]}>CSV Format</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[exportModalStyles.formatOption, selectedFormat === 'excel' && exportModalStyles.formatOptionSelected]}
+                  onPress={() => setSelectedFormat('excel')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'excel' ? '#3b82f6' : '#64748b'} />
+                  <Text style={[exportModalStyles.formatText, selectedFormat === 'excel' && exportModalStyles.formatTextSelected]}>Excel Format (.xls)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={exportModalStyles.infoBox}>
+              <BarChart size={14} color="#64748b" />
+              <Text style={exportModalStyles.infoText}>Export will include all tasks based on current filters.</Text>
+            </View>
+          </View>
+
+          <View style={exportModalStyles.footer}>
+            <TouchableOpacity style={exportModalStyles.cancelButton} onPress={onClose}>
+              <Text style={exportModalStyles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[exportModalStyles.exportButton, isExporting && exportModalStyles.disabledButton]}
+              onPress={() => onExport(selectedFormat)}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Download size={16} color="white" />
+                  <Text style={exportModalStyles.exportButtonText}>Export</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
 // ==================== Main Component ====================
 export default function TasksScreen({ navigation }: { navigation: any }) {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -455,6 +588,8 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const limit = 10;
 
   const statusOptions: DropdownOption[] = useMemo(() => [
@@ -635,48 +770,85 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  const handleExportCSV = async () => {
+  const handleExport = async (formatType: 'csv' | 'excel') => {
     try {
-      const params: any = { limit: 5000 };
+      setIsExporting(true);
+      const params: any = { limit: 10000 };
       if (searchQuery.length >= 2) params.search = searchQuery;
       if (projectFilter) params.projectId = projectFilter;
       if (statusFilter) params.status = statusFilter;
 
-      const csvData = await taskAPI.export(params);
-      
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData as any], { type: 'text/csv' });
-        const url = globalAny.URL.createObjectURL(blob);
-        const a = globalAny.document.createElement('a');
-        a.href = url;
-        a.download = `tasks_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        a.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const downloadPath = Platform.OS === 'android'
-          ? RNFS.DownloadDirectoryPath
-          : RNFS.DocumentDirectoryPath;
-        const fileName = `tasks_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        const filePath = `${downloadPath}/${fileName}`;
-        
-        await RNFS.writeFile(filePath, csvData as string, 'utf8');
-        
-        const shareOptions: any = {
-          title: 'Export Tasks',
-          message: `Tasks exported to ${fileName}`,
-        };
-        
-        if (Platform.OS === 'ios') {
-          shareOptions.url = `file://${filePath}`;
-        }
-        
-        await Share.share(shareOptions);
+      const response = await taskAPI.getAll(params);
+      const extracted = extractResponseData(response);
+      const tasksList = extracted.data;
+
+      if (!tasksList.length) {
+        Alert.alert('No Data', 'No tasks available to export.');
+        return;
       }
-      Alert.alert('Success', 'Tasks exported successfully!');
+
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      const fileName = formatType === 'csv' 
+        ? `tasks_export_${timestamp}.csv` 
+        : `tasks_export_${timestamp}.xls`;
+
+      let content = '';
+      if (formatType === 'csv') {
+        const headers = ['Task Name', 'Project', 'Status', 'Priority', 'Description', 'Due Date', 'Created At'];
+        const rows = tasksList.map((task: Task) => {
+          const projectName = typeof task.projectId === 'object' ? task.projectId?.name : '—';
+          return [
+            `"${task.name.replace(/"/g, '""')}"`,
+            `"${projectName.replace(/"/g, '""')}"`,
+            task.status,
+            task.priority,
+            `"${(task.description || '').replace(/"/g, '""')}"`,
+            task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '—',
+            format(new Date(task.createdAt), 'yyyy-MM-dd')
+          ].join(',');
+        });
+        content = [headers.join(','), ...rows].join('\n');
+      } else {
+        // Simple HTML table for Excel
+        const rows = tasksList.map((task: Task) => {
+          const projectName = typeof task.projectId === 'object' ? task.projectId?.name : '—';
+          return `
+            <tr>
+              <td>${task.name}</td>
+              <td>${projectName}</td>
+              <td>${task.status}</td>
+              <td>${task.priority}</td>
+              <td>${task.description || ''}</td>
+              <td>${task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '—'}</td>
+              <td>${format(new Date(task.createdAt), 'yyyy-MM-dd')}</td>
+            </tr>
+          `;
+        }).join('');
+        
+        content = `
+          <html>
+            <head><meta charset="UTF-8"></head>
+            <body>
+              <table border="1">
+                <thead>
+                  <tr style="background-color: #3b82f6; color: white;">
+                    <th>Task Name</th><th>Project</th><th>Status</th><th>Priority</th><th>Description</th><th>Due Date</th><th>Created At</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </body>
+          </html>
+        `;
+      }
+      
+      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
+      setShowExportModal(false);
     } catch (error: any) {
       console.error('Export failed:', error);
-      Alert.alert('Error', error?.message || 'Failed to export CSV. Please try again.');
+      Alert.alert('Error', 'Failed to export tasks. Please try again.');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -824,6 +996,13 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                   </View>
                 )}
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.exportButton}
+                onPress={() => setShowExportModal(true)}
+              >
+                <Download size={16} color="#3b82f6" />
+                <Text style={styles.exportButtonText}>Export</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
                 <Plus size={16} color="white" />
                 <Text style={styles.addButtonText}>Add</Text>
@@ -932,6 +1111,13 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
           </View>
         )}
       </Layout>
+
+      <ExportModal
+        visible={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExport={handleExport}
+        isExporting={isExporting}
+      />
 
       {/* Dropdown Modals */}
       <DropdownModal

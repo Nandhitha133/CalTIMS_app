@@ -61,13 +61,33 @@ export interface TimesheetAdminListResponse {
 }
 
 class TimesheetService {
-  async getHistory(params: any): Promise<TimesheetHistoryResponse> {
-    const response = await timesheetAPI.getHistory(params);
-    return (response as any).data || response;
+  private extractArray(res: any): any[] {
+    if (!res) return [];
+    if (Array.isArray(res)) return res;
+    if (res.data && Array.isArray(res.data)) return res.data;
+    if (res.data && res.data.data && Array.isArray(res.data.data)) return res.data.data;
+    if (res.timesheets && Array.isArray(res.timesheets)) return res.timesheets;
+    if (res.list && Array.isArray(res.list)) return res.list;
+    // Handle cases where the whole object might be the data if it has no data/timesheets/list keys
+    if (typeof res === 'object' && !res.data && !res.timesheets && !res.list && !res.pagination) {
+       return [];
+    }
+    return [];
   }
 
-  async getDetails(weekStartDate: string, userId: string): Promise<any> {
-    const response = await timesheetAPI.getDetails(weekStartDate, userId);
+  async getHistory(params: any): Promise<TimesheetHistoryResponse> {
+    const response: any = await timesheetAPI.getHistory(params);
+    const list = this.extractArray(response);
+    const pagination = response.pagination || { 
+      page: params.page || 1, 
+      totalPages: response.totalPages || 1, 
+      total: response.total || list.length 
+    };
+    return { data: list, pagination } as any;
+  }
+
+  async getDetails(weekStartDate: string, userId: string, params: any = {}): Promise<any> {
+    const response = await timesheetAPI.getDetails(weekStartDate, userId, params);
     return (response as any).data || response;
   }
 
@@ -87,22 +107,31 @@ class TimesheetService {
   }
 
   // Admin Methods
-  async getAdminStats(): Promise<any> {
-    const response = await timesheetAPI.getAdminStats();
-    return (response as any).data || response;
+  async getAdminStats(params?: any): Promise<any> {
+    const response: any = await timesheetAPI.getAdminStats(params);
+    // Try to find stats in 'data' or 'stats' or root
+    return response.data || response.stats || response;
   }
 
   async getAdminFilters(): Promise<any> {
-    const response = await timesheetAPI.getAdminFilters();
-    return (response as any).data || response;
+    const response: any = await timesheetAPI.getAdminFilters();
+    return response.data || response.filters || response;
   }
 
   async getAdminList(params: any): Promise<TimesheetAdminListResponse> {
-    const response = await timesheetAPI.getAdminList(params);
-    const result = (response as any).data || response;
+    const response: any = await timesheetAPI.getAdminList(params);
+    
+    const list = this.extractArray(response);
+    const pagination = response.pagination || { 
+      page: params.page || 1, 
+      totalPages: response.totalPages || 1, 
+      total: response.total || list.length 
+    };
+
+    const result = { data: list, pagination };
     
     // Ensure ID mapping to satisfy strict frontend types
-    if (result.data) {
+    if (Array.isArray(result.data)) {
       result.data = result.data.map((item: any) => ({
         ...item,
         id: item.id || item._id,

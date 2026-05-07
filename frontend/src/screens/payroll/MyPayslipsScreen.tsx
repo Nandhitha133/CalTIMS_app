@@ -268,9 +268,15 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
   const loadUserData = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
-      if (userData) setUser(JSON.parse(userData));
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        return parsedUser;
+      }
+      return null;
     } catch (error) {
       console.error('Error loading user data:', error);
+      return null;
     }
   };
 
@@ -284,9 +290,12 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  const fetchPayslips = async () => {
+  const fetchPayslips = async (currentUser?: any) => {
     try {
-      const response = await payrollAPI.getMyPayslips();
+      const targetUser = currentUser || user;
+      if (!targetUser?._id) return;
+
+      const response = await payrollAPI.getMyPayslips({ userId: targetUser._id });
       const data = extractData(response, []);
       setHistory(data);
 
@@ -298,23 +307,22 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  const fetchAllData = async (showFullLoading = false) => {
-    if (showFullLoading) setLoading(true);
-    await Promise.all([fetchSettings(), fetchPayslips()]);
-    if (showFullLoading) setLoading(false);
-  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAllData(false);
+    const userData = await loadUserData();
+    await Promise.all([fetchSettings(), fetchPayslips(userData)]);
     setRefreshing(false);
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadUserData();
-      // Initial load with full screen spinner, subsequent filter changes won't unmount pickers
-      fetchAllData(loading); 
+      const init = async () => {
+        const userData = await loadUserData();
+        await Promise.all([fetchSettings(), fetchPayslips(userData)]);
+        setLoading(false);
+      };
+      init();
     }, [selectedMonth, selectedYear])
   );
 

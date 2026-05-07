@@ -513,23 +513,6 @@ const extractData = (response: any, defaultValue: any = null): any => {
   return response;
 };
 
-// Base64 polyfill for React Native
-const btoa = (input: string) => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-  let str = input;
-  let output = '';
-  for (let block = 0, charCode, i = 0, map = chars;
-    str.charAt(i | 0) || (map = '=', i % 1);
-    output += map.charAt(63 & block >> 8 - i % 1 * 8)) {
-    charCode = str.charCodeAt(i += 3 / 4);
-    if (charCode > 0xFF) {
-      throw new Error("'btoa' failed: The string to be encoded contains characters outside of the Latin1 range.");
-    }
-    block = block << 8 | charCode;
-  }
-  return output;
-};
-
 export default function ReportsScreen({ navigation }: { navigation: any }) {
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -713,29 +696,30 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
   };
 
   const fetchSmartInsights = async () => {
-    // Note: Backend endpoint /reports/insights is currently unavailable (404).
-    // Using local insight generator as a permanent fallback to prevent console errors.
     try {
-      const localInsights = [];
-      if (totalHours > 0) {
-        localInsights.push(`Total productivity for this period is ${totalHours.toFixed(1)} hours across ${uniqueEmployees} employees.`);
-      }
-      if (complianceRate < 80) {
-        localInsights.push(`Action Required: Overall timesheet compliance ( ${complianceRate.toFixed(1)}% ) is below the 80% target.`);
-      } else {
-        localInsights.push(`Keep it up! Your team compliance is strong at ${complianceRate.toFixed(1)}%.`);
-      }
-      if (topPerformers.length > 0) {
-        localInsights.push(`${topPerformers[0].name} is the top contributor this period with ${topPerformers[0].hours.toFixed(1)}h.`);
-      }
+      const response = await reportAPI.getSmartInsights(filterParams);
+      const data = extractData(response, []);
       
-      setInsightsData(localInsights.length > 0 ? localInsights : [
-        "Select a different date range or filter to see detailed productivity insights.",
-        "Team compliance is calculated based on submitted vs draft timesheets."
-      ]);
+      if (data && data.length > 0) {
+        setInsightsData(data);
+      } else {
+        // Fallback to local insights if API returns empty
+        const localInsights = [];
+        if (totalHours > 0) {
+          localInsights.push(`Total productivity for this period is ${totalHours.toFixed(1)} hours across ${uniqueEmployees} employees.`);
+        }
+        if (complianceRate < 80) {
+          localInsights.push(`Action Required: Overall timesheet compliance ( ${complianceRate.toFixed(1)}% ) is below the 80% target.`);
+        } else {
+          localInsights.push(`Keep it up! Your team compliance is strong at ${complianceRate.toFixed(1)}%.`);
+        }
+        setInsightsData(localInsights);
+      }
     } catch (error) {
-      console.log('Error generating local insights fallback');
-      setInsightsData([]);
+      console.log('Error fetching smart insights, using fallback');
+      // Local fallback
+      const localInsights = [`Total productivity: ${totalHours.toFixed(1)}h`, `Compliance: ${complianceRate}%` ];
+      setInsightsData(localInsights);
     }
   };
 
@@ -802,23 +786,21 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
       const response = format === 'pdf' ? await reportAPI.exportPDF(params) : await reportAPI.exportCSV(params);
       const data = extractData(response, '');
       
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([data], { type: format === 'pdf' ? 'application/pdf' : 'text/csv' } as any);
-        const url = globalAny.URL.createObjectURL(blob);
-        const doc = globalAny.document;
-        const link = doc.createElement('a');
-        link.href = url;
-        link.download = `enterprise-report-${dateFnsFormat(new Date(), 'yyyyMMdd')}.${format}`;
-        link.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const fileName = `enterprise-report-${dateFnsFormat(new Date(), 'yyyyMMdd')}.${format}`;
-        const fileType = format === 'pdf' ? 'application/pdf' : 'text/csv';
-        // Check if data is already base64 (often PDFs from API are)
-        const isBase64 = format === 'pdf' || (typeof data === 'string' && data.length > 1000 && !data.includes(','));
-        await exportFile(data, fileName, fileType, isBase64);
+      if (!data || data.length === 0) {
+        throw new Error('The server returned an empty report. Please try again or check your filters.');
       }
+      
+      const fileName = `enterprise-report-${dateFnsFormat(new Date(), 'yyyyMMdd')}.${format}`;
+      const fileType = format === 'pdf' ? 'application/pdf' : 'text/csv';
+      
+      // Clean up data if it's a base64 string
+      let exportData = data;
+      if (format === 'pdf' && typeof data === 'string') {
+        exportData = data.trim();
+      }
+
+      const isBase64 = format === 'pdf' || (typeof exportData === 'string' && exportData.length > 1000 && !exportData.includes(','));
+      await exportFile(exportData, fileName, fileType, isBase64);
       
       setShowExportModal(false);
     } catch (error) {

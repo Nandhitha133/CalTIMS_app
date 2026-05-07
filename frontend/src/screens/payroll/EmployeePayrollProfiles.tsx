@@ -30,10 +30,21 @@ import {
   TrendingUp,
   Landmark,
   ChevronDown,
+  Calculator,
+  Shield,
+  CreditCard,
+  Building,
+  Plus,
+  Save,
+  ArrowRight,
+  ArrowLeft,
+  DollarSign,
+  Activity,
 } from 'lucide-react-native';
-import { userAPI, payrollAPI, policyAPI, settingsAPI } from '../../services/endpoints';
-import Header from '../../components/common/Header';
-import Footer from '../../components/common/Footer';
+import { userAPI as employeeAPI, payrollAPI, policyAPI, settingsAPI } from '../../services/endpoints';
+import CommonHeader from '../../components/common/Header';
+import CommonFooter from '../../components/common/Footer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropdownModal from '../../components/common/DropdownModal';
 
 const COLORS = {
@@ -71,33 +82,14 @@ const COLORS = {
   slate: '#64748B',
 };
 
-interface Employee {
-  _id: string;
-  id?: string;
-  employeeId: string;
-  name: string;
-  email: string;
-  department: string;
-  designation: string;
-  role: string;
-  bankName?: string;
-  accountNumber?: string;
-  ifscCode?: string;
-  pan?: string;
-  uan?: string;
-  avatar?: string;
-  profile?: PayrollProfile;
-  hasProfile?: boolean;
-  payrollStatus?: string;
-  bankStatus?: string;
-}
-
 interface EarningComponent {
   name: string;
   value: number;
   calculatedValue?: number;
   calculationType: 'Fixed' | 'Percentage' | 'Formula';
   formula?: string;
+  basedOn?: string;
+  hidden?: boolean;
 }
 
 interface DeductionComponent {
@@ -106,6 +98,9 @@ interface DeductionComponent {
   calculatedValue?: number;
   calculationType: 'Fixed' | 'Percentage' | 'Formula';
   formula?: string;
+  basedOn?: string;
+  hidden?: boolean;
+  isStatutory?: boolean;
   config?: {
     durationType: string;
     amount: number;
@@ -129,6 +124,27 @@ interface PayrollProfile {
   updatedAt: string;
 }
 
+interface Employee {
+  _id: string;
+  id?: string;
+  employeeId: string;
+  name: string;
+  email: string;
+  department: string;
+  designation: string;
+  role: string;
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
+  pan?: string;
+  uan?: string;
+  avatar?: string;
+  profile?: PayrollProfile;
+  hasProfile?: boolean;
+  payrollStatus?: string;
+  bankStatus?: string;
+}
+
 interface SalaryBreakdown {
   grossPay: number;
   totalDeductions: number;
@@ -136,23 +152,82 @@ interface SalaryBreakdown {
   earnings: EarningComponent[];
   deductions: DeductionComponent[];
   statutoryDeductions?: DeductionComponent[];
+  employerContributions?: any[];
+  workingDays: number;
 }
 
-interface ProfileViewData {
-  user: Employee;
-  profile: PayrollProfile;
-  breakdown: SalaryBreakdown;
+interface StatutoryConfig {
+  pf: { mode: string; enabled: boolean };
+  esi: { mode: string; enabled: boolean };
+  pt: { mode: string; enabled: boolean };
+  gratuity: { mode: string; enabled: boolean };
 }
 
-interface KPI {
-  label: string;
-  value: number;
-  icon: any;
-  color: string;
-  bg: string;
+interface AttendanceConfig {
+  mode: string;
+  workingDays: number;
 }
 
-const EmployeePayrollProfiles = () => {
+interface BankDetails {
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  pan: string;
+  uan: string;
+}
+
+interface GlobalPolicy {
+  statutory?: {
+    pf?: { enabled: boolean; employeePercent?: number };
+    esi?: { enabled: boolean; employeePercent?: number };
+    pt?: { enabled: boolean };
+    gratuity?: { enabled: boolean; includeInCTC?: boolean };
+  };
+}
+
+interface Settings {
+  organization?: {
+    currency?: string;
+    name?: string;
+  };
+  payroll?: {
+    currencySymbol?: string;
+  };
+}
+
+const ROLE_TEMPLATES: Record<string, any> = {
+  intern: {
+    earnings: [
+      { name: 'Stipend', value: 15000, calculationType: 'Fixed', basedOn: 'CTC' },
+    ],
+    deductions: [],
+  },
+  employee: {
+    earnings: [
+      { name: 'Basic Salary', value: 40, calculationType: 'Percentage', basedOn: 'CTC' },
+      { name: 'House Rent Allowance (HRA)', value: 40, calculationType: 'Percentage', basedOn: 'Basic Salary' },
+      { name: 'Conveyance', value: 2000, calculationType: 'Fixed', basedOn: 'CTC' },
+    ],
+    deductions: [
+      { name: 'Provident Fund (PF)', value: 12, calculationType: 'Percentage', basedOn: 'Basic Salary' },
+      { name: 'ESI', value: 0.75, calculationType: 'Percentage', basedOn: 'Gross' },
+    ],
+  },
+  manager: {
+    earnings: [
+      { name: 'Basic Salary', value: 50, calculationType: 'Percentage', basedOn: 'CTC' },
+      { name: 'House Rent Allowance (HRA)', value: 50, calculationType: 'Percentage', basedOn: 'Basic Salary' },
+      { name: 'Special Allowance', value: 15000, calculationType: 'Fixed', basedOn: 'CTC' },
+    ],
+    deductions: [
+      { name: 'Provident Fund (PF)', value: 12, calculationType: 'Percentage', basedOn: 'Basic Salary' },
+      { name: 'Professional Tax', value: 200, calculationType: 'Fixed', basedOn: 'CTC' },
+    ],
+  },
+};
+
+export const EmployeePayrollProfiles = () => {
+  // List View States
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [profiles, setProfiles] = useState<PayrollProfile[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
@@ -166,14 +241,53 @@ const EmployeePayrollProfiles = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeptDropdown, setShowDeptDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [selectedProfileData, setSelectedProfileData] = useState<ProfileViewData | null>(null);
+  const [selectedProfileData, setSelectedProfileData] = useState<{
+    user: Employee;
+    profile: PayrollProfile;
+    breakdown: SalaryBreakdown;
+  } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<string | null>(null);
-  const [globalPolicy, setGlobalPolicy] = useState<any>(null);
+  const [globalPolicy, setGlobalPolicy] = useState<GlobalPolicy | null>(null);
   const [currencySymbol, setCurrencySymbol] = useState('₹');
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  // Wizard States
+  const [showWizard, setShowWizard] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedRole, setSelectedRole] = useState('employee');
+  const [ctcType, setCtcType] = useState<'annual' | 'monthly'>('annual');
+  const [ctcValue, setCtcValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [wizardError, setWizardError] = useState<string | null>(null);
+  const [structure, setStructure] = useState({
+    name: 'Payroll Profile',
+    earnings: [...ROLE_TEMPLATES.employee.earnings],
+    deductions: [...ROLE_TEMPLATES.employee.deductions],
+  });
+  const [bankDetails, setBankDetails] = useState<BankDetails>({
+    bankName: '',
+    accountNumber: '',
+    ifscCode: '',
+    pan: '',
+    uan: '',
+  });
+  const [statutoryConfig, setStatutoryConfig] = useState<StatutoryConfig>({
+    pf: { mode: 'default', enabled: true },
+    esi: { mode: 'default', enabled: true },
+    pt: { mode: 'default', enabled: true },
+    gratuity: { mode: 'default', enabled: true },
+  });
+  const [attendanceConfig, setAttendanceConfig] = useState<AttendanceConfig>({
+    mode: 'POLICY_DEFAULT',
+    workingDays: 26,
+  });
 
   const [departments, setDepartments] = useState<string[]>(['All']);
+  const [showEmployeePicker, setShowEmployeePicker] = useState(false);
 
+  // Load initial data
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -186,22 +300,38 @@ const EmployeePayrollProfiles = () => {
     setCurrentPage(1);
   }, [searchTerm, deptFilter, statusFilter, itemsPerPage]);
 
+  // When editing employee, load their profile data
+  useEffect(() => {
+    if (editingEmployee && showWizard) {
+      loadEmployeeDataForWizard();
+    }
+  }, [editingEmployee, showWizard, profiles]);
+
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
       // Load settings for currency
-      const settingsRes = await fetchSettings();
-      if (settingsRes?.organization?.currency) {
-        setCurrencySymbol(getCurrencySymbol(settingsRes.organization.currency));
+      const settingsRes = (await settingsAPI.getSettings()) as any;
+      const settingsData = settingsRes?.data?.data || settingsRes?.data || settingsRes;
+      setSettings(settingsData);
+      if (settingsData?.organization?.currency) {
+        setCurrencySymbol(getCurrencySymbol(settingsData.organization.currency));
+      } else if (settingsData?.payroll?.currencySymbol) {
+        setCurrencySymbol(settingsData.payroll.currencySymbol);
       }
 
       // Load global policy
-      const policyRes: any = await policyAPI.getPolicy();
-      setGlobalPolicy(policyRes?.data?.data);
+      try {
+        const policyRes = (await policyAPI.getPolicy()) as any;
+        setGlobalPolicy(policyRes?.data?.data || policyRes?.data || policyRes);
+      } catch (err) {
+        console.log('Policy API not available, using default');
+        setGlobalPolicy({ statutory: {} });
+      }
 
-      // Load employees
-      const employeesRes: any = await userAPI.getAll();
-      const employeesList = employeesRes?.data?.data || employeesRes?.data || [];
+      // Load employees from API
+      const employeesRes = (await employeeAPI.getAll()) as any;
+      const employeesList = employeesRes?.data?.data || employeesRes?.data || employeesRes || [];
       setEmployees(employeesList);
 
       // Extract unique departments
@@ -212,124 +342,78 @@ const EmployeePayrollProfiles = () => {
       setDepartments(Array.from(deptSet));
 
       // Load payroll profiles
-      const profilesRes: any = await payrollAPI.getProfiles();
-      setProfiles(profilesRes?.data?.data || []);
+      try {
+        const profilesRes = (await payrollAPI.getProfiles({ limit: 1000 })) as any;
+        setProfiles(profilesRes?.data?.data || profilesRes?.data || profilesRes || []);
+      } catch (err: any) {
+        console.warn('Profiles API failed:', err.message);
+        setProfiles([]);
+        // Optional: notify user that some data could not be loaded
+      }
     } catch (error) {
       console.error('Error loading data:', error);
-      // Load mock data for demo
-      loadMockData();
+      Alert.alert('Error', 'Failed to load data. Please check your connection.');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
   };
 
-  const fetchSettings = async () => {
-    try {
-      const response: any = await settingsAPI.getSettings();
-      const data = response?.data?.data || response?.data || response;
-      return data;
-    } catch (error) {
-      return null;
+  const loadEmployeeDataForWizard = () => {
+    if (!editingEmployee) return;
+
+    // Load bank details from employee
+    setBankDetails({
+      bankName: editingEmployee.bankName || '',
+      accountNumber: editingEmployee.accountNumber || '',
+      ifscCode: editingEmployee.ifscCode || '',
+      pan: editingEmployee.pan || '',
+      uan: editingEmployee.uan || '',
+    });
+
+    // Load existing profile
+    const existingProfile = profiles.find(p => p.userId === editingEmployee._id || p.employeeId === editingEmployee.employeeId);
+    if (existingProfile) {
+      setStructure({
+        name: 'Payroll Profile',
+        earnings: existingProfile.earnings || ROLE_TEMPLATES.employee.earnings,
+        deductions: existingProfile.deductions || ROLE_TEMPLATES.employee.deductions,
+      });
+      setCtcValue(existingProfile.annualCTC ? existingProfile.annualCTC.toString() : 
+                  existingProfile.monthlyCTC ? (existingProfile.monthlyCTC * 12).toString() : '');
+      setCtcType('annual');
+    } else {
+      // Reset to default template
+      const template = getAppliedTemplate(selectedRole);
+      setStructure({
+        name: 'Payroll Profile',
+        earnings: template.earnings,
+        deductions: template.deductions,
+      });
+      setCtcValue('');
     }
   };
 
   const getCurrencySymbol = (currency: string): string => {
     const symbols: Record<string, string> = {
-      USD: '$',
-      EUR: '€',
-      GBP: '£',
-      INR: '₹',
-      JPY: '¥',
-      CNY: '¥',
-      AUD: 'A$',
-      CAD: 'C$',
+      USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥', AUD: 'A$', CAD: 'C$',
     };
     return symbols[currency] || '₹';
   };
 
-  const loadMockData = () => {
-    const mockEmployees: Employee[] = [
-      {
-        _id: '1',
-        employeeId: 'EMP001',
-        name: 'John Doe',
-        email: 'john.doe@caldim.com',
-        department: 'Engineering',
-        designation: 'Senior Software Engineer',
-        role: 'Senior Engineer',
-        bankName: 'HDFC Bank',
-        accountNumber: 'XXXX1234',
-        ifscCode: 'HDFC0001234',
-        pan: 'ABCDE1234F',
-        uan: '123456789012',
-      },
-      {
-        _id: '2',
-        employeeId: 'EMP002',
-        name: 'Jane Smith',
-        email: 'jane.smith@caldim.com',
-        department: 'Product',
-        designation: 'Product Manager',
-        role: 'Manager',
-        bankName: 'ICICI Bank',
-        accountNumber: 'XXXX5678',
-        ifscCode: 'ICIC0005678',
-        pan: 'FGHIJ5678K',
-        uan: '987654321098',
-      },
-    ];
-
-    const mockProfiles: PayrollProfile[] = [
-      {
-        _id: 'profile1',
-        userId: '1',
-        employeeId: 'EMP001',
-        employeeName: 'John Doe',
-        annualCTC: 1200000,
-        monthlyCTC: 100000,
-        payrollType: 'Monthly',
-        earnings: [
-          { name: 'Basic Salary', value: 40, calculationType: 'Percentage', calculatedValue: 40000 },
-          { name: 'HRA', value: 50, calculationType: 'Percentage', calculatedValue: 20000 },
-          { name: 'Special Allowance', value: 30000, calculationType: 'Fixed', calculatedValue: 30000 },
-        ],
-        deductions: [
-          { name: 'Provident Fund', value: 12, calculationType: 'Percentage', calculatedValue: 4800 },
-          { name: 'Professional Tax', value: 200, calculationType: 'Fixed', calculatedValue: 200 },
-          { name: 'TDS', value: 10000, calculationType: 'Fixed', calculatedValue: 10000 },
-        ],
-        status: 'Active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        _id: 'profile2',
-        userId: '2',
-        employeeId: 'EMP002',
-        employeeName: 'Jane Smith',
-        annualCTC: 1800000,
-        monthlyCTC: 150000,
-        payrollType: 'Monthly',
-        earnings: [
-          { name: 'Basic Salary', value: 40, calculationType: 'Percentage', calculatedValue: 60000 },
-          { name: 'HRA', value: 50, calculationType: 'Percentage', calculatedValue: 30000 },
-          { name: 'Special Allowance', value: 50000, calculationType: 'Fixed', calculatedValue: 50000 },
-        ],
-        deductions: [
-          { name: 'Provident Fund', value: 12, calculationType: 'Percentage', calculatedValue: 7200 },
-          { name: 'Professional Tax', value: 200, calculationType: 'Fixed', calculatedValue: 200 },
-          { name: 'TDS', value: 15000, calculationType: 'Fixed', calculatedValue: 15000 },
-        ],
-        status: 'Active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ];
-
-    setEmployees(mockEmployees);
-    setProfiles(mockProfiles);
-    setDepartments(['All', 'Engineering', 'Product', 'HR', 'Finance']);
+  const getAppliedTemplate = (role: string) => {
+    const template = JSON.parse(JSON.stringify(ROLE_TEMPLATES[role] || ROLE_TEMPLATES.employee));
+    if (globalPolicy?.statutory) {
+      const pfComp = template.deductions.find((d: any) => d.name.includes('Provident Fund') || d.name === 'PF');
+      if (pfComp && globalPolicy.statutory.pf?.enabled) {
+        pfComp.value = globalPolicy.statutory.pf.employeePercent || 12;
+      }
+      const esiComp = template.deductions.find((d: any) => d.name.includes('ESI'));
+      if (esiComp && globalPolicy.statutory.esi?.enabled) {
+        esiComp.value = globalPolicy.statutory.esi.employeePercent || 0.75;
+      }
+    }
+    return template;
   };
 
   const filterEmployees = () => {
@@ -384,13 +468,22 @@ const EmployeePayrollProfiles = () => {
   const calculateSalaryBreakdown = (profile: PayrollProfile): SalaryBreakdown => {
     const monthlyCTC = profile.monthlyCTC;
     let grossPay = 0;
+    const context: Record<string, number> = {};
+
     const earningsWithValues: EarningComponent[] = profile.earnings.map(e => {
       let calculatedValue = 0;
       if (e.calculationType === 'Percentage') {
-        calculatedValue = (monthlyCTC * e.value) / 100;
+        let base = monthlyCTC;
+        if (e.basedOn === 'Basic Salary' && context['Basic Salary']) {
+          base = context['Basic Salary'];
+        } else if (e.basedOn === 'Basic Salary') {
+          base = monthlyCTC * 0.4;
+        }
+        calculatedValue = (base * e.value) / 100;
       } else {
         calculatedValue = e.value;
       }
+      context[e.name] = calculatedValue;
       grossPay += calculatedValue;
       return { ...e, calculatedValue };
     });
@@ -399,7 +492,13 @@ const EmployeePayrollProfiles = () => {
     const deductionsWithValues: DeductionComponent[] = profile.deductions.map(d => {
       let calculatedValue = 0;
       if (d.calculationType === 'Percentage') {
-        calculatedValue = (grossPay * d.value) / 100;
+        let base = monthlyCTC;
+        if (d.basedOn === 'Basic Salary' && context['Basic Salary']) {
+          base = context['Basic Salary'];
+        } else if (d.basedOn === 'Gross') {
+          base = grossPay;
+        }
+        calculatedValue = (base * d.value) / 100;
       } else {
         calculatedValue = d.value;
       }
@@ -415,10 +514,11 @@ const EmployeePayrollProfiles = () => {
       netSalary,
       earnings: earningsWithValues,
       deductions: deductionsWithValues,
+      workingDays: attendanceConfig.mode === 'CUSTOM' ? attendanceConfig.workingDays : 26,
     };
   };
 
-  const handleViewProfile = (employee: any) => {
+  const handleViewProfile = (employee: Employee) => {
     if (!employee.profile) {
       Alert.alert('Info', 'No payroll configuration found for this employee');
       return;
@@ -433,9 +533,32 @@ const EmployeePayrollProfiles = () => {
     setShowViewModal(true);
   };
 
-  const handleEditProfile = (employee: any) => {
-    // Navigate to edit profile screen
-    Alert.alert('Info', 'Edit profile feature coming soon');
+  const handleEditProfile = (employee: Employee) => {
+    setEditingEmployee(employee);
+    setShowWizard(true);
+    setCurrentStep(1);
+  };
+
+  const handleAddNewProfile = () => {
+    setEditingEmployee(null);
+    setShowWizard(true);
+    setCurrentStep(1);
+    setCtcValue('');
+    setBankDetails({
+      bankName: '',
+      accountNumber: '',
+      ifscCode: '',
+      pan: '',
+      uan: '',
+    });
+    const template = getAppliedTemplate('employee');
+    setStructure({
+      name: 'Payroll Profile',
+      earnings: template.earnings,
+      deductions: template.deductions,
+    });
+    setSelectedRole('employee');
+    setCtcType('annual');
   };
 
   const handleDeleteProfile = (profileId: string) => {
@@ -457,7 +580,228 @@ const EmployeePayrollProfiles = () => {
     }
   };
 
-  const getKPIs = (): KPI[] => {
+  // Wizard Functions
+  const monthlyCTC = (() => {
+    const val = parseFloat(ctcValue) || 0;
+    return ctcType === 'annual' ? val / 12 : val;
+  })();
+
+  const breakdown = (() => {
+    let grossPay = 0;
+    const context: Record<string, number> = {};
+
+    const earningsWithValues = structure.earnings.map(e => {
+      let calculatedValue = 0;
+      if (e.calculationType === 'Percentage') {
+        let base = monthlyCTC;
+        if (e.basedOn === 'Basic Salary' && context['Basic Salary']) {
+          base = context['Basic Salary'];
+        } else if (e.basedOn === 'Basic Salary') {
+          base = monthlyCTC * 0.4;
+        }
+        calculatedValue = (base * e.value) / 100;
+      } else {
+        calculatedValue = e.value;
+      }
+      context[e.name] = calculatedValue;
+      grossPay += calculatedValue;
+      return { ...e, calculatedValue };
+    });
+
+    let totalDeductions = 0;
+    const deductionsWithValues = structure.deductions.map(d => {
+      let calculatedValue = 0;
+      if (d.calculationType === 'Percentage') {
+        let base = monthlyCTC;
+        if (d.basedOn === 'Basic Salary' && context['Basic Salary']) {
+          base = context['Basic Salary'];
+        } else if (d.basedOn === 'Gross') {
+          base = grossPay;
+        }
+        calculatedValue = (base * d.value) / 100;
+      } else {
+        calculatedValue = d.value;
+      }
+      totalDeductions += calculatedValue;
+      return { ...d, calculatedValue };
+    });
+
+    const netSalary = grossPay - totalDeductions;
+
+    return {
+      grossPay,
+      totalDeductions,
+      netSalary,
+      earnings: earningsWithValues,
+      deductions: deductionsWithValues,
+      workingDays: attendanceConfig.mode === 'CUSTOM' ? attendanceConfig.workingDays : 26,
+    };
+  })();
+
+  const isBankComplete = (() => {
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    return (
+      bankDetails.bankName.length > 2 &&
+      bankDetails.accountNumber.length >= 8 &&
+      ifscRegex.test(bankDetails.ifscCode) &&
+      panRegex.test(bankDetails.pan)
+    );
+  })();
+
+  const handleApplyTemplate = (role: string) => {
+    setSelectedRole(role);
+    const synced = getAppliedTemplate(role);
+    setStructure({
+      ...structure,
+      earnings: synced.earnings,
+      deductions: synced.deductions,
+    });
+  };
+
+  const handleToggleCtcType = (newType: 'annual' | 'monthly') => {
+    if (newType === ctcType) return;
+    const val = parseFloat(ctcValue) || 0;
+    if (val > 0) {
+      if (newType === 'annual') {
+        setCtcValue((val * 12).toFixed(2));
+      } else {
+        setCtcValue((val / 12).toFixed(2));
+      }
+    }
+    setCtcType(newType);
+  };
+
+  const updateComponent = (type: 'earnings' | 'deductions', index: number, field: string, value: any) => {
+    const updated = [...structure[type]];
+    let newValue = value;
+
+    if (field === 'value') {
+      const numVal = parseFloat(value);
+      if (numVal < 0) newValue = '0';
+      if (updated[index].calculationType === 'Percentage' && numVal > 100) {
+        newValue = '100';
+      }
+    }
+
+    updated[index][field] = newValue;
+    setStructure({ ...structure, [type]: updated });
+  };
+
+  const addComponent = (type: 'earnings' | 'deductions') => {
+    const newComp = { name: '', value: 0, calculationType: 'Fixed', basedOn: 'CTC' };
+    setStructure({ ...structure, [type]: [...structure[type], newComp] });
+  };
+
+  const removeComponent = (type: 'earnings' | 'deductions', index: number) => {
+    const updated = [...structure[type]];
+    updated.splice(index, 1);
+    setStructure({ ...structure, [type]: updated });
+  };
+
+  const handleNext = () => {
+    setWizardError(null);
+    if (currentStep === 1) {
+      if (structure.earnings.length === 0) {
+        Alert.alert('Error', 'At least 1 earning component is required');
+        return;
+      }
+      if (!editingEmployee && !ctcValue) {
+        Alert.alert('Error', 'Please select an employee and enter CTC');
+        return;
+      }
+      if (!ctcValue || parseFloat(ctcValue) <= 0) {
+        Alert.alert('Error', 'Please enter a valid CTC');
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (bankDetails.bankName.length <= 2) {
+        Alert.alert('Error', 'Bank name must be at least 3 characters');
+        return;
+      }
+      if (bankDetails.accountNumber.length < 8) {
+        Alert.alert('Error', 'Account number must be at least 8 digits');
+        return;
+      }
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(bankDetails.ifscCode)) {
+        Alert.alert('Error', 'Invalid IFSC Code format (e.g., HDFC0001234)');
+        return;
+      }
+      const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+      if (!panRegex.test(bankDetails.pan)) {
+        Alert.alert('Error', 'Invalid PAN Card format (e.g., ABCDE1234F)');
+        return;
+      }
+      setCurrentStep(3);
+    } else if (currentStep === 3) {
+      if (!editingEmployee) {
+        Alert.alert('Error', 'Please select an employee first');
+        setCurrentStep(1);
+        return;
+      }
+      handleFinalSubmit();
+    }
+  };
+
+  const handlePrevious = () => {
+    setCurrentStep(prev => Math.max(1, prev - 1));
+  };
+
+  const handleFinalSubmit = async () => {
+    setIsSaving(true);
+    setWizardError(null);
+    const annualCTC = ctcType === 'annual' ? parseFloat(ctcValue) : parseFloat(ctcValue) * 12;
+
+    const cleanedDeductions = structure.deductions.filter(d => {
+      const name = (d.name || '').toLowerCase();
+      const isPF = name.includes('provident fund') || name === 'pf';
+      const isESI = name.includes('esi') || name.includes('state insurance');
+      const isPT = name.includes('professional tax') || name === 'pt';
+      const isStatutoryCandidate = (isPF && globalPolicy?.statutory?.pf?.enabled) ||
+        (isESI && globalPolicy?.statutory?.esi?.enabled) ||
+        (isPT && globalPolicy?.statutory?.pt?.enabled);
+      return !isStatutoryCandidate;
+    });
+
+    const finalDeductions = [...cleanedDeductions];
+
+
+    try {
+      const payload: any = {
+        userId: editingEmployee?._id || editingEmployee?.id,
+        employeeId: editingEmployee?.employeeId,
+        employeeName: editingEmployee?.name,
+        annualCTC,
+        monthlyCTC: annualCTC / 12,
+        payrollType: 'Monthly',
+        earnings: structure.earnings,
+        deductions: finalDeductions,
+        bankDetails,
+        statutoryConfig,
+        attendanceConfig,
+        status: 'Active',
+      };
+
+      if (editingEmployee?.profile?._id) {
+        await payrollAPI.updateProfile(editingEmployee.profile._id, payload);
+      } else {
+        await payrollAPI.setupFullProfile(payload);
+      }
+      
+      Alert.alert('Success', 'Salary configuration saved successfully!');
+      setShowWizard(false);
+      setEditingEmployee(null);
+      loadInitialData();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to save configuration');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const getKPIs = () => {
     const totalEmployees = employees.length;
     const configuredProfiles = profiles.length;
     const pendingSetup = totalEmployees - configuredProfiles;
@@ -498,6 +842,7 @@ const EmployeePayrollProfiles = () => {
     return { label: 'Missing', color: COLORS.rose, bg: COLORS.redLight, icon: AlertTriangle };
   };
 
+  // Render List View
   const renderKPI = (kpi: any, index: number) => {
     const IconComponent = kpi.icon;
     return (
@@ -571,7 +916,6 @@ const EmployeePayrollProfiles = () => {
       <>
         <ScrollView horizontal showsHorizontalScrollIndicator={true}>
           <View>
-            {/* Header */}
             <View style={styles.tableHeader}>
               <View style={[styles.tableCell, styles.cellEmployee]}><Text style={styles.headerText}>Employee</Text></View>
               <View style={[styles.tableCell, styles.cellRole]}><Text style={styles.headerText}>Role / Designation</Text></View>
@@ -581,7 +925,6 @@ const EmployeePayrollProfiles = () => {
               <View style={[styles.tableCell, styles.cellActions]}><Text style={[styles.headerText, styles.textRight]}>Actions</Text></View>
             </View>
 
-            {/* Rows */}
             {data.map((emp, index) => {
               const statusBadge = getStatusBadge(emp.payrollStatus || '', emp.bankStatus || '');
               const bankBadge = getBankStatusBadge(emp.bankStatus || '');
@@ -645,7 +988,6 @@ const EmployeePayrollProfiles = () => {
           </View>
         </ScrollView>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <View style={styles.paginationContainer}>
             <TouchableOpacity
@@ -695,7 +1037,6 @@ const EmployeePayrollProfiles = () => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Profile Header */}
               <View style={styles.profileHeader}>
                 <View style={styles.profileAvatar}>
                   <Text style={styles.profileAvatarText}>{user.name.charAt(0)}</Text>
@@ -712,7 +1053,6 @@ const EmployeePayrollProfiles = () => {
                 </View>
               </View>
 
-              {/* CTC Card */}
               <View style={styles.ctcCard}>
                 <Text style={styles.ctcCardLabel}>Annual Package (CTC)</Text>
                 <Text style={styles.ctcCardValue}>
@@ -720,7 +1060,6 @@ const EmployeePayrollProfiles = () => {
                 </Text>
               </View>
 
-              {/* Earnings Section */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <TrendingUp size={16} color={COLORS.emerald} />
@@ -741,7 +1080,6 @@ const EmployeePayrollProfiles = () => {
                 </View>
               </View>
 
-              {/* Deductions Section */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <TrendingDown size={16} color={COLORS.rose} />
@@ -766,14 +1104,12 @@ const EmployeePayrollProfiles = () => {
                 </View>
               </View>
 
-              {/* Compliance Details */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Landmark size={16} color={COLORS.indigo} />
                   <Text style={styles.sectionTitle}>Compliance Details</Text>
                 </View>
 
-                {/* Bank Details */}
                 <View style={styles.complianceCard}>
                   <View style={styles.complianceDot} />
                   <Text style={styles.complianceTitle}>Beneficiary Bank</Text>
@@ -791,7 +1127,6 @@ const EmployeePayrollProfiles = () => {
                   </View>
                 </View>
 
-                {/* Tax Identity */}
                 <View style={styles.complianceCard}>
                   <View style={[styles.complianceDot, { backgroundColor: COLORS.emerald }]} />
                   <Text style={styles.complianceTitle}>Tax Identity</Text>
@@ -805,7 +1140,6 @@ const EmployeePayrollProfiles = () => {
                   </View>
                 </View>
 
-                {/* Net Salary Card */}
                 <View style={styles.netSalaryCard}>
                   <Text style={styles.netSalaryLabel}>Estimated Monthly Payout</Text>
                   <Text style={styles.netSalaryValue}>{formatCurrency(breakdown.netSalary)}</Text>
@@ -827,6 +1161,501 @@ const EmployeePayrollProfiles = () => {
       </Modal>
     );
   };
+
+  // Render Wizard
+  const renderWizard = () => (
+    <Modal
+      visible={showWizard}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setShowWizard(false)}
+    >
+      {/* Employee Picker Modal */}
+      <DropdownModal
+        visible={showEmployeePicker}
+        onClose={() => setShowEmployeePicker(false)}
+        title="Select Employee"
+        options={employees
+          .filter(emp => !emp.hasProfile)
+          .map(emp => ({ label: `${emp.name} (${emp.employeeId})`, value: emp._id }))}
+        selectedValue={editingEmployee?._id || ''}
+        onSelect={(val) => {
+          const emp = employees.find(e => e._id === val);
+          if (emp) {
+            setEditingEmployee(emp);
+            loadEmployeeDataForWizard();
+          }
+          setShowEmployeePicker(false);
+        }}
+      />
+
+      <SafeAreaView style={styles.wizardContainer}>
+        <View style={styles.wizardHeader}>
+          <TouchableOpacity onPress={() => setShowWizard(false)} style={styles.wizardBackButton}>
+            <ArrowLeft size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.wizardTitle}>
+            {editingEmployee ? `Edit Profile: ${editingEmployee.name}` : 'Create Payroll Profile'}
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.wizardSteps}>
+          <View style={[styles.wizardStep, currentStep === 1 && styles.wizardStepActive]}>
+            <View style={[styles.wizardStepCircle, currentStep === 1 && styles.wizardStepCircleActive]}>
+              <Text style={[styles.wizardStepNumber, currentStep === 1 && styles.wizardStepNumberActive]}>1</Text>
+            </View>
+            <Text style={[styles.wizardStepLabel, currentStep === 1 && styles.wizardStepLabelActive]}>Salary</Text>
+          </View>
+          <View style={styles.wizardStepLine} />
+          <View style={[styles.wizardStep, currentStep === 2 && styles.wizardStepActive]}>
+            <View style={[styles.wizardStepCircle, currentStep === 2 && styles.wizardStepCircleActive]}>
+              <Text style={[styles.wizardStepNumber, currentStep === 2 && styles.wizardStepNumberActive]}>2</Text>
+            </View>
+            <Text style={[styles.wizardStepLabel, currentStep === 2 && styles.wizardStepLabelActive]}>Bank</Text>
+          </View>
+          <View style={styles.wizardStepLine} />
+          <View style={[styles.wizardStep, currentStep === 3 && styles.wizardStepActive]}>
+            <View style={[styles.wizardStepCircle, currentStep === 3 && styles.wizardStepCircleActive]}>
+              <Text style={[styles.wizardStepNumber, currentStep === 3 && styles.wizardStepNumberActive]}>3</Text>
+            </View>
+            <Text style={[styles.wizardStepLabel, currentStep === 3 && styles.wizardStepLabelActive]}>Review</Text>
+          </View>
+        </View>
+
+        <ScrollView style={styles.wizardContent} showsVerticalScrollIndicator={false}>
+          {currentStep === 1 && (
+            <View>
+              <Text style={styles.wizardSectionTitle}>Select Employee</Text>
+              {!editingEmployee && (
+                <TouchableOpacity 
+                  style={styles.wizardEmployeeSelector}
+                  onPress={() => setShowEmployeePicker(true)}
+                >
+                  <Text style={styles.wizardEmployeeSelectorText}>Select Employee</Text>
+                  <ChevronDown size={20} color={COLORS.gray} />
+                </TouchableOpacity>
+              )}
+              {editingEmployee && (
+                <View style={styles.wizardSelectedEmployee}>
+                  <View style={styles.wizardEmployeeAvatar}>
+                    <Text>{editingEmployee.name.charAt(0)}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.wizardEmployeeName}>{editingEmployee.name}</Text>
+                    <Text style={styles.wizardEmployeeId}>ID: {editingEmployee.employeeId}</Text>
+                  </View>
+                </View>
+              )}
+
+              <Text style={styles.wizardSectionTitle}>Role Template</Text>
+              <View style={styles.wizardRoleButtons}>
+                {['intern', 'employee', 'manager'].map(role => (
+                  <TouchableOpacity
+                    key={role}
+                    onPress={() => handleApplyTemplate(role)}
+                    style={[styles.wizardRoleButton, selectedRole === role && styles.wizardRoleButtonActive]}
+                  >
+                    <Text style={[styles.wizardRoleText, selectedRole === role && styles.wizardRoleTextActive]}>
+                      {role.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.wizardSectionTitle}>CTC</Text>
+              <View style={styles.wizardCtcHeader}>
+                <Text style={styles.wizardCtcLabel}>CTC ({ctcType.toUpperCase()})</Text>
+                <View style={styles.wizardCtcTypeButtons}>
+                  <TouchableOpacity
+                    onPress={() => handleToggleCtcType('annual')}
+                    style={[styles.wizardCtcTypeButton, ctcType === 'annual' && styles.wizardCtcTypeButtonActive]}
+                  >
+                    <Text style={[styles.wizardCtcTypeText, ctcType === 'annual' && styles.wizardCtcTypeTextActive]}>Year</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleToggleCtcType('monthly')}
+                    style={[styles.wizardCtcTypeButton, ctcType === 'monthly' && styles.wizardCtcTypeButtonActive]}
+                  >
+                    <Text style={[styles.wizardCtcTypeText, ctcType === 'monthly' && styles.wizardCtcTypeTextActive]}>Month</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.wizardCurrencyInput}>
+                <Text style={styles.wizardCurrencySymbol}>{currencySymbol}</Text>
+                <TextInput
+                  style={styles.wizardCtcInput}
+                  value={ctcValue}
+                  onChangeText={setCtcValue}
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.gray}
+                />
+              </View>
+
+              <Text style={styles.wizardSectionTitle}>Earnings</Text>
+              <View style={styles.wizardComponentsHeader}>
+                <Text style={styles.wizardComponentsTitle}>Earnings (Payable)</Text>
+                <TouchableOpacity onPress={() => addComponent('earnings')} style={styles.wizardAddButton}>
+                  <Plus size={16} color={COLORS.indigo} />
+                </TouchableOpacity>
+              </View>
+              {structure.earnings.filter(e => !e.hidden).map((e, idx) => (
+                <View key={idx} style={styles.wizardComponentRow}>
+                  <TextInput
+                    style={styles.wizardComponentNameInput}
+                    value={e.name}
+                    onChangeText={(val) => updateComponent('earnings', idx, 'name', val)}
+                    placeholder="Component Name"
+                    placeholderTextColor={COLORS.gray}
+                  />
+                  <View style={styles.wizardComponentTypeButtons}>
+                    <TouchableOpacity
+                      onPress={() => updateComponent('earnings', idx, 'calculationType', 'Fixed')}
+                      style={[styles.wizardCompTypeButton, e.calculationType === 'Fixed' && styles.wizardCompTypeButtonActive]}
+                    >
+                      <Text style={[styles.wizardCompTypeText, e.calculationType === 'Fixed' && styles.wizardCompTypeTextActive]}>Fix</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => updateComponent('earnings', idx, 'calculationType', 'Percentage')}
+                      style={[styles.wizardCompTypeButton, e.calculationType === 'Percentage' && styles.wizardCompTypeButtonActive]}
+                    >
+                      <Text style={[styles.wizardCompTypeText, e.calculationType === 'Percentage' && styles.wizardCompTypeTextActive]}>%</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.wizardComponentValueContainer}>
+                    <TextInput
+                      style={styles.wizardComponentValueInput}
+                      value={String(e.value)}
+                      onChangeText={(val) => updateComponent('earnings', idx, 'value', val)}
+                      keyboardType="numeric"
+                      placeholder="0"
+                    />
+                    <Text style={styles.wizardComponentValueSymbol}>
+                      {e.calculationType === 'Fixed' ? currencySymbol : '%'}
+                    </Text>
+                  </View>
+                  <Text style={styles.wizardComponentCalculated}>
+                    {formatCurrency(breakdown.earnings.find(item => item.name === e.name)?.calculatedValue || 0)}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeComponent('earnings', idx)} style={styles.wizardRemoveButton}>
+                    <Trash2 size={16} color={COLORS.rose} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <View style={styles.wizardTotalCard}>
+                <Text style={styles.wizardTotalLabel}>Total Gross Pay</Text>
+                <Text style={styles.wizardTotalValue}>{formatCurrency(breakdown.grossPay)}</Text>
+              </View>
+
+              <Text style={styles.wizardSectionTitle}>Deductions</Text>
+              <View style={styles.wizardComponentsHeader}>
+                <Text style={styles.wizardComponentsTitle}>Deductions (Subtractions)</Text>
+                <TouchableOpacity onPress={() => addComponent('deductions')} style={styles.wizardAddButton}>
+                  <Plus size={16} color={COLORS.indigo} />
+                </TouchableOpacity>
+              </View>
+              {structure.deductions.filter(d => !d.hidden).map((d, idx) => (
+                <View key={idx} style={styles.wizardComponentRow}>
+                  <TextInput
+                    style={styles.wizardComponentNameInput}
+                    value={d.name}
+                    onChangeText={(val) => updateComponent('deductions', idx, 'name', val)}
+                    placeholder="Component Name"
+                    placeholderTextColor={COLORS.gray}
+                  />
+                  <View style={styles.wizardComponentTypeButtons}>
+                    <TouchableOpacity
+                      onPress={() => updateComponent('deductions', idx, 'calculationType', 'Fixed')}
+                      style={[styles.wizardCompTypeButton, d.calculationType === 'Fixed' && styles.wizardCompTypeButtonActive]}
+                    >
+                      <Text style={[styles.wizardCompTypeText, d.calculationType === 'Fixed' && styles.wizardCompTypeTextActive]}>Fix</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => updateComponent('deductions', idx, 'calculationType', 'Percentage')}
+                      style={[styles.wizardCompTypeButton, d.calculationType === 'Percentage' && styles.wizardCompTypeButtonActive]}
+                    >
+                      <Text style={[styles.wizardCompTypeText, d.calculationType === 'Percentage' && styles.wizardCompTypeTextActive]}>%</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.wizardComponentValueContainer}>
+                    <TextInput
+                      style={styles.wizardComponentValueInput}
+                      value={String(d.value)}
+                      onChangeText={(val) => updateComponent('deductions', idx, 'value', val)}
+                      keyboardType="numeric"
+                      placeholder="0"
+                    />
+                    <Text style={styles.wizardComponentValueSymbol}>
+                      {d.calculationType === 'Fixed' ? currencySymbol : '%'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.wizardComponentCalculated, { color: COLORS.rose }]}>
+                    -{formatCurrency(breakdown.deductions.find(item => item.name === d.name)?.calculatedValue || 0)}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeComponent('deductions', idx)} style={styles.wizardRemoveButton}>
+                    <Trash2 size={16} color={COLORS.rose} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <View style={[styles.wizardTotalCard, { backgroundColor: COLORS.redLight }]}>
+                <Text style={styles.wizardTotalLabel}>Total Deductions</Text>
+                <Text style={[styles.wizardTotalValue, { color: COLORS.rose }]}>-{formatCurrency(breakdown.totalDeductions)}</Text>
+              </View>
+            </View>
+          )}
+
+          {currentStep === 2 && (
+            <View>
+              <Text style={styles.wizardSectionTitle}>Bank Details</Text>
+              <View style={styles.wizardInputGroup}>
+                <Text style={styles.wizardInputLabel}>Bank Name</Text>
+                <TextInput
+                  style={styles.wizardTextInput}
+                  value={bankDetails.bankName}
+                  onChangeText={(val) => setBankDetails({ ...bankDetails, bankName: val })}
+                  placeholder="e.g. HDFC Bank"
+                  placeholderTextColor={COLORS.gray}
+                />
+              </View>
+              <View style={styles.wizardRowInputs}>
+                <View style={[styles.wizardInputGroup, { flex: 1 }]}>
+                  <Text style={styles.wizardInputLabel}>Account Number</Text>
+                  <TextInput
+                    style={styles.wizardTextInput}
+                    value={bankDetails.accountNumber}
+                    onChangeText={(val) => setBankDetails({ ...bankDetails, accountNumber: val.replace(/[^0-9]/g, '') })}
+                    placeholder="0000 0000 0000"
+                    keyboardType="numeric"
+                    placeholderTextColor={COLORS.gray}
+                  />
+                </View>
+                <View style={[styles.wizardInputGroup, { flex: 1 }]}>
+                  <Text style={styles.wizardInputLabel}>IFSC Code</Text>
+                  <TextInput
+                    style={[styles.wizardTextInput, bankDetails.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankDetails.ifscCode) && styles.wizardInputError]}
+                    value={bankDetails.ifscCode}
+                    onChangeText={(val) => setBankDetails({ ...bankDetails, ifscCode: val.toUpperCase().trim() })}
+                    placeholder="HDFC0001234"
+                    autoCapitalize="characters"
+                    placeholderTextColor={COLORS.gray}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.wizardSectionTitle}>Tax Identity</Text>
+              <View style={styles.wizardInputGroup}>
+                <Text style={styles.wizardInputLabel}>PAN Card Number</Text>
+                <TextInput
+                  style={[styles.wizardTextInput, bankDetails.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(bankDetails.pan) && styles.wizardInputError]}
+                  value={bankDetails.pan}
+                  onChangeText={(val) => setBankDetails({ ...bankDetails, pan: val.toUpperCase().trim() })}
+                  placeholder="ABCDE1234F"
+                  autoCapitalize="characters"
+                  placeholderTextColor={COLORS.gray}
+                />
+              </View>
+              <View style={styles.wizardInputGroup}>
+                <Text style={styles.wizardInputLabel}>Universal Account Number (UAN)</Text>
+                <TextInput
+                  style={styles.wizardTextInput}
+                  value={bankDetails.uan}
+                  onChangeText={(val) => setBankDetails({ ...bankDetails, uan: val.replace(/[^0-9]/g, '') })}
+                  placeholder="1000 0000 0000"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.gray}
+                />
+              </View>
+
+              <Text style={styles.wizardSectionTitle}>Compliance Overrides</Text>
+              <View style={styles.wizardComplianceCard}>
+                {['pf', 'esi', 'pt'].map(item => {
+                  const config = statutoryConfig[item as keyof StatutoryConfig];
+                  const label = item === 'pf' ? 'Provident Fund' : item === 'esi' ? 'ESI Coverage' : 'Professional Tax';
+                  return (
+                    <View key={item} style={styles.wizardComplianceRow}>
+                      <View style={styles.wizardComplianceInfo}>
+                        <Shield size={16} color={COLORS.indigo} />
+                        <Text style={styles.wizardComplianceLabel}>{label}</Text>
+                      </View>
+                      <View style={styles.wizardComplianceModeButtons}>
+                        {['default', 'enabled', 'disabled'].map(mode => (
+                          <TouchableOpacity
+                            key={mode}
+                            onPress={() => setStatutoryConfig(prev => ({
+                              ...prev,
+                              [item]: { mode, enabled: mode !== 'disabled' }
+                            }))}
+                            style={[styles.wizardModeButton, config.mode === mode && styles.wizardModeButtonActive]}
+                          >
+                            <Text style={[styles.wizardModeText, config.mode === mode && styles.wizardModeTextActive]}>
+                              {mode === 'default' ? 'Policy' : mode}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.wizardSectionTitle}>Attendance Policy</Text>
+              <View style={styles.wizardAttendanceCard}>
+                <View style={styles.wizardComplianceRow}>
+                  <Text style={styles.wizardComplianceLabel}>Calculation Mode</Text>
+                  <View style={styles.wizardComplianceModeButtons}>
+                    {['POLICY_DEFAULT', 'CUSTOM'].map(mode => (
+                      <TouchableOpacity
+                        key={mode}
+                        onPress={() => setAttendanceConfig({ ...attendanceConfig, mode })}
+                        style={[styles.wizardModeButton, attendanceConfig.mode === mode && styles.wizardModeButtonActive]}
+                      >
+                        <Text style={[styles.wizardModeText, attendanceConfig.mode === mode && styles.wizardModeTextActive]}>
+                          {mode === 'POLICY_DEFAULT' ? 'Policy' : 'Custom'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                {attendanceConfig.mode === 'CUSTOM' && (
+                  <View style={styles.wizardInputGroup}>
+                    <Text style={styles.wizardInputLabel}>Working Days Per Month</Text>
+                    <View style={styles.wizardWorkingDaysInput}>
+                      <TextInput
+                        style={styles.wizardWorkingDaysField}
+                        value={String(attendanceConfig.workingDays)}
+                        onChangeText={(val) => setAttendanceConfig({ ...attendanceConfig, workingDays: parseInt(val) || 0 })}
+                        keyboardType="numeric"
+                      />
+                      <Text style={styles.wizardWorkingDaysLabel}>Days</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {currentStep === 3 && (
+            <View>
+              <View style={styles.wizardReviewHeader}>
+                <Text style={styles.wizardReviewTitle}>Final Review</Text>
+                <Text style={styles.wizardReviewSubtitle}>Overall Profile Summary</Text>
+              </View>
+
+              <View style={styles.wizardReviewCard}>
+                <View style={styles.wizardReviewSectionHeader}>
+                  <Users size={20} color={COLORS.indigo} />
+                  <Text style={styles.wizardReviewSectionTitle}>Employee Information</Text>
+                </View>
+                <View style={styles.wizardReviewRow}>
+                  <Text style={styles.wizardReviewLabel}>Name</Text>
+                  <Text style={styles.wizardReviewValue}>{editingEmployee?.name || '—'}</Text>
+                </View>
+                <View style={styles.wizardReviewRow}>
+                  <Text style={styles.wizardReviewLabel}>Employee ID</Text>
+                  <Text style={styles.wizardReviewValue}>{editingEmployee?.employeeId || '—'}</Text>
+                </View>
+                <View style={styles.wizardReviewRow}>
+                  <Text style={styles.wizardReviewLabel}>Annual CTC</Text>
+                  <Text style={[styles.wizardReviewValue, { color: COLORS.emerald }]}>
+                    {formatCurrency(ctcType === 'annual' ? parseFloat(ctcValue) : parseFloat(ctcValue) * 12)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.wizardReviewCard}>
+                <View style={styles.wizardReviewSectionHeader}>
+                  <Landmark size={20} color={COLORS.slate} />
+                  <Text style={styles.wizardReviewSectionTitle}>Bank & Identity</Text>
+                </View>
+                <View style={styles.wizardReviewRow}>
+                  <Text style={styles.wizardReviewLabel}>Bank</Text>
+                  <Text style={styles.wizardReviewValue}>{bankDetails.bankName || '—'}</Text>
+                </View>
+                <View style={styles.wizardReviewRow}>
+                  <Text style={styles.wizardReviewLabel}>IFSC</Text>
+                  <Text style={styles.wizardReviewValue}>{bankDetails.ifscCode || '—'}</Text>
+                </View>
+                <View style={styles.wizardReviewRow}>
+                  <Text style={styles.wizardReviewLabel}>PAN</Text>
+                  <Text style={styles.wizardReviewValue}>{bankDetails.pan || '—'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.wizardSalarySummaryCard}>
+                <Text style={styles.wizardSalarySummaryTitle}>Monthly Take-Home Estimate</Text>
+                <Text style={styles.wizardSalarySummaryValue}>{formatCurrency(breakdown.netSalary)}</Text>
+
+                <View style={styles.wizardSalarySummarySection}>
+                  <Text style={styles.wizardSalarySectionTitle}>Earnings</Text>
+                  {breakdown.earnings.filter(e => !e.hidden).map((e, idx) => (
+                    <View key={idx} style={styles.wizardSalaryRow}>
+                      <Text style={styles.wizardSalaryLabel}>{e.name}</Text>
+                      <Text style={styles.wizardSalaryAmount}>{formatCurrency(e.calculatedValue || 0)}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.wizardSalaryDivider} />
+
+                <View style={styles.wizardSalarySummarySection}>
+                  <Text style={styles.wizardSalarySectionTitle}>Deductions</Text>
+                  {breakdown.deductions.filter(d => !d.hidden).map((d, idx) => (
+                    <View key={idx} style={styles.wizardSalaryRow}>
+                      <Text style={styles.wizardSalaryLabel}>{d.name}</Text>
+                      <Text style={[styles.wizardSalaryAmount, { color: COLORS.rose }]}>
+                        -{formatCurrency(d.calculatedValue || 0)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.wizardSalaryDivider} />
+
+                <View style={styles.wizardSalaryTotalRow}>
+                  <View>
+                    <Text style={styles.wizardSalaryTotalLabel}>Monthly Gross</Text>
+                    <Text style={styles.wizardSalaryTotalValue}>{formatCurrency(breakdown.grossPay)}</Text>
+                  </View>
+                  <View style={styles.wizardSalaryTotalRight}>
+                    <Text style={styles.wizardSalaryTotalLabel}>Monthly Ded.</Text>
+                    <Text style={[styles.wizardSalaryTotalValue, { color: COLORS.rose }]}>
+                      -{formatCurrency(breakdown.totalDeductions)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={styles.wizardFooter}>
+          {currentStep > 1 && (
+            <TouchableOpacity onPress={handlePrevious} style={styles.wizardPrevButton}>
+              <ArrowLeft size={18} color={COLORS.textSecondary} />
+              <Text style={styles.wizardPrevButtonText}>Previous</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={handleNext}
+            disabled={isSaving}
+            style={[styles.wizardNextButton, isSaving && styles.wizardNextButtonDisabled]}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <>
+                <Text style={styles.wizardNextButtonText}>
+                  {currentStep === 3 ? 'Save Profile' : currentStep === 2 ? 'Review Summary' : 'Bank & Compliance'}
+                </Text>
+                <ArrowRight size={18} color={COLORS.white} />
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
 
   const renderDeleteConfirmModal = () => (
     <Modal
@@ -867,7 +1696,7 @@ const EmployeePayrollProfiles = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       
-      <Header title="Payroll Profiles" showBackButton={true} />
+      <CommonHeader title="Payroll Profiles" showBackButton={true} />
 
       <ScrollView
         style={styles.scrollView}
@@ -881,6 +1710,12 @@ const EmployeePayrollProfiles = () => {
           />
         }
       >
+        {/* Add New Profile Button */}
+        <TouchableOpacity style={styles.addButton} onPress={handleAddNewProfile}>
+          <Plus size={20} color={COLORS.white} />
+          <Text style={styles.addButtonText}>Create New Profile</Text>
+        </TouchableOpacity>
+
         {/* KPI Section */}
         <View style={styles.kpiContainer}>
           {getKPIs().map((kpi, index) => renderKPI(kpi, index))}
@@ -907,6 +1742,7 @@ const EmployeePayrollProfiles = () => {
 
       {/* Modals */}
       {renderProfileViewModal()}
+      {renderWizard()}
       {renderDeleteConfirmModal()}
 
       <DropdownModal
@@ -932,7 +1768,7 @@ const EmployeePayrollProfiles = () => {
         title="Select Payroll Status"
       />
 
-      <Footer />
+      <CommonFooter />
     </SafeAreaView>
   );
 };
@@ -947,6 +1783,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 80,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.indigo,
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  addButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
   kpiContainer: {
     flexDirection: 'row',
@@ -1488,7 +2341,565 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '500',
   },
+  // Wizard Styles
+  wizardContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  wizardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  wizardBackButton: {
+    padding: 8,
+  },
+  wizardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  wizardSteps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    backgroundColor: COLORS.white,
+  },
+  wizardStep: {
+    alignItems: 'center',
+  },
+  wizardStepActive: {},
+  wizardStepCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.filterBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+  wizardStepCircleActive: {
+    backgroundColor: COLORS.indigo,
+    borderColor: COLORS.indigo,
+  },
+  wizardStepNumber: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardStepNumberActive: {
+    color: COLORS.white,
+  },
+  wizardStepLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  wizardStepLabelActive: {
+    color: COLORS.indigo,
+    fontWeight: '600',
+  },
+  wizardStepLine: {
+    width: 40,
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginHorizontal: 8,
+  },
+  wizardContent: {
+    flex: 1,
+    padding: 20,
+  },
+  wizardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.white,
+  },
+  wizardPrevButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
+  },
+  wizardPrevButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardNextButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.indigo,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginLeft: 12,
+    gap: 8,
+  },
+  wizardNextButtonDisabled: {
+    opacity: 0.6,
+  },
+  wizardNextButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  wizardSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  wizardEmployeeSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  wizardEmployeeSelectorText: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  wizardSelectedEmployee: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.indigoLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 12,
+  },
+  wizardEmployeeAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.indigo,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wizardEmployeeName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  wizardEmployeeId: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  wizardRoleButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  wizardRoleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.filterBg,
+    alignItems: 'center',
+  },
+  wizardRoleButtonActive: {
+    backgroundColor: COLORS.indigo,
+  },
+  wizardRoleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+  },
+  wizardRoleTextActive: {
+    color: COLORS.white,
+  },
+  wizardCtcHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  wizardCtcLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardCtcTypeButtons: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.filterBg,
+    borderRadius: 20,
+    padding: 2,
+  },
+  wizardCtcTypeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 18,
+  },
+  wizardCtcTypeButtonActive: {
+    backgroundColor: COLORS.white,
+  },
+  wizardCtcTypeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardCtcTypeTextActive: {
+    color: COLORS.indigo,
+  },
+  wizardCurrencyInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  wizardCurrencySymbol: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.gray,
+    marginRight: 8,
+  },
+  wizardCtcInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+    paddingVertical: 12,
+  },
+  wizardComponentsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  wizardComponentsTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  wizardAddButton: {
+    padding: 6,
+    backgroundColor: COLORS.indigoLight,
+    borderRadius: 8,
+  },
+  wizardComponentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  wizardComponentNameInput: {
+    flex: 1,
+    minWidth: 100,
+    padding: 8,
+    backgroundColor: COLORS.filterBg,
+    borderRadius: 8,
+    fontSize: 12,
+    color: COLORS.textPrimary,
+  },
+  wizardComponentTypeButtons: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.filterBg,
+    borderRadius: 20,
+    padding: 2,
+  },
+  wizardCompTypeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  wizardCompTypeButtonActive: {
+    backgroundColor: COLORS.white,
+  },
+  wizardCompTypeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardCompTypeTextActive: {
+    color: COLORS.indigo,
+  },
+  wizardComponentValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.filterBg,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+  },
+  wizardComponentValueInput: {
+    width: 50,
+    padding: 8,
+    fontSize: 12,
+    textAlign: 'right',
+    color: COLORS.textPrimary,
+  },
+  wizardComponentValueSymbol: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.gray,
+  },
+  wizardComponentCalculated: {
+    width: 70,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'right',
+    color: COLORS.emerald,
+  },
+  wizardRemoveButton: {
+    padding: 6,
+  },
+  wizardTotalCard: {
+    backgroundColor: COLORS.greenLight,
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  wizardTotalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardTotalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.emerald,
+  },
+  wizardInputGroup: {
+    marginBottom: 16,
+  },
+  wizardInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  wizardTextInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  wizardInputError: {
+    borderColor: COLORS.rose,
+  },
+  wizardRowInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  wizardComplianceCard: {
+    backgroundColor: COLORS.indigoLight,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  wizardComplianceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  wizardComplianceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  wizardComplianceLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+  },
+  wizardComplianceModeButtons: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 2,
+  },
+  wizardModeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  wizardModeButtonActive: {
+    backgroundColor: COLORS.indigo,
+  },
+  wizardModeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  wizardModeTextActive: {
+    color: COLORS.white,
+  },
+  wizardAttendanceCard: {
+    backgroundColor: COLORS.yellowLight,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  wizardWorkingDaysInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 12,
+  },
+  wizardWorkingDaysField: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+  },
+  wizardWorkingDaysLabel: {
+    fontSize: 12,
+    color: COLORS.gray,
+  },
+  wizardReviewHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  wizardReviewTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+  },
+  wizardReviewSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  wizardReviewCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  wizardReviewSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  wizardReviewSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  wizardReviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+    wizardReviewLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  wizardReviewValue: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+  },
+  wizardSalarySummaryCard: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  wizardSalarySummaryTitle: {
+    fontSize: 12,
+    color: COLORS.gray,
+    textTransform: 'uppercase',
+  },
+  wizardSalarySummaryValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    marginTop: 4,
+  },
+  wizardSalarySummarySection: {
+    marginTop: 20,
+  },
+  wizardSalarySectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.gray,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  wizardSalaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  wizardSalaryLabel: {
+    fontSize: 11,
+    color: COLORS.white + 'CC',
+  },
+  wizardSalaryAmount: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.emerald,
+  },
+  wizardSalaryDivider: {
+    height: 1,
+    backgroundColor: COLORS.white + '20',
+    marginVertical: 12,
+  },
+  wizardSalaryTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  wizardSalaryTotalRight: {
+    alignItems: 'flex-end',
+  },
+  wizardSalaryTotalLabel: {
+    fontSize: 10,
+    color: COLORS.gray,
+    textTransform: 'uppercase',
+  },
+  wizardSalaryTotalValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    marginTop: 4,
+  },
 });
 
-export { EmployeePayrollProfiles };
 export default EmployeePayrollProfiles;

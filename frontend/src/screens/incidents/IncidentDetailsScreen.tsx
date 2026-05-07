@@ -273,7 +273,7 @@ export default function IncidentDetailsScreen() {
       onRefresh={() => {}}
     >
       {loading ? (
-        <View style={styles.loaderContainer}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={styles.loaderText}>Loading ticket details...</Text>
         </View>
@@ -455,6 +455,7 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   content: { paddingHorizontal: 16, paddingTop: 16 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+  loaderText: { marginTop: 12, fontSize: 14, color: '#64748b', fontWeight: '500' },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', padding: 20 },
   errorText: { fontSize: 16, color: '#64748b', marginTop: 12, marginBottom: 20 },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#dbeafe' },

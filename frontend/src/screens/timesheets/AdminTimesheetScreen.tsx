@@ -22,7 +22,6 @@ import { format, getISOWeek } from 'date-fns';
 import RNFS from 'react-native-fs';
 import {
   Filter,
-  Download,
   Eye,
   CheckCircle,
   XCircle,
@@ -47,7 +46,7 @@ import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
 import { formatHours } from '../../utils/formatters';
-import { exportFile } from '../../utils/exportHelper';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -56,6 +55,7 @@ const STATUSES = [
   { label: 'Pending', value: 'submitted' },
   { label: 'Approved', value: 'approved' },
   { label: 'Rejected', value: 'rejected' },
+  { label: 'Admin Filled', value: 'admin_filled' },
 ];
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
@@ -126,9 +126,9 @@ const StatsCard = ({ title, value, icon: Icon, color, theme }: any) => (
 );
 
 // Timesheet Row Component for Table View
-const TimesheetRow = ({
+// Admin Timesheet Card Component
+const AdminTimesheetCard = ({
   item,
-  index,
   onView,
   onApprove,
   onReject,
@@ -137,7 +137,6 @@ const TimesheetRow = ({
   theme
 }: {
   item: TimesheetAdminItem;
-  index: number;
   onView: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -150,81 +149,89 @@ const TimesheetRow = ({
   const isPending = item.status?.toLowerCase() === 'submitted';
 
   return (
-    <View style={[styles.tableRow, {
-      backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
-      borderBottomColor: theme === 'dark' ? '#334155' : '#e2e8f0',
-    }]}>
-      <View style={styles.rowEmployee}>
-        <View style={styles.employeeAvatar}>
-          <Text style={styles.avatarText}>{(item.userId?.name || '?').charAt(0)}</Text>
+    <TouchableOpacity 
+      activeOpacity={0.7}
+      onPress={onView}
+      style={[styles.card, { 
+        backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+        borderColor: theme === 'dark' ? '#334155' : '#e2e8f0'
+      }]}
+    >
+      <View style={styles.cardHeader}>
+        <View style={styles.employeeInfo}>
+          <View style={styles.employeeAvatar}>
+            <Text style={styles.avatarText}>{(item.userId?.name || '?').charAt(0)}</Text>
+          </View>
+          <View>
+            <Text style={[styles.employeeName, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+              {item.userId?.name || '—'}
+            </Text>
+            <Text style={styles.employeeId}>{item.userId?.employeeId || '—'}</Text>
+          </View>
         </View>
-        <View>
-          <Text style={[styles.employeeName, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
-            {item.userId?.name || '—'}
-          </Text>
-          <Text style={styles.employeeId}>{item.userId?.employeeId || '—'}</Text>
-        </View>
-      </View>
-
-      <View style={styles.rowWeek}>
-        <Text style={[styles.weekText, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
-          {weekNumber}
-        </Text>
-        {item.submittedAt && (
-          <Text style={styles.submittedDate}>
-            Submitted {format(new Date(item.submittedAt), 'MMM d')}
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.rowProjects}>
-        <Text style={[styles.projectsText, { color: theme === 'dark' ? '#cbd5e1' : '#475569' }]} numberOfLines={2}>
-          {projectsText}
-        </Text>
-      </View>
-
-      <View style={styles.rowHours}>
-        <Text style={[styles.hoursText, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
-          {formatHours(item.totalHours)}h
-        </Text>
-      </View>
-
-      <View style={styles.rowStatus}>
         <StatusBadge status={item.status === 'submitted' ? 'pending' : item.status} />
-        {item.approvedBy?.name && (
-          <Text style={styles.approvedBy}>by {item.approvedBy.name.split(' ')[0]}</Text>
-        )}
       </View>
 
-      <View style={styles.rowActions}>
-        <TouchableOpacity onPress={onView} style={styles.actionBtn}>
-          <Eye size={16} color="#6366f1" />
-        </TouchableOpacity>
+      <View style={styles.cardContent}>
+        <View style={styles.infoRow}>
+          <Calendar size={14} color="#64748b" />
+          <Text style={[styles.infoText, { color: theme === 'dark' ? '#cbd5e1' : '#475569' }]}>{weekNumber}</Text>
+          {item.submittedAt && (
+            <Text style={styles.subText}>• Submitted {format(new Date(item.submittedAt), 'MMM d')}</Text>
+          )}
+        </View>
 
-        {isPending && (
-          <>
-            <TouchableOpacity
-              onPress={onReject}
-              style={styles.actionBtn}
-              disabled={isApproving || isRejecting}
-            >
-              <XCircle size={16} color="#ef4444" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onApprove}
-              style={styles.actionBtn}
-              disabled={isApproving || isRejecting}
-            >
-              {isApproving ? (
-                <ActivityIndicator size="small" color="#10b981" />
-              ) : (
-                <CheckCircle size={16} color="#10b981" />
-              )}
-            </TouchableOpacity>
-          </>
-        )}
+        <View style={styles.infoRow}>
+          <Briefcase size={14} color="#64748b" />
+          <Text style={[styles.infoText, { color: theme === 'dark' ? '#cbd5e1' : '#475569' }]} numberOfLines={1}>
+            {projectsText}
+          </Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <Clock size={14} color="#64748b" />
+          <Text style={[styles.infoText, { color: theme === 'dark' ? '#cbd5e1' : '#475569' }]}>
+            {formatHours(item.totalHours)}h Total Effort
+          </Text>
+        </View>
       </View>
-    </View>
+
+      <View style={styles.cardFooter}>
+        <View style={styles.footerLeft}>
+          {item.approvedBy?.name && (
+            <Text style={styles.approvedBy}>Processed by {item.approvedBy.name.split(' ')[0]}</Text>
+          )}
+        </View>
+        <View style={styles.cardActions}>
+          <TouchableOpacity onPress={onView} style={styles.actionBtn}>
+            <Eye size={18} color="#6366f1" />
+          </TouchableOpacity>
+
+          {isPending && (
+            <>
+              <TouchableOpacity
+                onPress={onReject}
+                style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
+                disabled={isApproving || isRejecting}
+              >
+                <XCircle size={18} color="#ef4444" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onApprove}
+                style={[styles.actionBtn, { backgroundColor: '#dcfce7' }]}
+                disabled={isApproving || isRejecting}
+              >
+                {isApproving ? (
+                  <ActivityIndicator size="small" color="#10b981" />
+                ) : (
+                  <CheckCircle size={18} color="#10b981" />
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 };
 
@@ -484,12 +491,16 @@ const TimesheetDetailsModal = ({
   onClose,
   weekStartDate,
   userId,
+  timesheetId,
+  organizationId,
   theme
 }: {
   visible: boolean;
   onClose: () => void;
   weekStartDate: string;
   userId: string;
+  timesheetId?: string;
+  organizationId?: string;
   theme: 'light' | 'dark';
 }) => {
   const [details, setDetails] = useState<any>(null);
@@ -504,7 +515,17 @@ const TimesheetDetailsModal = ({
   const fetchDetails = async () => {
     setLoading(true);
     try {
-      const data = await timesheetService.getDetails(weekStartDate, userId);
+      // Normalize date to YYYY-MM-DD to avoid time-related query mismatches
+      const formattedDate = weekStartDate && weekStartDate.includes('T') 
+        ? weekStartDate.split('T')[0] 
+        : weekStartDate;
+        
+      const data = await timesheetService.getDetails(formattedDate, userId, { 
+        isAdminView: true,
+        organizationId,
+        id: timesheetId,
+        timesheetId: timesheetId
+      });
       setDetails(data);
     } catch (error) {
       console.error('Error fetching details:', error);
@@ -621,6 +642,7 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
   const [selectedTimesheet, setSelectedTimesheet] = useState<TimesheetAdminItem | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [activeTimesheetId, setActiveTimesheetId] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -701,10 +723,14 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
 
   const fetchStats = async () => {
     try {
-      const statsData = await timesheetService.getAdminStats();
+      const statsData = await timesheetService.getAdminStats({
+        organizationId: user?.organizationId,
+        isAdminView: true,
+      });
       setStats(statsData);
-    } catch (error) {
-      console.log('Admin stats endpoint not available, falling back to empty stats', error);
+    } catch (error: any) {
+      console.error('Error fetching admin stats:', error);
+      Alert.alert('Error', error.message || 'Failed to load dashboard stats');
       setStats({
         totalTimesheets: 0,
         pendingReview: 0,
@@ -723,13 +749,16 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
       const response = await timesheetService.getAdminList({
         page: pagination.page,
         limit: pagination.limit,
+        organizationId: user?.organizationId,
+        isAdminView: true,
         ...filters,
         search: search.length >= 2 ? search : '',
       });
       setTimesheets((response.data as any) || []);
       setPagination((response.pagination as any) || { page: 1, totalPages: 1, total: 0, limit: 10 });
     } catch (error: any) {
-      console.log('Admin list endpoint not available, falling back to empty list', error);
+      console.error('Error fetching admin timesheets:', error);
+      Alert.alert('Error', error.message || 'Failed to load timesheet list');
       setTimesheets([]);
       setPagination(prev => ({ ...prev, totalPages: 1, total: 0 }));
     } finally {
@@ -769,9 +798,10 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
     setFilterModalVisible(false);
   };
 
-  const handleViewDetails = (weekStartDate: string, userId: string) => {
+  const handleViewDetails = (weekStartDate: string, userId: string, timesheetId?: string) => {
     setSelectedWeek(weekStartDate);
     setSelectedUserId(userId);
+    setActiveTimesheetId(timesheetId || null);
     setDetailsModalVisible(true);
   };
 
@@ -817,31 +847,7 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
     }
   };
 
-  const handleExportCSV = async () => {
-    try {
-      const csvData = await timesheetService.exportAdminList({
-        ...filters,
-        search: search.length >= 2 ? search : '',
-      });
 
-      if (Platform.OS === 'web') {
-        const globalAny = globalThis as any;
-        const blob = new globalAny.Blob([csvData], { type: 'text/csv' } as any);
-        const url = globalAny.URL.createObjectURL(blob);
-        const link = globalAny.document.createElement('a');
-        link.href = url;
-        link.download = `admin_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        link.click();
-        globalAny.URL.revokeObjectURL(url);
-      } else {
-        const fileName = `admin_timesheets_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-        await exportFile(csvData as string, fileName, 'text/csv');
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-      Alert.alert('Error', 'Failed to export CSV');
-    }
-  };
 
   const activeFilterCount = [filters.userId, filters.projectId, filters.status, filters.year, filters.week].filter(Boolean).length;
 
@@ -904,13 +910,6 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={[styles.exportButton, { backgroundColor: '#6366f1' }]}
-              onPress={handleExportCSV}
-            >
-              <Download size={18} color="#ffffff" />
-              <Text style={styles.exportButtonText}>Export</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -954,16 +953,6 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
           </View>
         )}
 
-        {/* Table Header */}
-        <View style={[styles.tableHeader, { backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc' }]}>
-          <Text style={[styles.headerText, styles.headerEmployee]}>Employee</Text>
-          <Text style={[styles.headerText, styles.headerWeek]}>Week</Text>
-          <Text style={[styles.headerText, styles.headerProjects]}>Projects</Text>
-          <Text style={[styles.headerText, styles.headerHours]}>Hours</Text>
-          <Text style={[styles.headerText, styles.headerStatus]}>Status</Text>
-          <Text style={[styles.headerText, styles.headerActions]}>Actions</Text>
-        </View>
-
         {/* Timesheets List */}
         {loading && timesheets.length === 0 ? (
           <View style={styles.loadingContainer}>
@@ -979,13 +968,15 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.tableBody}>
-            {timesheets.map((item, index) => (
-              <TimesheetRow
+          <View style={styles.timesheetList}>
+            {timesheets.map((item) => (
+              <AdminTimesheetCard
                 key={item.id || item._id}
                 item={item}
-                index={index}
-                onView={() => handleViewDetails(item.weekStartDate, item.userId?.id || item.userId?._id)}
+                onView={() => {
+                  const uid = item.userId?._id || item.userId?.id || (typeof item.userId === 'string' ? item.userId : '');
+                  handleViewDetails(item.weekStartDate, uid, item.id || item._id);
+                }}
                 onApprove={() => handleApprove(item.id || item._id)}
                 onReject={() => {
                   setSelectedTimesheet(item);
@@ -1046,6 +1037,8 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
           onClose={() => setDetailsModalVisible(false)}
           weekStartDate={selectedWeek || ''}
           userId={selectedUserId || ''}
+          timesheetId={activeTimesheetId || ''}
+          organizationId={user?.organizationId}
           theme={theme}
         />
 
@@ -1218,83 +1211,99 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
-  headerText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b',
-    textTransform: 'uppercase',
+  timesheetList: {
+    paddingHorizontal: 16,
+    gap: 12,
+    paddingBottom: 24,
   },
-  headerEmployee: { width: '22%' },
-  headerWeek: { width: '15%' },
-  headerProjects: { width: '25%' },
-  headerHours: { width: '10%', textAlign: 'center' },
-  headerStatus: { width: '15%', textAlign: 'center' },
-  headerActions: { width: '13%', textAlign: 'center' },
-  tableBody: {
-    flex: 1,
+  card: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 4,
   },
-  tableRow: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  employeeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
+    gap: 12,
   },
-  rowEmployee: { width: '22%', flexDirection: 'row', alignItems: 'center', gap: 10 },
   employeeAvatar: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: '#6366f1',
+    backgroundColor: '#6366f120',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#6366f1',
   },
   employeeName: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  employeeId: {
-    fontSize: 10,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  rowWeek: { width: '15%' },
-  weekText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  submittedDate: {
-    fontSize: 9,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  rowProjects: { width: '25%' },
-  projectsText: {
-    fontSize: 12,
-  },
-  rowHours: { width: '10%', alignItems: 'center' },
-  hoursText: {
     fontSize: 14,
     fontWeight: '700',
   },
-  rowStatus: { width: '15%', alignItems: 'center', gap: 2 },
-  approvedBy: {
-    fontSize: 9,
+  employeeId: {
+    fontSize: 11,
     color: '#64748b',
+    marginTop: 1,
   },
-  rowActions: { width: '13%', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  cardContent: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  subText: {
+    fontSize: 11,
+    color: '#94a3b8',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f015',
+  },
+  footerLeft: {
+    flex: 1,
+  },
+  approvedBy: {
+    fontSize: 11,
+    color: '#94a3b8',
+    fontStyle: 'italic',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   actionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
   },
   loadingContainer: {
     padding: 40,
