@@ -419,15 +419,7 @@ export default function AuditLogScreen() {
       >
         {/* Header with live activity bell */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 16 }}>
-          <View style={{ flex: 1 }}>
-            <PageHeader
-              title="Audit Logs"
-              subtitle={`Real-time system activity — ${total} total events`}
-              icon={Shield}
-              iconColor="#6366f1"
-              iconBgColor="#eef2ff"
-            />
-          </View>
+
           <TouchableOpacity
             style={styles.activityBell}
             onPress={() => setShowActivityFeed(true)}

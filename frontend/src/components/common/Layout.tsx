@@ -18,6 +18,7 @@ interface LayoutProps {
   showBackButton?: boolean;
   onBackPress?: () => void;
   scrollable?: boolean;
+  backgroundColor?: string;
 }
 
 export default function Layout({
@@ -33,9 +34,10 @@ export default function Layout({
   showBackButton = false,
   onBackPress,
   scrollable = true,
+  backgroundColor,
 }: LayoutProps) {
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, backgroundColor ? { backgroundColor } : null]}>
       <Header 
         title={title} 
         showSidebarButton={showSidebar} 

@@ -226,7 +226,9 @@ const ROLE_TEMPLATES: Record<string, any> = {
   },
 };
 
-export const EmployeePayrollProfiles = () => {
+export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
+  const incomingEmployeeId = route?.params?.employeeId;
+
   // List View States
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [profiles, setProfiles] = useState<PayrollProfile[]>([]);
@@ -299,6 +301,22 @@ export const EmployeePayrollProfiles = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, deptFilter, statusFilter, itemsPerPage]);
+
+  // Handle incoming employee ID from navigation
+  useEffect(() => {
+    if (incomingEmployeeId && employees.length > 0) {
+      const targetEmp = employees.find(e => e._id === incomingEmployeeId || e.employeeId === incomingEmployeeId);
+      if (targetEmp) {
+        setSearchTerm(targetEmp.employeeId || targetEmp.name);
+        // If they have a profile, view it, otherwise edit/setup
+        if (targetEmp.hasProfile) {
+          handleViewProfile(targetEmp);
+        } else {
+          handleEditProfile(targetEmp);
+        }
+      }
+    }
+  }, [incomingEmployeeId, employees]);
 
   // When editing employee, load their profile data
   useEffect(() => {
@@ -461,8 +479,9 @@ export const EmployeePayrollProfiles = () => {
     loadInitialData();
   }, []);
 
-  const formatCurrency = (amount: number): string => {
-    return `${currencySymbol}${amount.toLocaleString('en-IN')}`;
+  const formatCurrency = (amount: any): string => {
+    const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+    return `${currencySymbol}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const calculateSalaryBreakdown = (profile: PayrollProfile): SalaryBreakdown => {

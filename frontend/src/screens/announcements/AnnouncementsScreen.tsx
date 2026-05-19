@@ -103,16 +103,18 @@ const ROLE_LABELS: Record<string, string> = {
 
 // --- Sub-components moved outside to prevent re-rendering/focus issues ---
 
-const AnnouncementCard = ({ 
-  announcement, 
-  onEdit, 
-  onDelete, 
-  isExpired 
-}: { 
-  announcement: Announcement; 
+const AnnouncementCard = ({
+  announcement,
+  onEdit,
+  onDelete,
+  isExpired,
+  canManage
+}: {
+  announcement: Announcement;
   onEdit: (a: Announcement) => void;
   onDelete: (a: Announcement) => void;
   isExpired: (date?: string) => boolean;
+  canManage: boolean;
 }) => {
   const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.info;
   const cfg = getTypeConfig(announcement.type);
@@ -121,16 +123,19 @@ const AnnouncementCard = ({
   const isInactive = !announcement.isActive;
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPress={() => onEdit(announcement)}
+    <View
       style={[
         styles.announcementCard,
         { borderLeftColor: cfg.dot },
         (isInactive || expired) && styles.inactiveCard
       ]}
     >
-      <View style={styles.cardHeader}>
+      <TouchableOpacity
+        activeOpacity={canManage ? 0.7 : 1}
+        onPress={() => canManage && onEdit(announcement)}
+        style={styles.cardHeader}
+        disabled={!canManage}
+      >
         <View style={[styles.iconContainer, { backgroundColor: cfg.badgeBg }]}>
           <TypeIcon size={18} color={cfg.badgeText} />
         </View>
@@ -156,51 +161,53 @@ const AnnouncementCard = ({
           </View>
 
           <Text style={styles.cardDescription} numberOfLines={3}>{announcement.content}</Text>
+        </View>
+      </TouchableOpacity>
 
-          <View style={styles.cardDivider} />
+      <View style={styles.cardDivider} />
 
-          <View style={styles.cardFooter}>
-            <View style={styles.metaInfo}>
-              <View style={styles.authorAvatar}>
-                <Text style={styles.authorInitial}>
-                  {announcement.publishedBy?.name?.charAt(0) || 'S'}
-                </Text>
-              </View>
-              <View>
-                <Text style={styles.authorName}>{announcement.publishedBy?.name || 'System'}</Text>
-                <Text style={styles.metaText}>{format(new Date(announcement.createdAt), 'MMM d, yyyy')}</Text>
-              </View>
-            </View>
-
-            <View style={styles.cardActions}>
-              <TouchableOpacity onPress={() => onEdit(announcement)} style={styles.actionBtn}>
-                <Pencil size={14} color="#64748b" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => onDelete(announcement)} style={styles.actionBtn}>
-                <Trash2 size={14} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.targetAudience}>
-            <Users size={10} color="#94a3b8" />
-            <Text style={styles.targetText}>
-              {announcement.targetRoles && announcement.targetRoles.length > 0
-                ? announcement.targetRoles.map(r => ROLE_LABELS[r]).join(', ')
-                : 'Everyone'}
+      <View style={styles.cardFooter}>
+        <View style={styles.metaInfo}>
+          <View style={styles.authorAvatar}>
+            <Text style={styles.authorInitial}>
+              {announcement.publishedBy?.name?.charAt(0) || 'S'}
             </Text>
-            {announcement.expiresAt && (
-              <View style={styles.expiryInfo}>
-                <Calendar size={10} color={expired ? '#ef4444' : '#94a3b8'} />
-                <Text style={[styles.targetText, expired && styles.expiredText]}>
-                  {format(new Date(announcement.expiresAt), 'MMM d')}
-                </Text>
-              </View>
-            )}
+          </View>
+          <View>
+            <Text style={styles.authorName}>{announcement.publishedBy?.name || 'System'}</Text>
+            <Text style={styles.metaText}>{format(new Date(announcement.createdAt), 'MMM d, yyyy')}</Text>
           </View>
         </View>
+
+        {canManage && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity onPress={() => onEdit(announcement)} style={styles.actionBtn}>
+              <Pencil size={14} color="#64748b" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onDelete(announcement)} style={styles.actionBtn}>
+              <Trash2 size={14} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
-    </TouchableOpacity>
+
+      <View style={styles.targetAudience}>
+        <Users size={10} color="#94a3b8" />
+        <Text style={styles.targetText}>
+          {announcement.targetRoles && announcement.targetRoles.length > 0
+            ? announcement.targetRoles.map(r => ROLE_LABELS[r]).join(', ')
+            : 'Everyone'}
+        </Text>
+        {announcement.expiresAt && (
+          <View style={styles.expiryInfo}>
+            <Calendar size={10} color={expired ? '#ef4444' : '#94a3b8'} />
+            <Text style={[styles.targetText, expired && styles.expiredText]}>
+              {format(new Date(announcement.expiresAt), 'MMM d')}
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 };
 
@@ -224,7 +231,7 @@ const AnnouncementModal = ({
   toggleRole: (role: string) => void;
 }) => {
   const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.info;
-  
+
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
       <View style={modalStyles.overlay}>
@@ -448,16 +455,23 @@ export default function AnnouncementsScreen() {
     }
   };
 
+  const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin';
+
   const fetchAnnouncements = async () => {
     try {
       setLoading(true);
-      const response = await announcementAPI.getAllAdmin({ page, limit });
-      const data = (response as any).data;
-      setAnnouncements(data?.data || []);
-      setTotalPages(data?.pagination?.totalPages || 1);
-    } catch (error) {
+      const response = await (isAdmin ? announcementAPI.getAllAdmin({ page, limit }) : announcementAPI.getAll({ limit: 10 }));
+      const resData = (response as any);
+
+      // Robust extraction of list and pagination
+      const list = resData.data?.data || resData.data || (Array.isArray(resData) ? resData : []);
+      const pagination = resData.data?.pagination || resData.pagination || { totalPages: 1 };
+
+      setAnnouncements(list);
+      setTotalPages(pagination.totalPages || 1);
+    } catch (error: any) {
       console.error('Error fetching announcements:', error);
-      Alert.alert('Error', 'Failed to load announcements');
+      Alert.alert('Error', error?.message || 'Failed to load announcements');
     } finally {
       setLoading(false);
     }
@@ -506,14 +520,20 @@ export default function AnnouncementsScreen() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    const targetId = (deleteTarget as any)._id || (deleteTarget as any).id;
+    if (!targetId) {
+      Alert.alert('Error', 'Announcement ID is missing');
+      return;
+    }
+
     try {
-      await announcementAPI.delete(deleteTarget._id);
+      await announcementAPI.delete(targetId);
       Alert.alert('Success', 'Announcement deleted');
       setShowDeleteModal(false);
       setDeleteTarget(null);
       fetchAnnouncements();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to delete announcement');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to delete announcement');
     }
   };
 
@@ -535,7 +555,8 @@ export default function AnnouncementsScreen() {
       };
 
       if (editTarget) {
-        await announcementAPI.update(editTarget._id, payload);
+        const targetId = (editTarget as any)._id || (editTarget as any).id;
+        await announcementAPI.update(targetId, payload);
         Alert.alert('Success', 'Announcement updated!');
       } else {
         await announcementAPI.create(payload);
@@ -642,12 +663,13 @@ export default function AnnouncementsScreen() {
         ) : (
           <>
             {announcements.map((ann) => (
-              <AnnouncementCard 
-                key={ann._id} 
-                announcement={ann} 
+              <AnnouncementCard
+                key={ann._id || (ann as any).id}
+                announcement={ann}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isExpired={isExpired}
+                canManage={isAdmin}
               />
             ))}
 
@@ -675,7 +697,7 @@ export default function AnnouncementsScreen() {
         )}
       </Layout>
 
-      <AnnouncementModal 
+      <AnnouncementModal
         visible={showModal}
         onClose={() => setShowModal(false)}
         editTarget={editTarget}
@@ -685,7 +707,7 @@ export default function AnnouncementsScreen() {
         isSubmitting={isSubmitting}
         toggleRole={toggleRole}
       />
-      <DeleteModal 
+      <DeleteModal
         visible={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         title={deleteTarget?.title}

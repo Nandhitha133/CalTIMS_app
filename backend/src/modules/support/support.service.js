@@ -140,10 +140,19 @@ const supportService = {
      * Get all tickets (Admin)
      */
     async getAllTickets(query = {}, organizationId) {
-        const { status, limit = 10, page = 1 } = query;
+        const { status, limit = 10, page = 1, search } = query;
         const filter = {};
         if (organizationId) filter.organizationId = organizationId;
         if (status) filter.status = status;
+
+        if (search) {
+            filter.$or = [
+                { ticketId: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { issueType: { $regex: search, $options: 'i' } }
+            ];
+        }
 
         const tickets = await SupportTicket.find(filter)
             .sort({ createdAt: -1 })

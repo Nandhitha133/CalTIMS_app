@@ -65,15 +65,15 @@ const SectionCard = ({ title, subtitle, icon: Icon, children }: any) => (
 );
 
 // Leave Type Card Component
-const LeaveTypeCard = ({ 
-  leaveType, 
-  isEligible, 
-  onToggleEligibility, 
+const LeaveTypeCard = ({
+  leaveType,
+  isEligible,
+  onToggleEligibility,
   onRemove,
-  index 
-}: { 
-  leaveType: string; 
-  isEligible: boolean; 
+  index
+}: {
+  leaveType: string;
+  isEligible: boolean;
   onToggleEligibility: () => void;
   onRemove: () => void;
   index: number;
@@ -87,15 +87,15 @@ const LeaveTypeCard = ({
           <Text style={styles.leaveTypeName} numberOfLines={1}>
             {leaveType}
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowRemoveConfirm(true)}
             style={styles.leaveTypeRemove}
           >
             <X size={14} color="#ef4444" />
           </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[styles.eligibilityButton, isEligible && styles.eligibilityButtonActive]}
           onPress={onToggleEligibility}
         >
@@ -141,13 +141,13 @@ const LeaveTypeCard = ({
 };
 
 // Add Leave Type Modal
-const AddLeaveTypeModal = ({ 
-  visible, 
-  onClose, 
-  onAdd 
-}: { 
-  visible: boolean; 
-  onClose: () => void; 
+const AddLeaveTypeModal = ({
+  visible,
+  onClose,
+  onAdd
+}: {
+  visible: boolean;
+  onClose: () => void;
   onAdd: (value: string) => void;
 }) => {
   const [newLeaveType, setNewLeaveType] = useState('');
@@ -199,17 +199,17 @@ const AddLeaveTypeModal = ({
 };
 
 // Allowance Slider Component
-const AllowanceSlider = ({ 
-  label, 
-  value, 
-  max, 
-  color, 
-  onChange 
-}: { 
-  label: string; 
-  value: number; 
-  max: number; 
-  color: string; 
+const AllowanceSlider = ({
+  label,
+  value,
+  max,
+  color,
+  onChange
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color: string;
   onChange: (value: number) => void;
 }) => {
   const [showValueModal, setShowValueModal] = useState(false);
@@ -225,7 +225,7 @@ const AllowanceSlider = ({
     <View style={styles.allowanceContainer}>
       <View style={styles.allowanceHeader}>
         <Text style={styles.allowanceLabel}>{label}</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.allowanceValueBadge}
           onPress={() => {
             setTempValue(String(value));
@@ -235,18 +235,18 @@ const AllowanceSlider = ({
           <Text style={styles.allowanceValueText}>{value} DAYS</Text>
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.sliderContainer}>
         <View style={styles.sliderTrack}>
-          <View 
+          <View
             style={[
-              styles.sliderFill, 
+              styles.sliderFill,
               { width: `${(value / max) * 100}%`, backgroundColor: color }
-            ]} 
+            ]}
           />
         </View>
         <View style={styles.sliderMarks}>
-          {[0, max/2, max].map((mark, idx) => (
+          {[0, max / 2, max].map((mark, idx) => (
             <Text key={idx} style={styles.sliderMark}>{mark}</Text>
           ))}
         </View>
@@ -291,7 +291,7 @@ export default function LeavePolicyTab() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   const { isPro } = useAuthStore();
-  
+
   const [leaveTypes, setLeaveTypes] = useState<string[]>([]);
   const [eligibleLeaveTypes, setEligibleLeaveTypes] = useState<string[]>([]);
   const [policy, setPolicy] = useState<LeavePolicy>({
@@ -428,9 +428,9 @@ export default function LeavePolicyTab() {
         <View style={styles.mainContent}>
           {/* Left Column */}
           <View style={styles.leftColumn}>
-            <SectionCard 
-              title="Leave Library" 
-              subtitle="Define the range of time-off categories available" 
+            <SectionCard
+              title="Leave Library"
+              subtitle="Define the range of time-off categories available"
               icon={Briefcase}
             >
               <View style={styles.leaveLibraryContent}>
@@ -465,7 +465,7 @@ export default function LeavePolicyTab() {
                   <Settings2 size={18} color="#6366f1" />
                   <Text style={styles.proTipText}>
                     <Text style={styles.proTipBold}>Pro-tip:</Text> Marking a category as{' '}
-                    <Text style={styles.proTipHighlight}>Deductible</Text> ensures it tracks 
+                    <Text style={styles.proTipHighlight}>Deductible</Text> ensures it tracks
                     against an employee's annual, sick, or casual allowance pool.
                   </Text>
                 </View>
@@ -476,9 +476,9 @@ export default function LeavePolicyTab() {
           {/* Right Column */}
           <View style={styles.rightColumn}>
             {/* Standard Allowances */}
-            <SectionCard 
-              title="Standard Allowances" 
-              subtitle="Yearly entitlement pools" 
+            <SectionCard
+              title="Standard Allowances"
+              subtitle="Yearly entitlement pools"
               icon={TrendingUp}
             >
               <View style={styles.allowancesContent}>
@@ -507,9 +507,9 @@ export default function LeavePolicyTab() {
             </SectionCard>
 
             {/* Carry Forward */}
-            <SectionCard 
-              title="Carry Forward" 
-              subtitle="Year-end balance rollover" 
+            <SectionCard
+              title="Carry Forward"
+              subtitle="Year-end balance rollover"
               icon={CalendarOff}
             >
               <View style={styles.carryForwardContent}>
@@ -529,7 +529,7 @@ export default function LeavePolicyTab() {
                 <View style={styles.fiscalYearBox}>
                   <Text style={styles.fiscalYearTitle}>Fiscal Year Rule</Text>
                   <Text style={styles.fiscalYearText}>
-                    Eligible leave types allow balance transfers up to this limit. 
+                    Eligible leave types allow balance transfers up to this limit.
                     Overages are purged on April 1st.
                   </Text>
                 </View>
@@ -537,9 +537,9 @@ export default function LeavePolicyTab() {
             </SectionCard>
 
             {/* Approval Workflow (Optional - add if needed) */}
-            <SectionCard 
-              title="Approval Workflow" 
-              subtitle="Leave request approval hierarchy" 
+            <SectionCard
+              title="Approval Workflow"
+              subtitle="Leave request approval hierarchy"
               icon={Clock}
             >
               <View style={styles.workflowContent}>

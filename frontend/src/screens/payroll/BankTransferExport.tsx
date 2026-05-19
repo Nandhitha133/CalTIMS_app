@@ -191,12 +191,13 @@ const ConfirmModal = ({ visible, onClose, onConfirm, nodeCount, totalLiquidity, 
 );
 
 const getPreviewCellStyle = (index: number) => {
-  if (index === 0) return { width: 120 };
-  if (index === 1) return { width: 140 };
-  if (index === 2) return { width: 120 };
-  if (index === 3) return { width: 100 };
-  if (index === 4) return { width: 100, textAlign: 'right' as const };
-  return { width: 120 };
+  if (index === 0) return { width: 100 }; // Employee ID
+  if (index === 1) return { width: 140 }; // Account Number
+  if (index === 2) return { width: 140 }; // Beneficiary Name
+  if (index === 3) return { width: 120 }; // Bank Name
+  if (index === 4) return { width: 100 }; // IFSC
+  if (index === 5) return { width: 100, textAlign: 'right' as const }; // Amount
+  return { width: 120 }; // Description
 };
 
 export function BankTransferExport({ navigation }: { navigation: any }) {
@@ -301,10 +302,34 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
       (h: any) => h.month === month && h.year === year && (h.breakdown?.netPay || 0) > 0
     );
 
-    nodes = nodes.map((n: any) => ({
-      ...n,
-      validation: validatePayout(n),
-    }));
+    nodes = nodes.map((n: any) => {
+      // 1. Try to find user in usersData (latest source of truth)
+      const userId = n.user?._id || n.user;
+      const fullUser = Array.isArray(usersData) ? usersData.find((u: any) => u._id === userId) : null;
+      
+      // 2. Prepare user object with fallbacks
+      // Prefer latest data from fullUser, then populated n.user, then snapshot data
+      const userFromSnapshot = n.employeeInfo ? {
+        _id: userId,
+        name: n.employeeInfo.name,
+        employeeId: n.employeeInfo.employeeId,
+        bankName: n.bankDetails?.bankName,
+        accountNumber: n.bankDetails?.accountNumber,
+        ifscCode: n.bankDetails?.ifscCode,
+      } : null;
+
+      const userObject = fullUser || (typeof n.user === 'object' ? n.user : null) || userFromSnapshot || { _id: userId };
+
+      const enrichedNode = {
+        ...n,
+        user: userObject
+      };
+
+      return {
+        ...enrichedNode,
+        validation: validatePayout(enrichedNode),
+      };
+    });
 
     if (bankFilter) {
       nodes = nodes.filter((h: any) => h.user?.bankName === bankFilter);
@@ -315,7 +340,7 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
     }
 
     return nodes;
-  }, [history, month, year, bankFilter, statusFilter, validatePayout]);
+  }, [history, month, year, bankFilter, statusFilter, validatePayout, usersData]);
 
   const stats = useMemo(() => {
     const totalLiquidity = filteredNodes.reduce((acc, curr) => acc + (curr.breakdown?.netPay || 0), 0);
@@ -328,11 +353,12 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
     };
   }, [filteredNodes]);
 
-  const headers = ['Account Number', 'Beneficiary Name', 'Bank Name', 'IFSC', 'Amount', 'Description'];
+  const headers = ['Employee ID', 'Account Number', 'Beneficiary Name', 'Bank Name', 'IFSC', 'Amount', 'Description'];
   const previewRows = useMemo(() => {
     return filteredNodes.map((h: any) => [
+      h.user?.employeeId || 'N/A',
       h.user?.accountNumber || 'NOT-MAPPED',
-      h.user?.name,
+      h.user?.name || 'Unknown',
       h.user?.bankName || 'NOT-MAPPED',
       h.user?.ifscCode || 'N/A',
       h.breakdown?.netPay,
@@ -521,7 +547,7 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
                 <EmployeeRow
                   key={idx}
                   employee={node}
-                  onPress={() => navigation.navigate('PayrollProfiles', { employeeId: node.user?._id })}
+                  onPress={() => navigation.navigate('PayrollProfiles', { employeeId: node.user?._id || node.user })}
                   currencySymbol={currencySymbol}
                 />
               ))

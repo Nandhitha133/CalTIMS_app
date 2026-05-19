@@ -147,6 +147,7 @@ export default function IncidentListScreen() {
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
 
@@ -186,6 +187,15 @@ export default function IncidentListScreen() {
     }
   };
 
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setPage(1); // Reset to page 1 on new search
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   const fetchData = async () => {
     try {
       // Don't block the UI if we already have mock data
@@ -196,7 +206,7 @@ export default function IncidentListScreen() {
       }
 
       const filters: Record<string, any> = { page, limit };
-      if (searchQuery) filters.search = searchQuery;
+      if (debouncedSearchQuery) filters.search = debouncedSearchQuery;
       if (statusFilter !== 'All') filters.status = statusFilter;
       if (activeTab === 'incidents' && priorityFilter !== 'All') filters.priority = priorityFilter;
 
@@ -208,12 +218,10 @@ export default function IncidentListScreen() {
         const dataList = Array.isArray(extracted) ? extracted : (extracted?.data || []);
         const pagination = !Array.isArray(extracted) ? extracted?.pagination : null;
 
-        // If we got live data, replace mock data
-        if (dataList.length > 0) {
-          setIncidents(dataList);
-          setTotalPages(pagination?.totalPages || 1);
-          setTotalResults(pagination?.total || dataList.length);
-        }
+        // Always update state if request was successful, even if list is empty
+        setIncidents(dataList);
+        setTotalPages(pagination?.totalPages || 1);
+        setTotalResults(pagination?.total || dataList.length);
       } else if (isAdmin) {
         const response = await supportService.getTickets(filters);
         const extracted = extractData(response);
@@ -221,11 +229,9 @@ export default function IncidentListScreen() {
         const dataList = Array.isArray(extracted) ? extracted : (extracted?.data || []);
         const pagination = !Array.isArray(extracted) ? extracted?.pagination : null;
 
-        if (dataList.length > 0) {
-          setSupportTickets(dataList);
-          setTotalPages(pagination?.totalPages || 1);
-          setTotalResults(pagination?.total || dataList.length);
-        }
+        setSupportTickets(dataList);
+        setTotalPages(pagination?.totalPages || 1);
+        setTotalResults(pagination?.total || dataList.length);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -242,7 +248,7 @@ export default function IncidentListScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchData();
-    }, [activeTab, page, searchQuery, statusFilter, priorityFilter, isAdmin])
+    }, [activeTab, page, debouncedSearchQuery, statusFilter, priorityFilter, isAdmin])
   );
 
   const onRefresh = async () => {
@@ -348,8 +354,10 @@ export default function IncidentListScreen() {
         <TouchableOpacity 
           onPress={() => {
             setSearchQuery('');
+            setDebouncedSearchQuery('');
             setStatusFilter('All');
             setPriorityFilter('All');
+            setPage(1);
           }}
         >
           <Text style={styles.resetText}>RESET FILTERS</Text>

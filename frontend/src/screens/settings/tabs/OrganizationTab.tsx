@@ -39,6 +39,8 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { useAuthStore } from '../../../store/authStore';
 import * as ImagePicker from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
+import Layout from '../../../components/common/Layout';
+import PageHeader from '../../../components/common/PageHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -331,6 +333,7 @@ export default function OrganizationTab() {
   const queryClient = useQueryClient();
   const { user, subscription } = useAuthStore();
   const { updateGeneralSettings } = useSettingsStore();
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const [logoFile, setLogoFile] = useState<ImagePicker.Asset | null>(null);
   const [form, setForm] = useState({
@@ -484,16 +487,29 @@ export default function OrganizationTab() {
   }
 
   return (
-    <View style={styles.container}>
-      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+    <Layout
+      title="Organization"
+      user={user}
+      sidebarVisible={sidebarVisible}
+      setSidebarVisible={setSidebarVisible}
+      refreshing={isLoading}
+      onRefresh={() => queryClient.invalidateQueries({ queryKey: ['settings'] })}
+      scrollable={false}
+      backgroundColor="#f9fafb"
+    >
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Organization Landscape</Text>
-            <Text style={styles.headerSubtitle}>
-              Manage institutional identity and operational governance
-            </Text>
-          </View>
+          <PageHeader 
+            title="Organization Landscape"
+            subtitle="Manage institutional identity and operational governance"
+            icon={Building2}
+            iconColor="#6366f1"
+            iconBgColor="#eef2ff"
+          />
 
           {/* Section 1: Company Identity */}
           <SectionCard title="Company Identity" subtitle="Core branding and location profile" icon={Building2}>
@@ -702,7 +718,7 @@ export default function OrganizationTab() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </Layout>
   );
 }
 

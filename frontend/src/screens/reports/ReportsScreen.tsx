@@ -55,6 +55,7 @@ import { exportFile } from '../../utils/exportHelper';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 32;
+const CARD_INNER_WIDTH = SCREEN_WIDTH - 64;
 
 // Color Palette
 const PALETTE = [
@@ -264,13 +265,32 @@ const ExportModal = ({ visible, onClose, onExport, isExporting }: any) => {
 const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOptions, employees, projects, departments }: any) => {
   const [tempFilters, setTempFilters] = useState(filters);
   const [activeSelector, setActiveSelector] = useState<string | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState<'from' | 'to'>('from');
 
   React.useEffect(() => {
     if (visible) {
       setTempFilters(filters);
       setActiveSelector(null);
+      setShowDatePicker(false);
     }
   }, [visible, filters]);
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const dateStr = dateFnsFormat(selectedDate, 'yyyy-MM-dd');
+      setTempFilters((prev: any) => ({
+        ...prev,
+        [datePickerMode]: dateStr
+      }));
+    }
+  };
+
+  const openDatePicker = (mode: 'from' | 'to') => {
+    setDatePickerMode(mode);
+    setShowDatePicker(true);
+  };
 
   const months = [
     { label: 'All Months', value: 'all' },
@@ -306,10 +326,7 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
                 <View style={styles.dateRangeRow}>
                   <TouchableOpacity
                     style={styles.dateButton}
-                    onPress={() => {
-                      // Show date picker
-                      Alert.alert('Select Start Date', 'Use device date picker', [{ text: 'OK' }]);
-                    }}
+                    onPress={() => openDatePicker('from')}
                   >
                     <Calendar size={14} color="#64748b" />
                     <Text style={styles.dateButtonText}>
@@ -319,9 +336,7 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
                   <Text style={styles.dateTo}>to</Text>
                   <TouchableOpacity
                     style={styles.dateButton}
-                    onPress={() => {
-                      Alert.alert('Select End Date', 'Use device date picker', [{ text: 'OK' }]);
-                    }}
+                    onPress={() => openDatePicker('to')}
                   >
                     <Calendar size={14} color="#64748b" />
                     <Text style={styles.dateButtonText}>
@@ -329,13 +344,21 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
                     </Text>
                   </TouchableOpacity>
                 </View>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={tempFilters[datePickerMode] ? new Date(tempFilters[datePickerMode]) : new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onDateChange}
+                  />
+                )}
               </View>
 
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Employee</Text>
                 <SafeSelector
                   options={[
-                    { label: 'All Employees', value: 'all' },
+                    { label: 'All Staff', value: 'all' },
                     ...employees.map((emp: any) => ({ label: emp.name, value: emp._id })),
                   ]}
                   selectedValue={tempFilters.userId}
@@ -619,7 +642,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
 
   const fetchEmployees = async () => {
     try {
-      const response = await userAPI.getAll({ limit: 200, role: 'employee' });
+      const response = await userAPI.getAll({ limit: 400 }); // Fetch all staff (Admin, Manager, Employee)
       const data = extractData(response, []);
       setEmployees(data);
       const depts = new Set(data.map((e: any) => e.department).filter(Boolean));
@@ -633,6 +656,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
     try {
       const response = await reportAPI.getTimesheetSummary(filterParams);
       const data = extractData(response, []);
+      console.log('Fetched Timesheet Summary rows:', data.length);
       setTsData(data);
     } catch (error) {
       console.error('Error fetching timesheet summary:', error);
@@ -699,7 +723,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
     try {
       const response = await reportAPI.getSmartInsights(filterParams);
       const data = extractData(response, []);
-      
+
       if (data && data.length > 0) {
         setInsightsData(data);
       } else {
@@ -718,7 +742,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
     } catch (error) {
       console.log('Error fetching smart insights, using fallback');
       // Local fallback
-      const localInsights = [`Total productivity: ${totalHours.toFixed(1)}h`, `Compliance: ${complianceRate}%` ];
+      const localInsights = [`Total productivity: ${totalHours.toFixed(1)}h`, `Compliance: ${complianceRate}%`];
       setInsightsData(localInsights);
     }
   };
@@ -782,17 +806,17 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
         ...(selectedUserId !== 'all' && { userId: selectedUserId }),
         ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
       };
-      
+
       const response = format === 'pdf' ? await reportAPI.exportPDF(params) : await reportAPI.exportCSV(params);
       const data = extractData(response, '');
-      
+
       if (!data || data.length === 0) {
         throw new Error('The server returned an empty report. Please try again or check your filters.');
       }
-      
+
       const fileName = `enterprise-report-${dateFnsFormat(new Date(), 'yyyyMMdd')}.${format}`;
       const fileType = format === 'pdf' ? 'application/pdf' : 'text/csv';
-      
+
       // Clean up data if it's a base64 string
       let exportData = data;
       if (format === 'pdf' && typeof data === 'string') {
@@ -801,7 +825,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
 
       const isBase64 = format === 'pdf' || (typeof exportData === 'string' && exportData.length > 1000 && !exportData.includes(','));
       await exportFile(exportData, fileName, fileType, isBase64);
-      
+
       setShowExportModal(false);
     } catch (error) {
       console.error('Export error:', error);
@@ -1012,7 +1036,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
               {compliancePieData.length > 0 ? (
                 <RNSPieChart
                   data={compliancePieData}
-                  width={CHART_WIDTH}
+                  width={CARD_INNER_WIDTH}
                   height={220}
                   chartConfig={{
                     color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
@@ -1054,20 +1078,30 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
               {weeklyTrend.length > 0 ? (
                 <LineChart
                   data={trendChartData}
-                  width={CHART_WIDTH}
+                  width={CARD_INNER_WIDTH}
                   height={220}
                   chartConfig={{
                     backgroundColor: '#ffffff',
                     backgroundGradientFrom: '#ffffff',
                     backgroundGradientTo: '#ffffff',
                     decimalPlaces: 1,
-                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
                     labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
                     style: { borderRadius: 16 },
                     propsForDots: { r: '4', strokeWidth: '2', stroke: '#6366f1' },
+                    propsForBackgroundLines: {
+                      strokeDasharray: '5, 5',
+                      strokeWidth: 1,
+                      stroke: '#e2e8f0',
+                    },
                   }}
                   bezier
-                  style={styles.chart}
+                  withVerticalLines={false}
+                  withHorizontalLines={true}
+                  style={{
+                    ...styles.chart,
+                    paddingRight: 40,
+                  }}
                   yAxisLabel=""
                   yAxisSuffix="h"
                 />
@@ -1105,7 +1139,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
               {deptData.length > 0 ? (
                 <BarChart
                   data={deptChartData}
-                  width={CHART_WIDTH}
+                  width={CARD_INNER_WIDTH}
                   height={220}
                   chartConfig={{
                     backgroundColor: '#ffffff',
@@ -1115,9 +1149,17 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                     color: (opacity = 1, index = 0) => PALETTE[index % PALETTE.length],
                     labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
                     style: { borderRadius: 16 },
-                    barPercentage: 0.7,
+                    barPercentage: 0.6,
+                    propsForBackgroundLines: {
+                      strokeDasharray: '5, 5',
+                      strokeWidth: 1,
+                      stroke: '#e2e8f0',
+                    },
                   }}
-                  style={styles.chart}
+                  style={{
+                    ...styles.chart,
+                    paddingRight: 40,
+                  }}
                   fromZero
                   showValuesOnTopOfBars
                   withCustomBarColorFromData
@@ -1131,14 +1173,14 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
 
             {/* Detailed Employee Report Table */}
             <View style={styles.tableCard}>
-              <SectionHeader icon={FileText} title="Detailed Employee Report" color="#06b6d4" subtitle="Comprehensive breakdown of individual contributions" />
+              <SectionHeader icon={FileText} title="Detailed Staff Report" color="#06b6d4" subtitle="Comprehensive breakdown of individual contributions" />
               {filteredTsData.length === 0 ? (
-                <EmptyChart message="No employee data found for the selected filters" />
+                <EmptyChart message="No data found for the selected filters" />
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, styles.tableCellEmployee]}>Employee</Text>
+                      <Text style={[styles.tableHeaderCell, styles.tableCellEmployee]}>Staff Member</Text>
                       <Text style={[styles.tableHeaderCell, styles.tableCellDept]}>Department</Text>
                       <Text style={[styles.tableHeaderCell, styles.tableCellProject]}>Project</Text>
                       <Text style={[styles.tableHeaderCell, styles.tableCellHours]}>Hours</Text>
@@ -1161,22 +1203,26 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                           <Text style={[styles.tableCell, styles.tableCellProject]} numberOfLines={1}>
                             {row.project?.name || '—'}
                           </Text>
-                          <Text style={[styles.tableCell, styles.tableCellHours]}>
-                            <Text style={styles.hoursValue}>{row.totalHours?.toFixed(2)}</Text>
-                            <Text style={styles.hoursUnit}>h</Text>
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.viewButton}
-                            onPress={() => handleViewDetails(
-                              row._id?.userId || '',
-                              row._id?.projectId || '',
-                              row.user?.name || 'Unknown',
-                              row.project?.name || 'All Projects'
-                            )}
-                          >
-                            <Eye size={14} color="#06b6d4" />
-                            <Text style={styles.viewButtonText}>View</Text>
-                          </TouchableOpacity>
+                          <View style={styles.tableCellHours}>
+                            <Text style={styles.tableCell}>
+                              <Text style={styles.hoursValue}>{row.totalHours?.toFixed(2)}</Text>
+                              <Text style={styles.hoursUnit}>h</Text>
+                            </Text>
+                          </View>
+                          <View style={styles.tableCellAction}>
+                            <TouchableOpacity
+                              style={styles.viewButton}
+                              onPress={() => handleViewDetails(
+                                row._id?.userId || '',
+                                row._id?.projectId || '',
+                                row.user?.name || 'Unknown',
+                                row.project?.name || 'All Projects'
+                              )}
+                            >
+                              <Eye size={14} color="#06b6d4" />
+                              <Text style={styles.viewButtonText}>View</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       );
                     })}
@@ -1243,16 +1289,16 @@ const styles = StyleSheet.create({
   exportHeaderText: { color: 'white', fontWeight: '600', fontSize: 13 },
 
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginBottom: 20 },
-  kpiCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 14, 
-    backgroundColor: 'white', 
-    borderRadius: 16, 
-    padding: 16, 
-    borderWidth: 1, 
+  kpiCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
-    width: SCREEN_WIDTH > 600 ? (SCREEN_WIDTH - 44) / 2 : '100%' 
+    width: SCREEN_WIDTH > 600 ? (SCREEN_WIDTH - 44) / 2 : '100%'
   },
   kpiIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   kpiContent: { flex: 1 },
@@ -1272,7 +1318,7 @@ const styles = StyleSheet.create({
   insightBullet: { fontSize: 14, color: '#6366f1', lineHeight: 20 },
   insightText: { flex: 1, fontSize: 13, color: '#475569', lineHeight: 20 },
 
-  chartCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+  chartCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   sectionIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
@@ -1313,8 +1359,8 @@ const styles = StyleSheet.create({
   tableCellEmployee: { width: 140 },
   tableCellDept: { width: 100 },
   tableCellProject: { width: 120 },
-  tableCellHours: { width: 70, textAlign: 'right' },
-  tableCellAction: { width: 70, textAlign: 'center' },
+  tableCellHours: { width: 90, textAlign: 'right', justifyContent: 'center' },
+  tableCellAction: { width: 90, alignItems: 'center', justifyContent: 'center' },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   tableCell: { fontSize: 12, color: '#475569' },
   employeeAvatar: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#e0f2fe', alignItems: 'center', justifyContent: 'center', marginRight: 8 },

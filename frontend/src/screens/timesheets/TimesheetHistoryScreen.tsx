@@ -1,5 +1,5 @@
 // screens/timesheets/TimesheetHistoryScreen.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,7 @@ import {
   CheckCircle,
   XCircle as XCircleIcon,
   AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react-native';
 import { timesheetService, TimesheetHistoryItem } from '../../services/timesheet.service';
 import Layout from '../../components/common/Layout';
@@ -364,6 +365,112 @@ const ReportIssueModal = ({
   );
 };
 
+// Export Modal Component
+const ExportModal = memo(({
+  visible,
+  onClose,
+  onExport,
+  isExporting,
+  theme
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onExport: (format: 'csv' | 'excel') => void;
+  isExporting: boolean;
+  theme: 'light' | 'dark';
+}) => {
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'excel'>('csv');
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={exportModalStyles.overlay}>
+        <View style={[exportModalStyles.container, { backgroundColor: theme === 'dark' ? '#1e293b' : 'white' }]}>
+          <View style={[exportModalStyles.header, { borderBottomColor: theme === 'dark' ? '#334155' : '#e2e8f0' }]}>
+            <Download size={24} color="#6366f1" />
+            <Text style={[exportModalStyles.title, { color: theme === 'dark' ? 'white' : '#1e293b' }]}>Export Timesheets</Text>
+            <TouchableOpacity onPress={onClose} style={exportModalStyles.closeButton}>
+              <X size={20} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={exportModalStyles.content}>
+            <Text style={exportModalStyles.description}>
+              Export your timesheet history data to your device. The file will include week dates, total hours, projects worked on, and status information.
+            </Text>
+
+            <View style={exportModalStyles.formatSection}>
+              <Text style={[exportModalStyles.sectionTitle, { color: theme === 'dark' ? 'white' : '#1e293b' }]}>Select Format</Text>
+              <View style={exportModalStyles.formatOptions}>
+                <TouchableOpacity
+                  style={[
+                    exportModalStyles.formatOption,
+                    { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', borderColor: theme === 'dark' ? '#475569' : '#e2e8f0' },
+                    selectedFormat === 'csv' && exportModalStyles.formatOptionSelected
+                  ]}
+                  onPress={() => setSelectedFormat('csv')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'csv' ? '#6366f1' : '#64748b'} />
+                  <Text style={[
+                    exportModalStyles.formatText,
+                    selectedFormat === 'csv' && exportModalStyles.formatTextSelected
+                  ]}>CSV Format</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    exportModalStyles.formatOption,
+                    { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', borderColor: theme === 'dark' ? '#475569' : '#e2e8f0' },
+                    selectedFormat === 'excel' && exportModalStyles.formatOptionSelected
+                  ]}
+                  onPress={() => setSelectedFormat('excel')}
+                >
+                  <FileSpreadsheet size={20} color={selectedFormat === 'excel' ? '#6366f1' : '#64748b'} />
+                  <Text style={[
+                    exportModalStyles.formatText,
+                    selectedFormat === 'excel' && exportModalStyles.formatTextSelected
+                  ]}>Excel Format (.xls)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={[exportModalStyles.infoBox, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', borderColor: theme === 'dark' ? '#475569' : '#e2e8f0' }]}>
+              <AlertCircle size={14} color="#64748b" />
+              <Text style={exportModalStyles.infoText}>
+                Export will include your filtered timesheet history based on current selection.
+              </Text>
+            </View>
+          </View>
+
+          <View style={[exportModalStyles.footer, { borderTopColor: theme === 'dark' ? '#334155' : '#e2e8f0' }]}>
+            <TouchableOpacity style={[exportModalStyles.cancelButton, { backgroundColor: theme === 'dark' ? '#334155' : '#f1f5f9' }]} onPress={onClose}>
+              <Text style={exportModalStyles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[exportModalStyles.exportButton, isExporting && exportModalStyles.disabledButton]}
+              onPress={() => onExport(selectedFormat)}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <>
+                  <Download size={16} color="white" />
+                  <Text style={exportModalStyles.exportButtonText}>Export</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
 // Timesheet Card Component for List View
 const TimesheetCard = ({ 
   item, 
@@ -470,6 +577,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
   });
   const [search, setSearch] = useState('');
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [issueModalVisible, setIssueModalVisible] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
@@ -613,23 +721,126 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
     }
   };
 
-  const handleExportCSV = async () => {
-    setIsExporting(true);
+  const handleExport = async (formatType: 'csv' | 'excel') => {
     try {
-      const csvData = await timesheetService.exportHistory({
+      setIsExporting(true);
+      
+      // Fetch all historical data without pagination limit for export
+      const response = await timesheetService.getHistory({
+        limit: 10000,
         year: filters.year,
         month: filters.month,
-        status: filters.status === 'All Status' ? '' : filters.status
+        status: filters.status === 'All Status' ? '' : filters.status,
+        search: search.length >= 2 ? search : '',
       });
 
-      const fileName = `timesheet_history_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-      await exportFile(csvData as string, fileName, 'text/csv');
-    } catch (error) {
+      const allData = response.data || [];
+
+      if (!allData.length) {
+        Alert.alert('No Data', 'No timesheet history available to export.');
+        return;
+      }
+
+      const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
+      const fileName = formatType === 'csv' 
+        ? `timesheet_history_${timestamp}.csv` 
+        : `timesheet_history_${timestamp}.xls`;
+
+      const content = formatType === 'csv' 
+        ? convertToCSV(allData) 
+        : generateExcelHTML(allData);
+
+      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
+      setShowExportModal(false);
+    } catch (error: any) {
       console.error('Export failed:', error);
-      Alert.alert('Error', 'Failed to export CSV');
+      Alert.alert('Error', error.message || 'Failed to export timesheet history');
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const convertToCSV = (data: TimesheetHistoryItem[]): string => {
+    const headers = [
+      'Week Start Date',
+      'Week End Date',
+      'Total Hours',
+      'Status',
+      'Projects',
+      'Last Updated'
+    ];
+
+    const rows = data.map(item => {
+      const weekEndDate = new Date(new Date(item.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000);
+      const status = item.statuses.join(', ');
+      const projects = item.projects.join('; ');
+
+      return [
+        format(new Date(item.weekStartDate), 'yyyy-MM-dd'),
+        format(weekEndDate, 'yyyy-MM-dd'),
+        item.totalHours,
+        `"${status}"`,
+        `"${projects.replace(/"/g, '""')}"`,
+        format(new Date(item.lastUpdated), 'yyyy-MM-dd HH:mm:ss')
+      ].join(',');
+    });
+
+    return [headers.join(','), ...rows].join('\n');
+  };
+
+  const generateExcelHTML = (data: TimesheetHistoryItem[]): string => {
+    const headers = [
+      'Week Start Date', 'Week End Date', 'Total Hours', 'Status', 'Projects', 'Last Updated'
+    ];
+
+    const rows = data.map(item => {
+      const weekEndDate = new Date(new Date(item.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000);
+      const status = item.statuses.join(', ');
+      const projects = item.projects.join(', ');
+
+      return `
+        <tr>
+          <td>${format(new Date(item.weekStartDate), 'yyyy-MM-dd')}</td>
+          <td>${format(weekEndDate, 'yyyy-MM-dd')}</td>
+          <td>${item.totalHours}</td>
+          <td>${status}</td>
+          <td>${escapeHtml(projects)}</td>
+          <td>${format(new Date(item.lastUpdated), 'yyyy-MM-dd HH:mm:ss')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            table { border-collapse: collapse; width: 100%; }
+            th { background-color: #6366f1; color: white; padding: 10px; text-align: left; border: 1px solid #e2e8f0; }
+            td { padding: 8px; border: 1px solid #e2e8f0; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+          </style>
+        </head>
+        <body>
+          <h2>Timesheet History Report</h2>
+          <p>Generated on: ${format(new Date(), 'MMMM dd, yyyy HH:mm:ss')}</p>
+          <table>
+            <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+  };
+
+  const escapeHtml = (text: string): string => {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   };
 
   const getStatusColor = (status: string) => {
@@ -676,7 +887,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.exportButton}
-            onPress={handleExportCSV}
+            onPress={() => setShowExportModal(true)}
           >
             <Download size={18} color="#ffffff" />
           </TouchableOpacity>
@@ -799,6 +1010,14 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
           onClose={() => setIssueModalVisible(false)}
           timesheetId={selectedTimesheetId || ''}
           onSubmit={handleSubmitIssue}
+          theme={theme}
+        />
+
+        <ExportModal
+          visible={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+          isExporting={isExporting}
           theme={theme}
         />
       </ScrollView>
@@ -1291,5 +1510,135 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#ffffff',
+  },
+});
+
+const exportModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    width: '90%',
+    maxWidth: 400,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  title: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  content: {
+    padding: 20,
+  },
+  description: {
+    fontSize: 13,
+    color: '#64748b',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  formatSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 12,
+  },
+  formatOptions: {
+    gap: 8,
+  },
+  formatOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  formatOptionSelected: {
+    borderColor: '#6366f1',
+    backgroundColor: '#eef2ff',
+  },
+  formatText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  formatTextSelected: {
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#64748b',
+    lineHeight: 16,
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  exportButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#6366f1',
+  },
+  exportButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });

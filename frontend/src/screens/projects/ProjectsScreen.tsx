@@ -641,7 +641,12 @@ export default function ProjectsScreen() {
       const payload = {
         ...formData,
         code: formData.code.toUpperCase(),
-        allocatedEmployees: formData.allocatedEmployees.filter(emp => emp.userId),
+        allocatedEmployees: formData.allocatedEmployees
+          .filter(emp => emp.userId)
+          .map(emp => ({
+            ...emp,
+            userId: typeof emp.userId === 'object' ? (emp.userId as any)._id : emp.userId
+          })),
         endDate: formData.endDate || null,
       };
       await projectAPI.create(payload);
@@ -650,7 +655,9 @@ export default function ProjectsScreen() {
       resetForm();
       fetchProjects();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create project');
+      console.error('Project creation failed:', error, error.data);
+      const details = error.data?.message || JSON.stringify(error.data || error.response?.data || error);
+      Alert.alert('Error Details', `Msg: ${error.message}\nDetails: ${details}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -664,7 +671,12 @@ export default function ProjectsScreen() {
       const payload = {
         ...formData,
         code: formData.code.toUpperCase(),
-        allocatedEmployees: formData.allocatedEmployees.filter(emp => emp.userId),
+        allocatedEmployees: formData.allocatedEmployees
+          .filter(emp => emp.userId)
+          .map(emp => ({
+            ...emp,
+            userId: typeof emp.userId === 'object' ? (emp.userId as any)._id : emp.userId
+          })),
         endDate: formData.endDate || null,
       };
       await projectAPI.update(selectedProject._id, payload);
@@ -1047,12 +1059,12 @@ export default function ProjectsScreen() {
       }
 
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      const fileName = formatType === 'csv' 
-        ? `projects_export_${timestamp}.csv` 
+      const fileName = formatType === 'csv'
+        ? `projects_export_${timestamp}.csv`
         : `projects_export_${timestamp}.xls`;
 
-      const content = formatType === 'csv' 
-        ? convertToCSV(allProjectsData) 
+      const content = formatType === 'csv'
+        ? convertToCSV(allProjectsData)
         : generateExcelHTML(allProjectsData);
 
       await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
@@ -1101,13 +1113,7 @@ export default function ProjectsScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <PageHeader
-        title="Projects"
-        subtitle="Manage your active and past projects"
-        icon={FolderOpen}
-        iconColor="#ec4899"
-        iconBgColor="#fdf2f8"
-      />
+
 
       {/* Stats Row */}
       <View style={styles.statsContainer}>
@@ -1796,12 +1802,12 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
   statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 24, paddingHorizontal: 16 },
-  statCard: { 
-    flex: 1, 
-    borderRadius: 16, 
-    padding: 16, 
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 16,
     backgroundColor: 'white',
-    borderWidth: 1, 
+    borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

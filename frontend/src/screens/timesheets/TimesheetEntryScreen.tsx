@@ -33,14 +33,14 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react-native';
-import { 
-  timesheetAPI, 
-  projectAPI, 
-  settingsAPI, 
-  taskAPI, 
-  leaveAPI, 
-  calendarAPI, 
-  attendanceAPI 
+import {
+  timesheetAPI,
+  projectAPI,
+  settingsAPI,
+  taskAPI,
+  leaveAPI,
+  calendarAPI,
+  attendanceAPI
 } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
@@ -219,7 +219,7 @@ const TimesheetRow = ({
       {/* Day Hours */}
       {weekDays.map((day: Date, dayIdx: number) => {
         if (!isWorkingDay(day)) return null;
-        
+
         const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
         const isFutureDate = day.getTime() > new Date().setHours(23, 59, 59, 999);
         const isPendingCell = row.dayMeta?.[dayIdx]?.isPending;
@@ -413,7 +413,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [showRowLimitModal, setShowRowLimitModal] = useState(false);
   const [rowLimitMessage, setRowLimitMessage] = useState('');
-  
+
   // Dropdown states
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [showTaskPicker, setShowTaskPicker] = useState(false);
@@ -628,10 +628,10 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
       weekDays.forEach((day, i) => {
         const dayStr = format(day, 'yyyy-MM-dd');
-        const cur = new Date(day); cur.setHours(0,0,0,0);
-        const lStart = new Date(start); lStart.setHours(0,0,0,0);
-        const lEnd = new Date(end); lEnd.setHours(0,0,0,0);
-        
+        const cur = new Date(day); cur.setHours(0, 0, 0, 0);
+        const lStart = new Date(start); lStart.setHours(0, 0, 0, 0);
+        const lEnd = new Date(end); lEnd.setHours(0, 0, 0, 0);
+
         if (cur >= lStart && cur <= lEnd && cur.getDay() !== 0 && cur.getDay() !== 6) {
           leaveMetaArray[i] = {
             type: `${category} (${status === 'pending' ? 'Pending' : 'Approved'})`,
@@ -672,13 +672,13 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       Alert.alert('Error', 'Only one permission row is allowed per week.');
       return;
     }
-    setRows(prevRows => [...prevRows, { 
-      id: Date.now(), 
-      projectId: PERMISSION_ROW_MARKER, 
-      taskType: PERMISSION_ROW_MARKER, 
-      dayHours: Array(7).fill('00:00'), 
+    setRows(prevRows => [...prevRows, {
+      id: Date.now(),
+      projectId: PERMISSION_ROW_MARKER,
+      taskType: PERMISSION_ROW_MARKER,
+      dayHours: Array(7).fill('00:00'),
       dayMeta: Array(7).fill(null),
-      isLeaveRow: false 
+      isLeaveRow: false
     }]);
     setIsDirty(true);
   };
@@ -794,7 +794,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       Alert.alert('Error', 'Individual entry cannot exceed 24 hours');
       return;
     }
-    
+
     setRows(prevRows => prevRows.map(r => {
       if (r.id !== rowId || r.isLeaveRow) return r;
       const newHours = [...r.dayHours];
@@ -813,7 +813,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   const handleSelectProject = (projectId: string) => {
     if (currentRowId) {
       handleUpdateRow(currentRowId, { projectId, taskType: 'Select Task' });
-      
+
       // Update task options for this row
       const projectTasks = allTasks.filter((t: any) => (t.projectId?.id || t.projectId?._id || t.projectId) === projectId);
       const globalTasks = (taskCategories as string[]).filter((t: string) => !projectTasks.some((pt: any) => pt.name === t));
@@ -832,7 +832,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     }
     setCurrentRowId(rowId);
     setCurrentProjectId(projectId);
-    
+
     const projectTasks = allTasks.filter((t: any) => (t.projectId?.id || t.projectId?._id || t.projectId) === projectId);
     const globalTasks = (taskCategories as string[]).filter((t: string) => !projectTasks.some((pt: any) => pt.name === t));
     const options = [
@@ -926,13 +926,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          <PageHeader 
-            title="Timesheet Entry" 
-            subtitle="Log your daily activities and tasks"
-            icon={Clock}
-            iconColor="white" 
-            iconBgColor="#6366f1"
-          />
+
 
           <View style={styles.navContainer}>
             <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.navButton}>
@@ -945,8 +939,8 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
               </Text>
               <Text style={styles.weekNumber}>Week {getWeek(weekStart)}</Text>
             </View>
-            <TouchableOpacity 
-              onPress={() => handleWeekChange(1)} 
+            <TouchableOpacity
+              onPress={() => handleWeekChange(1)}
               disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
               style={[styles.navButton, isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 })) && styles.navButtonDisabled]}
             >
@@ -1045,7 +1039,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
               <Text style={styles.attendanceTitle}>Office Swipe Integration</Text>
             </View>
             <Text style={styles.attendanceText}>
-              {isAttendanceEnabled 
+              {isAttendanceEnabled
                 ? "Biometric attendance integration is active. Your swipe hours are automatically synced."
                 : "Attendance device integration is not configured. Contact your administrator."
               }
@@ -1105,7 +1099,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         isWeekSubmitted={isWeekSubmitted}
       />
       <RowLimitModal visible={showRowLimitModal} onClose={() => setShowRowLimitModal(false)} message={rowLimitMessage} />
-      
+
       {(isSaving || isSubmitting) && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#6366f1" />
@@ -1120,7 +1114,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   scrollView: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
-  
+
   navContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1138,14 +1132,14 @@ const styles = StyleSheet.create({
   weekInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   weekDate: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
   weekNumber: { fontSize: 11, color: '#64748b', marginLeft: 4 },
-  
+
   actionButtons: { flexDirection: 'row', gap: 12, marginHorizontal: 16, marginBottom: 16 },
   actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
   addButton: { backgroundColor: '#6366f1' },
   permissionButton: { backgroundColor: '#f59e0b' },
   saveButton: { backgroundColor: '#64748b' },
   actionButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
-  
+
   tableContainer: { marginHorizontal: 16, marginBottom: 16, backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   headerCell: { paddingVertical: 12, paddingHorizontal: 8, fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' },
@@ -1157,7 +1151,7 @@ const styles = StyleSheet.create({
   headerAction: { width: 50, textAlign: 'center' },
   dayName: { fontSize: 11, fontWeight: 'bold' },
   dayDate: { fontSize: 9, color: '#94a3b8' },
-  
+
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   permissionRow: { backgroundColor: '#fefce8' },
   cell: { paddingVertical: 10, paddingHorizontal: 8, justifyContent: 'center' },
@@ -1168,7 +1162,7 @@ const styles = StyleSheet.create({
   cellHour: { width: 80, alignItems: 'center' },
   cellTotal: { width: 70, alignItems: 'center' },
   cellAction: { width: 50, alignItems: 'center' },
-  
+
   selectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#f8fafc' },
   selectButtonText: { fontSize: 12, color: '#1e293b', flex: 1 },
   placeholderText: { color: '#94a3b8' },
@@ -1178,12 +1172,12 @@ const styles = StyleSheet.create({
   disabledText: { fontSize: 12, color: '#64748b' },
   leaveCell: { backgroundColor: '#ecfdf5', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#d1fae5' },
   leaveText: { fontSize: 12, fontWeight: '600', color: '#10b981' },
-  
+
   hourInputContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   hourInput: { width: 30, textAlign: 'center', fontSize: 13, fontWeight: '500', padding: 4, backgroundColor: 'transparent' },
   hourInputDisabled: { opacity: 0.5 },
   hourSeparator: { fontSize: 13, fontWeight: '500', color: '#64748b' },
-  
+
   cellNormal: { backgroundColor: '#f8fafc', borderRadius: 8 },
   cellDisabled: { backgroundColor: '#f1f5f9', borderRadius: 8, opacity: 0.5 },
   cellPending: { backgroundColor: '#fffbeb', borderRadius: 8, borderWidth: 1, borderColor: '#fef3c7' },
@@ -1193,19 +1187,19 @@ const styles = StyleSheet.create({
   cellLopApproved: { backgroundColor: '#fef2f2', borderRadius: 8, borderWidth: 1, borderColor: '#fee2e2' },
   lopText: { fontSize: 13, fontWeight: 'bold', color: '#ef4444' },
   leaveCellText: { fontSize: 8, marginTop: 2, textAlign: 'center' },
-  
+
   totalHours: { fontSize: 14, fontWeight: 'bold', color: '#1e293b' },
   leaveTotalHours: { color: '#10b981' },
-  
+
   footerStats: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   statsRow: { flexDirection: 'row', gap: 8 },
   statsLabel: { fontSize: 12, color: '#64748b' },
   statsValue: { fontSize: 12, fontWeight: 'bold', color: '#1e293b' },
-  
+
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#6366f1', marginHorizontal: 16, marginBottom: 16, paddingVertical: 14, borderRadius: 12 },
   submitButtonDisabled: { opacity: 0.5 },
   submitButtonText: { fontSize: 14, fontWeight: 'bold', color: 'white' },
-  
+
   attendanceCard: { marginHorizontal: 16, marginBottom: 20, padding: 16, backgroundColor: 'white', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   attendanceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   attendanceTitle: { fontSize: 13, fontWeight: 'bold', color: '#1e293b' },
@@ -1214,13 +1208,13 @@ const styles = StyleSheet.create({
   statusActive: { backgroundColor: '#ecfdf5' },
   statusInactive: { backgroundColor: '#fef2f2' },
   attendanceStatusText: { fontSize: 10, fontWeight: 'bold', color: '#10b981' },
-  
+
   summaryBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#f8fafc', borderRadius: 12, marginHorizontal: 16, marginBottom: 16 },
   summaryItem: { alignItems: 'center' },
   summaryLabel: { fontSize: 10, color: '#64748b', marginBottom: 4 },
   summaryValue: { fontSize: 14, fontWeight: 'bold', color: '#1e293b' },
   summaryDivider: { width: 1, height: 30, backgroundColor: '#e2e8f0' },
-  
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContainer: { backgroundColor: 'white', borderRadius: 24, width: '85%', maxWidth: 400, overflow: 'hidden' },
   dropdownModal: { backgroundColor: 'white', borderRadius: 24, width: '90%', maxHeight: '80%', overflow: 'hidden' },
@@ -1235,11 +1229,11 @@ const styles = StyleSheet.create({
   modalButtonSecondary: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f1f5f9' },
   modalButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
   modalButtonTextSecondary: { color: '#64748b' },
-  
+
   dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   dropdownOptionSelected: { backgroundColor: '#eff6ff' },
   dropdownOptionText: { fontSize: 15, color: '#1e293b' },
   dropdownOptionTextSelected: { color: '#6366f1', fontWeight: '600' },
-  
+
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
 });

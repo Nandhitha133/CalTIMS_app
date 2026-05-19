@@ -117,6 +117,8 @@ const styles = StyleSheet.create({
   pageButtonDisabled: { opacity: 0.5 },
   pageButtonText: { fontSize: 13, fontWeight: '600', color: '#3b82f6' },
   pageInfo: { fontSize: 13, color: '#64748b' },
+  errorText: { color: '#ef4444', fontSize: 12, marginTop: 4 },
+  filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1e293b' }
 });
 
 const exportModalStyles = StyleSheet.create({
@@ -390,15 +392,14 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
 
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
   const [showEmployeeIdDropdown, setShowEmployeeIdDropdown] = useState(false);
   const [dropdownContext, setDropdownContext] = useState<'create' | 'edit' | 'filter'>('create');
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [formData, setFormData] = useState<EmployeeForm>(INITIAL_FORM);
   const [editFormData, setEditFormData] = useState<EmployeeForm>(INITIAL_FORM);
-  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
-  const [editFormErrors, setEditFormErrors] = useState<Record<string, boolean>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [editFormErrors, setEditFormErrors] = useState<Record<string, string>>({});
 
   const [employees, setEmployees] = useState<User[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
@@ -484,21 +485,46 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const onRefresh = async () => { setRefreshing(true); await fetchEmployees(); setRefreshing(false); };
 
   const validateFields = (data: any, isEdit = false) => {
-    const errors: Record<string, boolean> = {};
-    if (!data.name?.trim()) errors.name = true;
-    if (!data.email?.trim() || !/\S+@\S+\.\S+/.test(data.email)) errors.email = true;
-    if (!isEdit && (!data.password || data.password.length < 8)) errors.password = true;
-    if (!data.department?.trim()) errors.department = true;
-    if (!data.designation?.trim()) errors.designation = true;
-    if (!data.phone?.trim() || data.phone.replace(/\D/g, '').length !== 10) errors.phone = true;
-    if (!data.joinDate) errors.joinDate = true;
-    if (!data.bankName?.trim()) errors.bankName = true;
-    if (!data.accountNumber?.trim()) errors.accountNumber = true;
-    if (!data.branchName?.trim()) errors.branchName = true;
-    if (!data.ifscCode?.trim()) errors.ifscCode = true;
-    if (!data.uan?.trim()) errors.uan = true;
-    if (!data.pan?.trim()) errors.pan = true;
-    if (!data.aadhaar?.trim()) errors.aadhaar = true;
+    const errors: Record<string, string> = {};
+    if (!data.name?.trim()) errors.name = 'Name is required';
+    else if (!/^[A-Za-z\s]+$/.test(data.name)) errors.name = 'Name should contain alphabets only';
+
+    if (!data.email?.trim()) errors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'Invalid email format';
+
+    if (!isEdit && (!data.password || data.password.length < 8)) errors.password = 'Password must be at least 8 characters';
+    if (isEdit && data.newPassword && data.newPassword.length < 8) errors.newPassword = 'Password must be at least 8 characters';
+
+    if (!data.department?.trim()) errors.department = 'Department is required';
+    if (!data.designation?.trim()) errors.designation = 'Designation is required';
+    
+    if (!data.phone?.trim()) errors.phone = 'Phone number is required';
+    else if (data.phone.length !== 10) errors.phone = 'Phone number must be exactly 10 digits';
+
+    if (!data.joinDate) errors.joinDate = 'Joining date is required';
+    else if (new Date(data.joinDate) > new Date()) errors.joinDate = 'Joining date cannot be in the future';
+
+    if (!data.bankName?.trim()) errors.bankName = 'Bank name is required';
+    else if (/\d/.test(data.bankName)) errors.bankName = 'Bank name cannot contain numbers';
+    
+    if (!data.accountNumber?.trim()) errors.accountNumber = 'Account number is required';
+    else if (data.accountNumber.length !== 16) errors.accountNumber = 'Invalid Account Number';
+
+    if (!data.branchName?.trim()) errors.branchName = 'Branch name is required';
+    else if (/\d/.test(data.branchName)) errors.branchName = 'Branch name cannot contain numbers';
+    
+    if (!data.ifscCode?.trim()) errors.ifscCode = 'IFSC code is required';
+    else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.ifscCode)) errors.ifscCode = 'Invalid IFSC code format';
+
+    if (!data.uan?.trim()) errors.uan = 'UAN is required';
+    else if (data.uan.length !== 12) errors.uan = 'UAN must be exactly 12 digits';
+
+    if (!data.pan?.trim()) errors.pan = 'PAN is required';
+    else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan)) errors.pan = 'Invalid PAN format';
+
+    if (!data.aadhaar?.trim()) errors.aadhaar = 'Aadhaar is required';
+    else if (data.aadhaar.length !== 12) errors.aadhaar = 'Aadhaar must be exactly 12 digits';
+
     return errors;
   };
 
@@ -523,7 +549,6 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const handleUpdateEmployee = async () => {
     if (!selectedEmployee) return;
     const errors = validateFields(editFormData, true);
-    if (editFormData.newPassword && editFormData.newPassword.length < 8) errors.newPassword = true;
     if (Object.keys(errors).length > 0) { setEditFormErrors(errors); Alert.alert('Error', 'Please fill all required fields correctly'); return; }
     setIsSubmitting(true);
     try {
@@ -691,12 +716,32 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const handleFormChange = (name: string, value: string, isEdit = false) => {
     let processedValue = value;
     if (['phone', 'accountNumber', 'uan', 'aadhaar'].includes(name)) processedValue = value.replace(/\D/g, '');
+    if (name === 'name') processedValue = value.replace(/[^A-Za-z\s]/g, '');
+    if (['bankName', 'branchName'].includes(name)) processedValue = value.replace(/\d/g, '');
+
+    const newData = isEdit ? { ...editFormData, [name]: processedValue } : { ...formData, [name]: processedValue };
+    
     if (isEdit) {
-      setEditFormData(prev => ({ ...prev, [name]: processedValue }));
-      if (editFormErrors[name]) setEditFormErrors(prev => { const up = { ...prev }; delete up[name]; return up; });
+      setEditFormData(newData);
     } else {
-      setFormData(prev => ({ ...prev, [name]: processedValue }));
-      if (formErrors[name]) setFormErrors(prev => { const up = { ...prev }; delete up[name]; return up; });
+      setFormData(newData);
+    }
+
+    const fieldErrors = validateFields(newData, isEdit);
+    if (isEdit) {
+      setEditFormErrors(prev => {
+        const up = { ...prev };
+        if (fieldErrors[name]) up[name] = fieldErrors[name];
+        else delete up[name];
+        return up;
+      });
+    } else {
+      setFormErrors(prev => {
+        const up = { ...prev };
+        if (fieldErrors[name]) up[name] = fieldErrors[name];
+        else delete up[name];
+        return up;
+      });
     }
   };
 
@@ -707,54 +752,119 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
 
   const renderEmployeeForm = (isEdit = false) => {
     const data = isEdit ? editFormData : formData;
+    const errors = isEdit ? editFormErrors : formErrors;
     const handleChange = (name: string, value: string) => handleFormChange(name, value, isEdit);
 
     return (
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={modalStyles.form}>
           <Text style={modalStyles.sectionTitle}>Basic Information</Text>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Full Name *</Text><TextInput style={modalStyles.input} placeholder="Enter full name" value={data.name} onChangeText={(text) => handleChange('name', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Email Address *</Text><TextInput style={modalStyles.input} placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" value={data.email} onChangeText={(text) => handleChange('email', text)} /></View>
+          
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Full Name *</Text>
+            <TextInput style={[modalStyles.input, errors.name ? { borderColor: '#ef4444' } : null]} placeholder="Enter full name" value={data.name} onChangeText={(text) => handleChange('name', text)} />
+            {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
+          </View>
+
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Email Address *</Text>
+            <TextInput style={[modalStyles.input, errors.email ? { borderColor: '#ef4444' } : null]} placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" value={data.email} onChangeText={(text) => handleChange('email', text)} />
+            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+          </View>
+
           {!isEdit ? (
-            <View style={modalStyles.field}><Text style={modalStyles.label}>Password *</Text><TextInput style={modalStyles.input} placeholder="Min 8 characters" secureTextEntry value={data.password} onChangeText={(text) => handleChange('password', text)} /></View>
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Password *</Text>
+              <TextInput style={[modalStyles.input, errors.password ? { borderColor: '#ef4444' } : null]} placeholder="Min 8 characters" secureTextEntry value={data.password} onChangeText={(text) => handleChange('password', text)} />
+              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+            </View>
           ) : (
-            <View style={modalStyles.field}><Text style={modalStyles.label}>Reset Password (Optional)</Text><TextInput style={modalStyles.input} placeholder="Min 8 characters" secureTextEntry value={data.newPassword} onChangeText={(text) => handleChange('newPassword', text)} /></View>
+            <View style={modalStyles.field}>
+              <Text style={modalStyles.label}>Reset Password (Optional)</Text>
+              <TextInput style={[modalStyles.input, errors.newPassword ? { borderColor: '#ef4444' } : null]} placeholder="Min 8 characters" secureTextEntry value={data.newPassword} onChangeText={(text) => handleChange('newPassword', text)} />
+              {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
+            </View>
           )}
+
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Role *</Text>
-            <TouchableOpacity style={modalStyles.selectButton} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowRoleDropdown(true); }}>
+            <TouchableOpacity style={[modalStyles.selectButton, errors.role ? { borderColor: '#ef4444' } : null]} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowRoleDropdown(true); }}>
               <Text style={[modalStyles.selectButtonText, !data.role && { color: '#94a3b8' }]}>{getRoleDisplayValue(data.role)}</Text>
               <ChevronDown size={16} color="#64748b" />
             </TouchableOpacity>
+            {errors.role ? <Text style={styles.errorText}>{errors.role}</Text> : null}
           </View>
+
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Department *</Text>
-            <TouchableOpacity style={modalStyles.selectButton} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowDepartmentDropdown(true); }}>
-              <Text style={[modalStyles.selectButtonText, !data.department && { color: '#94a3b8' }]}>{getDepartmentDisplayValue(data.department)}</Text>
-              <ChevronDown size={16} color="#64748b" />
-            </TouchableOpacity>
+            <TextInput style={[modalStyles.input, errors.department ? { borderColor: '#ef4444' } : null]} placeholder="Enter department" value={data.department} onChangeText={(text) => handleChange('department', text)} />
+            {errors.department ? <Text style={styles.errorText}>{errors.department}</Text> : null}
           </View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Designation *</Text><TextInput style={modalStyles.input} placeholder="e.g. Senior Developer" value={data.designation} onChangeText={(text) => handleChange('designation', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Phone Number *</Text><TextInput style={modalStyles.input} placeholder="10 digit number" keyboardType="phone-pad" maxLength={10} value={data.phone} onChangeText={(text) => handleChange('phone', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Employee ID</Text><TextInput style={modalStyles.input} placeholder="e.g. EMP001" value={data.employeeId} onChangeText={(text) => handleChange('employeeId', text)} /></View>
+
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Designation *</Text>
+            <TextInput style={[modalStyles.input, errors.designation ? { borderColor: '#ef4444' } : null]} placeholder="e.g. Senior Developer" value={data.designation} onChangeText={(text) => handleChange('designation', text)} />
+            {errors.designation ? <Text style={styles.errorText}>{errors.designation}</Text> : null}
+          </View>
+
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Phone Number *</Text>
+            <TextInput style={[modalStyles.input, errors.phone ? { borderColor: '#ef4444' } : null]} placeholder="10 digit number" keyboardType="phone-pad" maxLength={10} value={data.phone} onChangeText={(text) => handleChange('phone', text)} />
+            {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+          </View>
+
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Employee ID</Text>
+            <TextInput style={modalStyles.input} placeholder="e.g. EMP001" value={data.employeeId} onChangeText={(text) => handleChange('employeeId', text)} />
+          </View>
+
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Joining Date *</Text>
-            <TouchableOpacity style={modalStyles.selectButton} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowDatePicker(true); }}>
+            <TouchableOpacity style={[modalStyles.selectButton, errors.joinDate ? { borderColor: '#ef4444' } : null]} onPress={() => { setDropdownContext(isEdit ? 'edit' : 'create'); setShowDatePicker(true); }}>
               <Text style={[modalStyles.selectButtonText, !data.joinDate && { color: '#94a3b8' }]}>{formatDateString(data.joinDate)}</Text>
               <ChevronDown size={16} color="#64748b" />
             </TouchableOpacity>
+            {errors.joinDate ? <Text style={styles.errorText}>{errors.joinDate}</Text> : null}
           </View>
 
           <Text style={[modalStyles.sectionTitle, { marginTop: 12 }]}>Bank Details</Text>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Bank Name *</Text><TextInput style={modalStyles.input} placeholder="Enter bank name" value={data.bankName} onChangeText={(text) => handleChange('bankName', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Account Number *</Text><TextInput style={modalStyles.input} placeholder="Enter account number" keyboardType="numeric" value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Branch Name *</Text><TextInput style={modalStyles.input} placeholder="Enter branch name" value={data.branchName} onChangeText={(text) => handleChange('branchName', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>IFSC Code *</Text><TextInput style={modalStyles.input} placeholder="Enter IFSC code" autoCapitalize="characters" value={data.ifscCode} onChangeText={(text) => handleChange('ifscCode', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>UAN *</Text><TextInput style={modalStyles.input} placeholder="Enter UAN" keyboardType="numeric" value={data.uan} onChangeText={(text) => handleChange('uan', text)} /></View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Bank Name *</Text>
+            <TextInput style={[modalStyles.input, errors.bankName ? { borderColor: '#ef4444' } : null]} placeholder="Enter bank name" value={data.bankName} onChangeText={(text) => handleChange('bankName', text)} />
+            {errors.bankName ? <Text style={styles.errorText}>{errors.bankName}</Text> : null}
+          </View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Account Number *</Text>
+            <TextInput style={[modalStyles.input, errors.accountNumber ? { borderColor: '#ef4444' } : null]} placeholder="16 digit account number" keyboardType="numeric" maxLength={16} value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} />
+            {errors.accountNumber ? <Text style={styles.errorText}>{errors.accountNumber}</Text> : null}
+          </View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Branch Name *</Text>
+            <TextInput style={[modalStyles.input, errors.branchName ? { borderColor: '#ef4444' } : null]} placeholder="Enter branch name" value={data.branchName} onChangeText={(text) => handleChange('branchName', text)} />
+            {errors.branchName ? <Text style={styles.errorText}>{errors.branchName}</Text> : null}
+          </View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>IFSC Code *</Text>
+            <TextInput style={[modalStyles.input, errors.ifscCode ? { borderColor: '#ef4444' } : null]} placeholder="e.g. SBIN0001234" autoCapitalize="characters" maxLength={11} value={data.ifscCode} onChangeText={(text) => handleChange('ifscCode', text)} />
+            {errors.ifscCode ? <Text style={styles.errorText}>{errors.ifscCode}</Text> : null}
+          </View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>UAN *</Text>
+            <TextInput style={[modalStyles.input, errors.uan ? { borderColor: '#ef4444' } : null]} placeholder="12 digit UAN" keyboardType="numeric" maxLength={12} value={data.uan} onChangeText={(text) => handleChange('uan', text)} />
+            {errors.uan ? <Text style={styles.errorText}>{errors.uan}</Text> : null}
+          </View>
 
           <Text style={[modalStyles.sectionTitle, { marginTop: 12 }]}>Personal IDs</Text>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>PAN *</Text><TextInput style={modalStyles.input} placeholder="Enter PAN number" autoCapitalize="characters" value={data.pan} onChangeText={(text) => handleChange('pan', text)} /></View>
-          <View style={modalStyles.field}><Text style={modalStyles.label}>Aadhaar *</Text><TextInput style={modalStyles.input} placeholder="12 digit number" keyboardType="numeric" maxLength={12} value={data.aadhaar} onChangeText={(text) => handleChange('aadhaar', text)} /></View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>PAN *</Text>
+            <TextInput style={[modalStyles.input, errors.pan ? { borderColor: '#ef4444' } : null]} placeholder="e.g. ABCDE1234F" autoCapitalize="characters" maxLength={10} value={data.pan} onChangeText={(text) => handleChange('pan', text)} />
+            {errors.pan ? <Text style={styles.errorText}>{errors.pan}</Text> : null}
+          </View>
+          <View style={modalStyles.field}>
+            <Text style={modalStyles.label}>Aadhaar *</Text>
+            <TextInput style={[modalStyles.input, errors.aadhaar ? { borderColor: '#ef4444' } : null]} placeholder="12 digit number" keyboardType="numeric" maxLength={12} value={data.aadhaar} onChangeText={(text) => handleChange('aadhaar', text)} />
+            {errors.aadhaar ? <Text style={styles.errorText}>{errors.aadhaar}</Text> : null}
+          </View>
         </View>
       </ScrollView>
     );
@@ -806,10 +916,13 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
               </View>
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Department</Text>
-                <TouchableOpacity style={styles.filterSelectButton} onPress={() => { setDropdownContext('filter'); setShowDepartmentDropdown(true); }}>
-                  <Text style={[styles.filterSelectText, !tempFilters.department && styles.placeholderText]}>{tempFilters.department || 'All Departments'}</Text>
-                  <ChevronDown size={14} color="#64748b" />
-                </TouchableOpacity>
+                <TextInput 
+                  style={styles.filterInput} 
+                  placeholder="Type department..." 
+                  placeholderTextColor="#94a3b8" 
+                  value={tempFilters.department} 
+                  onChangeText={(text) => setTempFilters(prev => ({ ...prev, department: text }))} 
+                />
               </View>
               <View style={styles.filterRow}>
                 <View style={[styles.filterField, { flex: 1 }]}>
@@ -873,17 +986,16 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
       {/* Dropdown Modals */}
       <DropdownModal visible={showRoleDropdown} onClose={() => setShowRoleDropdown(false)} options={roleOptions} selectedValue={dropdownContext === 'create' ? formData.role : dropdownContext === 'edit' ? editFormData.role : dropdownContext === 'filter' ? tempFilters.role : ''} onSelect={(value) => { if (dropdownContext === 'create' || dropdownContext === 'edit') { const setter = dropdownContext === 'create' ? setFormData : setEditFormData; setter(prev => ({ ...prev, role: value })); } else if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, role: value })); }} title="Select Role" />
       <DropdownModal visible={showStatusDropdown} onClose={() => setShowStatusDropdown(false)} options={statusOptions} selectedValue={dropdownContext === 'filter' ? tempFilters.status : ''} onSelect={(value) => { if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, status: value })); }} title="Select Status" />
-      <DropdownModal visible={showDepartmentDropdown} onClose={() => setShowDepartmentDropdown(false)} options={departmentOptions} selectedValue={dropdownContext === 'create' ? formData.department : dropdownContext === 'edit' ? editFormData.department : dropdownContext === 'filter' ? tempFilters.department : ''} onSelect={(value) => { if (dropdownContext === 'create' || dropdownContext === 'edit') { const setter = dropdownContext === 'create' ? setFormData : setEditFormData; setter(prev => ({ ...prev, department: value })); } else if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, department: value })); }} title="Select Department" />
       <DropdownModal visible={showEmployeeIdDropdown} onClose={() => setShowEmployeeIdDropdown(false)} options={employeeIdOptions} selectedValue={dropdownContext === 'filter' ? tempFilters.employeeId : ''} onSelect={(value) => { if (dropdownContext === 'filter') setTempFilters(prev => ({ ...prev, employeeId: value })); }} title="Select Employee" />
 
       {/* Date Picker */}
-      {showDatePicker && <DateTimePicker value={new Date(dropdownContext === 'create' ? formData.joinDate : editFormData.joinDate)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, selectedDate) => { setShowDatePicker(false); if (selectedDate) { const formattedDate = format(selectedDate, 'yyyy-MM-dd'); if (dropdownContext === 'create') setFormData(prev => ({ ...prev, joinDate: formattedDate })); else setEditFormData(prev => ({ ...prev, joinDate: formattedDate })); } }} />}
+      {showDatePicker && <DateTimePicker maximumDate={new Date()} value={new Date(dropdownContext === 'create' ? formData.joinDate : editFormData.joinDate)} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, selectedDate) => { setShowDatePicker(false); if (selectedDate) { const formattedDate = format(selectedDate, 'yyyy-MM-dd'); if (dropdownContext === 'create') handleFormChange('joinDate', formattedDate, false); else handleFormChange('joinDate', formattedDate, true); } }} />}
 
       {/* Create Employee Modal */}
-      <Modal visible={showCreateModal} animationType="slide" transparent><View style={modalStyles.overlay}><View style={modalStyles.container}><View style={modalStyles.header}><Text style={modalStyles.title}>Add New Employee</Text><TouchableOpacity onPress={() => setShowCreateModal(false)}><X size={24} color="#64748b" /></TouchableOpacity></View>{renderEmployeeForm(false)}<View style={modalStyles.footer}><TouchableOpacity style={modalStyles.cancelButton} onPress={() => setShowCreateModal(false)}><Text style={modalStyles.cancelButtonText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[modalStyles.submitButton, isSubmitting && modalStyles.disabledButton]} onPress={handleCreateEmployee} disabled={isSubmitting}>{isSubmitting ? <ActivityIndicator color="white" size="small" /> : <><Save size={16} color="white" /><Text style={modalStyles.submitText}>Save Employee</Text></>}</TouchableOpacity></View></View></View></Modal>
+      <Modal visible={showCreateModal} animationType="slide" transparent><View style={modalStyles.overlay}><View style={modalStyles.container}><View style={modalStyles.header}><Text style={modalStyles.title}>Add New Employee</Text><TouchableOpacity onPress={() => setShowCreateModal(false)}><X size={24} color="#64748b" /></TouchableOpacity></View>{renderEmployeeForm(false)}<View style={modalStyles.footer}><TouchableOpacity style={modalStyles.cancelButton} onPress={() => setShowCreateModal(false)}><Text style={modalStyles.cancelButtonText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[modalStyles.submitButton, (Object.keys(validateFields(formData)).length > 0 || isSubmitting) && modalStyles.disabledButton]} onPress={handleCreateEmployee} disabled={Object.keys(validateFields(formData)).length > 0 || isSubmitting}>{isSubmitting ? <ActivityIndicator color="white" size="small" /> : <><Save size={16} color="white" /><Text style={modalStyles.submitText}>Save Employee</Text></>}</TouchableOpacity></View></View></View></Modal>
 
       {/* Edit Employee Modal */}
-      <Modal visible={showEditModal} animationType="slide" transparent><View style={modalStyles.overlay}><View style={modalStyles.container}><View style={modalStyles.header}><Text style={modalStyles.title}>Edit Employee</Text><TouchableOpacity onPress={() => setShowEditModal(false)}><X size={24} color="#64748b" /></TouchableOpacity></View>{renderEmployeeForm(true)}<View style={modalStyles.footer}><TouchableOpacity style={modalStyles.cancelButton} onPress={() => setShowEditModal(false)}><Text style={modalStyles.cancelButtonText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[modalStyles.submitButton, isSubmitting && modalStyles.disabledButton]} onPress={handleUpdateEmployee} disabled={isSubmitting}>{isSubmitting ? <ActivityIndicator color="white" size="small" /> : <><Save size={16} color="white" /><Text style={modalStyles.submitText}>Update Employee</Text></>}</TouchableOpacity></View></View></View></Modal>
+      <Modal visible={showEditModal} animationType="slide" transparent><View style={modalStyles.overlay}><View style={modalStyles.container}><View style={modalStyles.header}><Text style={modalStyles.title}>Edit Employee</Text><TouchableOpacity onPress={() => setShowEditModal(false)}><X size={24} color="#64748b" /></TouchableOpacity></View>{renderEmployeeForm(true)}<View style={modalStyles.footer}><TouchableOpacity style={modalStyles.cancelButton} onPress={() => setShowEditModal(false)}><Text style={modalStyles.cancelButtonText}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[modalStyles.submitButton, (Object.keys(validateFields(editFormData, true)).length > 0 || isSubmitting) && modalStyles.disabledButton]} onPress={handleUpdateEmployee} disabled={Object.keys(validateFields(editFormData, true)).length > 0 || isSubmitting}>{isSubmitting ? <ActivityIndicator color="white" size="small" /> : <><Save size={16} color="white" /><Text style={modalStyles.submitText}>Update Employee</Text></>}</TouchableOpacity></View></View></View></Modal>
 
       {/* View Employee Modal */}
       <Modal visible={showViewModal} animationType="slide" transparent>

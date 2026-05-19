@@ -1,7 +1,8 @@
 // src/screens/payroll/payrollFormatters.ts
-export const formatCurrency = (amount: number): string => {
-  if (amount === undefined || amount === null) return '0.00';
-  return amount.toLocaleString('en-IN', {
+export const formatCurrency = (amount: any): string => {
+  const num = typeof amount === 'number' ? amount : parseFloat(amount);
+  if (num === undefined || num === null || isNaN(num)) return '0.00';
+  return num.toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
