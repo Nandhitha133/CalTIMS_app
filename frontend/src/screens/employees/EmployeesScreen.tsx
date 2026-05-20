@@ -533,14 +533,28 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     if (Object.keys(errors).length > 0) { setFormErrors(errors); Alert.alert('Error', 'Please fill all required fields correctly'); return; }
     setIsSubmitting(true);
     try {
-      await userAPI.create(formData);
+      const payload: any = { ...formData };
+      delete payload.newPassword;
+      if (!payload.employeeId || payload.employeeId.trim() === '') {
+        delete payload.employeeId;
+      }
+      await userAPI.create(payload);
       Alert.alert('Success', 'Employee created successfully!');
       setShowCreateModal(false);
       setFormData(INITIAL_FORM);
       setFormErrors({});
       fetchEmployees();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to create employee');
+      const backendErrors = error.response?.data?.errors;
+      let errorMsg = error.response?.data?.message || 'Failed to create employee';
+      if (Array.isArray(backendErrors)) {
+        errorMsg += '\n' + backendErrors.map((err: any) => `${err.field}: ${err.message}`).join('\n');
+      } else if (error.response?.data) {
+        errorMsg += '\nDetails: ' + JSON.stringify(error.response.data);
+      } else {
+        errorMsg += '\nError message: ' + error.message;
+      }
+      Alert.alert('Error', errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -554,6 +568,9 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     try {
       const updateData: any = { ...editFormData };
       delete updateData.password; delete updateData.newPassword;
+      if (updateData.employeeId && updateData.employeeId.trim() === '') {
+        delete updateData.employeeId;
+      }
       await userAPI.update(selectedEmployee._id, updateData);
       if (editFormData.newPassword) await userAPI.resetPassword(selectedEmployee._id, editFormData.newPassword);
       Alert.alert('Success', 'Employee updated successfully!');
@@ -561,7 +578,16 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
       setSelectedEmployee(null);
       fetchEmployees();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to update employee');
+      const backendErrors = error.response?.data?.errors;
+      let errorMsg = error.response?.data?.message || 'Failed to update employee';
+      if (Array.isArray(backendErrors)) {
+        errorMsg += '\n' + backendErrors.map((err: any) => `${err.field}: ${err.message}`).join('\n');
+      } else if (error.response?.data) {
+        errorMsg += '\nDetails: ' + JSON.stringify(error.response.data);
+      } else {
+        errorMsg += '\nError message: ' + error.message;
+      }
+      Alert.alert('Error', errorMsg);
     } finally {
       setIsSubmitting(false);
     }

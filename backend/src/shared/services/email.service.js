@@ -123,8 +123,8 @@ function buildEmailHTML({ timesheets, reportTitle, companyName, generatedAt }) {
     <!-- Table -->
     <div style="padding:24px 40px">
       ${timesheets.length === 0
-        ? '<p style="text-align:center;color:#94a3b8;padding:40px 0">No records found for the selected period.</p>'
-        : `<table style="width:100%;border-collapse:collapse">
+      ? '<p style="text-align:center;color:#94a3b8;padding:40px 0">No records found for the selected period.</p>'
+      : `<table style="width:100%;border-collapse:collapse">
             <thead>
               <tr style="background:#f8fafc">
                 <th style="padding:10px 14px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Employee</th>
@@ -136,7 +136,7 @@ function buildEmailHTML({ timesheets, reportTitle, companyName, generatedAt }) {
             </thead>
             <tbody>${rows}</tbody>
           </table>`
-      }
+    }
     </div>
     <!-- Footer -->
     <div style="padding:20px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center">
@@ -265,15 +265,15 @@ const emailService = {
     const html = buildEmailHTML(data);
     const dateStr = new Date().toLocaleDateString('en-IN').replace(/\//g, '-');
     const filenameBase = `${data.reportTitle.replace(/[^a-z0-9]/gi, '_')}_${dateStr}`;
-    
+
     let attachments = [];
 
     if (format === 'PDF') {
-        const { buffer } = await emailService.buildReportPdf(reportType, companyName, projectIds);
-        attachments.push({ filename: `${filenameBase}.pdf`, content: buffer, contentType: 'application/pdf' });
+      const { buffer } = await emailService.buildReportPdf(reportType, companyName, projectIds);
+      attachments.push({ filename: `${filenameBase}.pdf`, content: buffer, contentType: 'application/pdf' });
     } else if (format === 'CSV' || format === 'Excel') {
-        const { buffer, ext, mime } = await emailService.buildReportCsv(reportType, companyName, projectIds, format);
-        attachments.push({ filename: `${filenameBase}.${ext}`, content: buffer, contentType: mime });
+      const { buffer, ext, mime } = await emailService.buildReportCsv(reportType, companyName, projectIds, format);
+      attachments.push({ filename: `${filenameBase}.${ext}`, content: buffer, contentType: mime });
     }
 
     await transporter.sendMail({
@@ -293,7 +293,7 @@ const emailService = {
   async sendPasswordReset(userEmail, userName, resetToken, companyName = 'CALTIMS') {
     const transporter = getTransporter();
     const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-    
+
     const html = buildResetPasswordHTML({
       resetLink,
       name: userName,
@@ -315,7 +315,7 @@ const emailService = {
    */
   async sendBudgetExceededEmail(recipientEmails, projectData, companyName = 'CALTIMS') {
     const transporter = getTransporter();
-    
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -421,9 +421,9 @@ const emailService = {
         doc.fillColor(colors.textMuted).text('No records found for the selected period.', 40, y + 30, { align: 'center', width: doc.page.width - 80 });
       } else {
         timesheets.forEach((ts, idx) => {
-          if (y > doc.page.height - 100) { 
-            doc.addPage(); 
-            y = 40; 
+          if (y > doc.page.height - 100) {
+            doc.addPage();
+            y = 40;
             // Repeat Header on new page
             doc.rect(40, y, doc.page.width - 80, 24).fill(colors.textMain);
             doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
@@ -433,7 +433,7 @@ const emailService = {
 
           const rowHeight = 35;
           doc.fillColor(idx % 2 === 0 ? colors.bg : '#ffffff').rect(40, y, doc.page.width - 80, rowHeight).fill();
-          
+
           const name = ts.userId?.name || 'Unknown';
           const empId = ts.userId?.employeeId || '';
           const dept = ts.userId?.department || '—';
@@ -444,14 +444,14 @@ const emailService = {
 
           doc.fillColor(colors.textMain).font('Helvetica-Bold').text(name, cols[0], y + 12, { width: cols[1] - cols[0] - 4 });
           doc.fillColor(colors.textMuted).font('Helvetica').fontSize(7).text(`#${empId}`, cols[0], y + 22);
-          
+
           doc.fillColor(colors.textMain).fontSize(9).text(dept, cols[1], y + 12, { width: cols[2] - cols[1] - 4 });
           doc.text(week, cols[2], y + 12, { width: cols[3] - cols[2] - 4 });
           doc.fillColor(colors.primary).font('Helvetica-Bold').text(hours, cols[3], y + 12, { width: cols[4] - cols[3] - 4 });
-          
+
           // Status tag
           doc.fillColor(statusColor).text(status.toUpperCase(), cols[4], y + 12, { width: 70 });
-          
+
           doc.moveTo(40, y + rowHeight).lineTo(doc.page.width - 40, y + rowHeight).strokeColor(colors.border).lineWidth(0.5).stroke();
           y += rowHeight;
         });
@@ -473,22 +473,22 @@ const emailService = {
     const { timesheets, reportTitle } = data;
 
     const csvData = timesheets.map(ts => ({
-        Employee: ts.userId?.name || 'Unknown',
-        EmployeeID: ts.userId?.employeeId || '',
-        Department: ts.userId?.department || '',
-        WeekStatus: ts.weekStartDate ? new Date(ts.weekStartDate).toLocaleDateString('en-IN') : '',
-        Hours: ts.totalHours ?? 0,
-        Status: ts.status ? ts.status.toUpperCase() : ''
+      Employee: ts.userId?.name || 'Unknown',
+      EmployeeID: ts.userId?.employeeId || '',
+      Department: ts.userId?.department || '',
+      WeekStatus: ts.weekStartDate ? new Date(ts.weekStartDate).toLocaleDateString('en-IN') : '',
+      Hours: ts.totalHours ?? 0,
+      Status: ts.status ? ts.status.toUpperCase() : ''
     }));
 
     const fields = ['Employee', 'EmployeeID', 'Department', 'WeekStatus', 'Hours', 'Status'];
     let csvString = '';
-    
+
     if (csvData.length > 0) {
-        const json2csvParser = new Parser({ fields });
-        csvString = json2csvParser.parse(csvData);
+      const json2csvParser = new Parser({ fields });
+      csvString = json2csvParser.parse(csvData);
     } else {
-        csvString = fields.join(',') + '\n'; // empty headers
+      csvString = fields.join(',') + '\n'; // empty headers
     }
 
     // if format is Excel, it is often useful to prepend BOM so excel opens UTF-8 properly
@@ -541,12 +541,12 @@ const emailService = {
    */
   async sendWelcomeEmail(recipientEmail, { name, password, portalLink, companyName = 'CALTIMS' }) {
     const transporter = getTransporter();
-    const html = buildWelcomeEmailHTML({ 
-      name, 
-      email: recipientEmail, 
-      password, 
-      portalLink, 
-      companyName 
+    const html = buildWelcomeEmailHTML({
+      name,
+      email: recipientEmail,
+      password,
+      portalLink,
+      companyName
     });
 
     await transporter.sendMail({
@@ -565,27 +565,27 @@ const emailService = {
   async sendPayslipEmail(recipientEmail, payroll, companyName = 'CALTIMS') {
     const transporter = getTransporter();
     const payslipService = require('../../modules/payroll/payslip.service');
-    
+
     try {
-        const buffer = await payslipService.generatePayslipBuffer(payroll);
-        const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
-        const fileName = `Payslip_${payroll.employeeInfo?.employeeId || 'NA'}_${monthName}_${payroll.year}.pdf`;
+      const buffer = await payslipService.generatePayslipBuffer(payroll);
+      const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
+      const fileName = `Payslip_${payroll.employeeInfo?.employeeId || 'NA'}_${monthName}_${payroll.year}.pdf`;
 
-        const html = _getPayslipEmailHtml(payroll, monthName, companyName);
+      const html = _getPayslipEmailHtml(payroll, monthName, companyName);
 
-        const info = await transporter.sendMail({
-          from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-          to: recipientEmail,
-          subject: `[${companyName}] Payslip for ${monthName} ${payroll.year}`,
-          html,
-          attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
-        });
+      const info = await transporter.sendMail({
+        from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+        to: recipientEmail,
+        subject: `[${companyName}] Payslip for ${monthName} ${payroll.year}`,
+        html,
+        attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
+      });
 
-        logger.info(`[EmailService] Payslip delivered to ${recipientEmail}: ID ${info.messageId}`);
-        return true;
+      logger.info(`[EmailService] Payslip delivered to ${recipientEmail}: ID ${info.messageId}`);
+      return true;
     } catch (err) {
-        logger.error(`[EmailService] Failed to send payslip to ${recipientEmail}: ${err.message}`, { stack: err.stack });
-        throw err; // bubble up for controller
+      logger.error(`[EmailService] Failed to send payslip to ${recipientEmail}: ${err.message}`, { stack: err.stack });
+      throw err; // bubble up for controller
     }
   },
 
@@ -597,39 +597,39 @@ const emailService = {
     const transporter = getTransporter();
     const pdfGeneratorService = require('../../modules/reports/pdfGenerator.service');
     const { getEnterprisePayslipHtml } = require('../../modules/payroll/payslip.template');
-    
+
     logger.info(`[EmailService] Initiating bulk dispatch for ${payrolls.length} employees`);
-    
+
     const results = { sent: 0, failed: 0, errors: [] };
 
     for (const item of payrolls) {
-        const { email, data } = item;
-        try {
-            const monthName = new Date(data.year, data.month - 1).toLocaleString('default', { month: 'long' });
-            
-            // Generate PDF buffer using PDFKit-based generator
-            const buffer = await pdfGeneratorService.generatePayslipBuffer(data);
+      const { email, data } = item;
+      try {
+        const monthName = new Date(data.year, data.month - 1).toLocaleString('default', { month: 'long' });
 
-            const fileName = `Payslip_${data.user?.employeeId || data.employeeInfo?.employeeId || 'NA'}_${monthName}_${data.year}.pdf`;
-            
-            // Get premium HTML body for email
-            const html = getEnterprisePayslipHtml(data, { organization: { companyName } });
+        // Generate PDF buffer using PDFKit-based generator
+        const buffer = await pdfGeneratorService.generatePayslipBuffer(data);
 
-            await transporter.sendMail({
-                from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-                to: email,
-                subject: `[${companyName}] Payslip for ${monthName} ${data.year}`,
-                html,
-                attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
-            });
+        const fileName = `Payslip_${data.user?.employeeId || data.employeeInfo?.employeeId || 'NA'}_${monthName}_${data.year}.pdf`;
 
-            results.sent++;
-            logger.debug(`[EmailService] Bulk dispatched: ${email}`);
-        } catch (err) {
-            results.failed++;
-            results.errors.push({ email, error: err.message });
-            logger.error(`[EmailService] Failed bulk dispatch for ${email}: ${err.message}`);
-        }
+        // Get premium HTML body for email
+        const html = getEnterprisePayslipHtml(data, { organization: { companyName } });
+
+        await transporter.sendMail({
+          from: `"${companyName}" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+          to: email,
+          subject: `[${companyName}] Payslip for ${monthName} ${data.year}`,
+          html,
+          attachments: [{ filename: fileName, content: buffer, contentType: 'application/pdf' }]
+        });
+
+        results.sent++;
+        logger.debug(`[EmailService] Bulk dispatched: ${email}`);
+      } catch (err) {
+        results.failed++;
+        results.errors.push({ email, error: err.message });
+        logger.error(`[EmailService] Failed bulk dispatch for ${email}: ${err.message}`);
+      }
     }
 
     return results;
@@ -641,16 +641,16 @@ const emailService = {
   async sendTrialReminder(recipientEmail, userName, daysLeft, companyName = 'CALTIMS') {
     const transporter = getTransporter();
     const isExpired = daysLeft === 0;
-    
+
     const title = isExpired ? 'Your Trial Has Expired' : `Trial Reminder: ${daysLeft} Days Left`;
-    const message = isExpired 
+    const message = isExpired
       ? `Hello ${userName}, your 28-day free trial of ${companyName} has expired. Please upgrade your plan to continue using our services.`
       : `Hello ${userName}, your free trial of ${companyName} will expire in ${daysLeft} days. Upgrade now to ensure uninterrupted access to your data.`;
-    
-    const html = buildNotificationHTML({ 
-      title, 
-      message, 
-      companyName, 
+
+    const html = buildNotificationHTML({
+      title,
+      message,
+      companyName,
       actionLink: `${process.env.CLIENT_URL}/settings?tab=subscription`,
       actionLabel: isExpired ? 'Upgrade Now' : 'View Plans'
     });

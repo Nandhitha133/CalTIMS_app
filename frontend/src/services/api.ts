@@ -105,7 +105,7 @@ class ApiService {
       }
 
       console.warn(`API Error [${response.status}] ${response.url}:`, errorMessage);
-      
+
       const error: any = new Error(errorMessage);
       error.status = response.status;
       error.data = errorData;
@@ -123,7 +123,7 @@ class ApiService {
     }
 
     if (contentType && (
-      contentType.includes('application/pdf') || 
+      contentType.includes('application/pdf') ||
       contentType.includes('application/vnd.ms-excel') ||
       contentType.includes('application/octet-stream')
     )) {

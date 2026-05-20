@@ -10,7 +10,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
-import { Sparkles, ArrowRight, X } from 'lucide-react-native';
+import { Sparkles, X } from 'lucide-react-native';
 import { apiService } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -164,15 +164,6 @@ export default function TrialBanner({ onClose, onUpgradePress }: TrialBannerProp
           </View>
 
           <View style={styles.rightSection}>
-            <TouchableOpacity
-              style={styles.upgradeButton}
-              onPress={handleUpgrade}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.upgradeText}>UPGRADE NOW</Text>
-              <ArrowRight size={14} color="#4f46e5" />
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.closeButton}
               onPress={handleClose}

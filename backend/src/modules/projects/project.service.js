@@ -27,9 +27,10 @@ const projectService = {
     const isManager = requestor.role === ROLES.MANAGER;
 
     if (assignedOnly || isEmployee || isManager) {
+      const targetUserId = query.userId || requestor._id;
       filter.$or = [
-        { managerId: requestor._id },
-        { 'allocatedEmployees.userId': requestor._id }
+        { managerId: targetUserId },
+        { 'allocatedEmployees.userId': targetUserId }
       ];
     }
 

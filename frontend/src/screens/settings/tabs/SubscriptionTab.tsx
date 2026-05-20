@@ -137,10 +137,11 @@ const UpgradeContactModal = ({ visible, onClose, plan, currencySymbol }: any) =>
 
     setSubmitting(true);
     try {
-      await api.post('/subscriptions/upgrade-request', {
-        ...formData,
-        plan: plan.name,
-        price: plan.price,
+      await api.post('/support/tickets', {
+        name: formData.name,
+        email: formData.email,
+        issueType: `Subscription Upgrade - ${plan.name}`,
+        message: `Plan: ${plan.name}\nPrice: ${currencySymbol}${plan.price}/user/month\nOrganization: ${formData.company || 'N/A'}\nPhone: ${formData.phone || 'N/A'}\n\nNotes:\n${formData.message}`,
       });
       setSubmitted(true);
     } catch (error: any) {

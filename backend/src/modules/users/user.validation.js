@@ -7,15 +7,16 @@ const createUserSchema = Joi.object({
   name: Joi.string().trim().max(100).required(),
   email: Joi.string().email().lowercase().trim().required(),
   password: Joi.string().min(8).required(),
+  newPassword: Joi.string().trim().allow(null, ''),
   role: Joi.string().valid(...Object.values(ROLES)).default('employee'),
-  department: Joi.string().trim().max(100),
-  designation: Joi.string().trim().max(100),
+  department: Joi.string().trim().max(100).allow(null, ''),
+  designation: Joi.string().trim().max(100).allow(null, ''),
   managerId: Joi.string().hex().length(24).allow(null, ''),
-  phone: Joi.string().trim().pattern(/^\d{10}$/).messages({
+  phone: Joi.string().trim().pattern(/^\d{10}$/).allow(null, '').messages({
     'string.pattern.base': 'Phone number must be exactly 10 digits',
   }),
-  employeeId: Joi.string().trim().max(50),
-  joinDate: Joi.date().iso(),
+  employeeId: Joi.string().trim().max(50).allow(null, ''),
+  joinDate: Joi.date().iso().allow(null, ''),
   bankName: Joi.string().trim().required(),
   accountNumber: Joi.string().trim().pattern(/^\d+$/).required().messages({
     'string.pattern.base': 'Account number must be numeric',
@@ -37,14 +38,14 @@ const createUserSchema = Joi.object({
 
 const updateUserSchema = Joi.object({
   name: Joi.string().trim().max(100),
-  department: Joi.string().trim().max(100),
-  designation: Joi.string().trim().max(100),
+  department: Joi.string().trim().max(100).allow(null, ''),
+  designation: Joi.string().trim().max(100).allow(null, ''),
   managerId: Joi.string().hex().length(24).allow(null, ''),
-  phone: Joi.string().trim().pattern(/^\d{10}$/).messages({
+  phone: Joi.string().trim().pattern(/^\d{10}$/).allow(null, '').messages({
     'string.pattern.base': 'Phone number must be exactly 10 digits',
   }),
-  employeeId: Joi.string().trim().max(50),
-  avatar: Joi.string().uri(),
+  employeeId: Joi.string().trim().max(50).allow(null, ''),
+  avatar: Joi.string().uri().allow(null, ''),
   role: Joi.string().valid(...Object.values(ROLES)),
   leaveBalance: Joi.object({
     annual: Joi.number().min(0),

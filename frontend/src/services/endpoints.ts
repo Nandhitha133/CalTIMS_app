@@ -361,6 +361,14 @@ export const supportService = {
   deleteTicket: (id: string) => 
     apiService.delete(`/support/tickets/${id}`),
 };
+// Add to your existing endpoints file
+export const projectAnalyticsAPI = {
+  analyzeProductivity: (projectId: string) => 
+    apiService.get(`/projects/${projectId}/analytics/productivity`),
+  
+  analyzeAICost: (projectId: string) => 
+    apiService.get(`/projects/${projectId}/analytics/cost`),
+};
 
 // ==================== EXPORTS ====================
 export default {

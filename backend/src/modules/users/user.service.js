@@ -60,21 +60,34 @@ const userService = {
     data.organizationId = organizationId;
     data.isOnboardingComplete = true;
 
-    // Automatically assign the "Employee" role if not provided
+    // Automatically assign the correct roleId based on the requested role name
     if (!data.roleId) {
       try {
         const Role = require('./role.model');
-        const defaultRole = await Role.findOne({ organizationId, name: /employee/i }).lean();
-        if (defaultRole) {
-          data.roleId = defaultRole._id;
-          data.role = data.role || ROLES.EMPLOYEE;
+        const roleNameQuery = data.role || ROLES.EMPLOYEE;
+        // Search for a role matching the requested role name (case-insensitive)
+        let matchedRole = await Role.findOne({ organizationId, name: new RegExp(`^${roleNameQuery}$`, 'i') }).lean();
+        
+        // If not found, try a looser match (e.g. name containing the role name)
+        if (!matchedRole) {
+          matchedRole = await Role.findOne({ organizationId, name: new RegExp(roleNameQuery, 'i') }).lean();
+        }
+        
+        // If still not found, search for "employee"
+        if (!matchedRole && roleNameQuery !== ROLES.EMPLOYEE) {
+          matchedRole = await Role.findOne({ organizationId, name: /employee/i }).lean();
+        }
+
+        // Final fallback: find any role in the organization
+        if (!matchedRole) {
+          matchedRole = await Role.findOne({ organizationId }).lean();
+        }
+
+        if (matchedRole) {
+          data.roleId = matchedRole._id;
+          data.role = data.role || (matchedRole.name.toLowerCase().includes('admin') ? ROLES.ADMIN : ROLES.EMPLOYEE);
         } else {
-          // Fallback to searching for ANY role if "Employee" name isn't found
-          const anyRole = await Role.findOne({ organizationId }).lean();
-          if (anyRole) {
-             data.roleId = anyRole._id;
-             data.role = anyRole.name.toLowerCase().includes('admin') ? ROLES.ADMIN : ROLES.EMPLOYEE;
-          }
+          data.role = data.role || ROLES.EMPLOYEE;
         }
       } catch (err) {
         console.error('Failed to assign default role:', err);

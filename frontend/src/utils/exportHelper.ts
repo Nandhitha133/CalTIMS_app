@@ -1,32 +1,33 @@
-import { Platform, PermissionsAndroid, Alert, Share } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, Share, NativeModules } from 'react-native';
 import RNFS from 'react-native-fs';
-import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+
+const { FileViewer } = NativeModules;
 
 /**
- * Helper to handle file exports across all modules
- * Uses data URIs to ensure full content is shared on both Android and iOS
- * without requiring additional native modules.
+ * Helper to handle file exports across all modules.
+ * Saves the file directly to the device Downloads folder on Android,
+ * and allows immediate viewing/opening using default document viewers!
  */
 export async function exportFile(
   content: string,
   fileName: string,
-  fileType: 'text/csv' | 'application/pdf' | 'application/vnd.ms-excel',
+  fileType: string,
   isBase64: boolean = false
 ): Promise<boolean> {
-  console.log(`[exportFile] Exporting ${fileName} (Type: ${fileType}, isBase64: ${isBase64}, Length: ${content?.length || 0})`);
+  console.log(`[exportFile] Starting export for: ${fileName} (Type: ${fileType}, isBase64: ${isBase64})`);
+
   if (!content || content.length === 0) {
-    Alert.alert('Export Failed', 'The report content is empty. Please check your data.');
+    Alert.alert('Export Failed', 'The report content is empty.');
     return false;
   }
 
   try {
-    // 0. Handle Web Export
-    if (Platform.OS === 'web') {
-      const globalAny = globalThis as any;
-      let blob: any;
-      
+    // 1. Web browser fallback (if running in a web platform context)
+    const globalAny = globalThis as any;
+    if (Platform.OS === 'web' && globalAny.document) {
+      console.log('[exportFile] Web environment detected. Triggering browser download.');
+      let blob;
       if (isBase64) {
-        // Convert base64 to blob
         const byteCharacters = globalAny.atob(content);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
@@ -37,7 +38,7 @@ export async function exportFile(
       } else {
         blob = new globalAny.Blob([content], { type: fileType });
       }
-      
+
       const url = globalAny.URL.createObjectURL(blob);
       const link = globalAny.document.createElement('a');
       link.href = url;
@@ -47,65 +48,125 @@ export async function exportFile(
       return true;
     }
 
-    // 1. Request Permissions for Android (only for older versions)
-    if (Platform.OS === 'android' && Platform.Version < 33) {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
-      );
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        Alert.alert('Permission Denied', 'Storage permission is required.');
+    // 2. Android flow
+    if (Platform.OS === 'android') {
+      const downloadPath = `${RNFS.ExternalStorageDirectoryPath}/Download/${fileName}`;
+
+      // Request standard storage permission for Android 9 or below
+      if (Platform.Version < 29) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Storage permission is required to save the report.');
+          return false;
+        }
+      }
+
+      try {
+        console.log(`[exportFile] Trying direct write to Downloads folder: ${downloadPath}`);
+        if (isBase64) {
+          await RNFS.writeFile(downloadPath, content, 'base64');
+        } else {
+          await RNFS.writeFile(downloadPath, content, 'utf8');
+        }
+
+        try {
+          await RNFS.scanFile(downloadPath);
+        } catch (e) {
+          console.warn('[exportFile] Scan file failed', e);
+        }
+
+        Alert.alert(
+          'Download Complete',
+          `File has been saved successfully to your Downloads folder:\n\n${fileName}`,
+          [
+            { text: 'OK' },
+            {
+              text: 'Open File',
+              onPress: async () => {
+                try {
+                  await FileViewer.openFile(downloadPath, fileType);
+                } catch (openErr) {
+                  Alert.alert('Error', 'No application found to open this file. You can open it from your device Downloads folder.');
+                }
+              }
+            }
+          ]
+        );
+        return true;
+      } catch (writeError: any) {
+        console.warn('[exportFile] Direct write to Downloads failed:', writeError);
+
+        // Android 11+ Scoped Storage fallback: Ask to go to Settings or write to Cache and open
+        Alert.alert(
+          'Storage Access Required',
+          `To save files directly to your "Download" folder, CALTIMS requires "All Files Access".\n\nWould you like to enable this in Settings, or download it to Cache and Open it instead?`,
+          [
+            {
+              text: ' Open',
+              onPress: async () => {
+                try {
+                  const cachePath = Platform.OS === 'android' && RNFS.ExternalCachesDirectoryPath
+                    ? `${RNFS.ExternalCachesDirectoryPath}/${fileName}`
+                    : `${RNFS.CachesDirectoryPath}/${fileName}`;
+                  if (isBase64) {
+                    await RNFS.writeFile(cachePath, content, 'base64');
+                  } else {
+                    await RNFS.writeFile(cachePath, content, 'utf8');
+                  }
+
+                  Alert.alert(
+                    'Download Complete',
+                    `File downloaded to secure Cache storage.\n\nWould you like to open it now?`,
+                    [
+                      { text: 'Cancel' },
+                      {
+                        text: 'Open File',
+                        onPress: async () => {
+                          try {
+                            await FileViewer.openFile(cachePath, fileType);
+                          } catch (openErr) {
+                            Alert.alert('Error', 'No application found to open this file.');
+                          }
+                        }
+                      }
+                    ]
+                  );
+                } catch (e) {
+                  Alert.alert('Error', 'Failed to save file to Cache.');
+                }
+              }
+            },
+            {
+              text: 'Go to Settings',
+              onPress: async () => {
+                const { Linking } = require('react-native');
+                try {
+                  await Linking.openSettings();
+                } catch (e) {
+                  Alert.alert('Error', 'Could not open settings page.');
+                }
+              }
+            }
+          ]
+        );
         return false;
       }
     }
 
-    // 2. Determine paths
-    const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
-    const downloadPath = Platform.OS === 'android' 
-      ? `${RNFS.ExternalStorageDirectoryPath}/Download/${fileName}`
-      : `${RNFS.DocumentDirectoryPath}/${fileName}`;
-
-    const targetPath = Platform.OS === 'android' ? downloadPath : cachePath;
-
-    // 3. Write file
-    console.log(`[exportFile] Writing to: ${targetPath}`);
-    if (isBase64) {
-      await RNFS.writeFile(targetPath, content, 'base64');
-    } else {
-      await RNFS.writeFile(targetPath, content, 'utf8');
-    }
-
-    // 4. Handle Android Download Notification/Indexing
-    if (Platform.OS === 'android') {
-      try {
-        await RNFS.scanFile(targetPath);
-        console.log('[exportFile] File scanned successfully');
-      } catch (e) {
-        console.warn('[exportFile] Scan file failed', e);
-      }
-      
-      Alert.alert(
-        'Download Complete',
-        `File has been saved to your Downloads folder:\n\n${fileName}`,
-        [
-          { text: 'OK' },
-          { 
-            text: 'Share', 
-            onPress: async () => {
-              const base64 = isBase64 ? content : await RNFS.readFile(targetPath, 'base64');
-              const dataUri = `data:${fileType};base64,${base64.replace(/\s/g, '')}`;
-              Share.share({ title: fileName, message: dataUri, url: dataUri });
-            }
-          }
-        ]
-      );
-      return true;
-    }
-
-    // 5. iOS Sharing (Works well with file:// URIs)
+    // 3. iOS flow
     if (Platform.OS === 'ios') {
+      const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+      if (isBase64) {
+        await RNFS.writeFile(cachePath, content, 'base64');
+      } else {
+        await RNFS.writeFile(cachePath, content, 'utf8');
+      }
+
       const shareResult = await Share.share({
         title: fileName,
-        url: `file://${targetPath}`,
+        url: `file://${cachePath}`,
       });
       return shareResult.action === Share.sharedAction;
     }
@@ -113,29 +174,8 @@ export async function exportFile(
     return true;
   } catch (error: any) {
     console.error('Export error:', error);
-    
-    // Fallback: If public directory fails, try cache directory
-    if (Platform.OS !== 'web') {
-      try {
-        const fallbackPath = `${RNFS.CachesDirectoryPath}/${fileName}`;
-        if (isBase64) {
-          await RNFS.writeFile(fallbackPath, content, 'base64');
-        } else {
-          await RNFS.writeFile(fallbackPath, content, 'utf8');
-        }
-        
-        const base64 = isBase64 ? content : await RNFS.readFile(fallbackPath, 'base64');
-        const dataUri = `data:${fileType};base64,${base64.replace(/\s/g, '')}`;
-        await Share.share({ title: fileName, message: dataUri, url: dataUri });
-        return true;
-      } catch (innerError) {
-        Alert.alert('Export Failed', 'An error occurred while saving the file.');
-        return false;
-      }
-    } else {
-      Alert.alert('Export Failed', 'An error occurred during download.');
-      return false;
-    }
+    Alert.alert('Export Failed', 'An error occurred while saving the file.');
+    return false;
   }
 }
 
@@ -145,9 +185,11 @@ export async function exportFile(
 export async function requestStoragePermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
     try {
-      if (Platform.Version >= 33) return true;
-      const result = await request(PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE);
-      return result === RESULTS.GRANTED;
+      if (Platform.Version >= 29) return true;
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (error) {
       return false;
     }

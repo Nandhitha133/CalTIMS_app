@@ -23,6 +23,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Briefcase,
   Edit3,
   X,
   Save,
@@ -33,6 +35,7 @@ import {
   Trash2,
   Filter,
   CheckCircle,
+  CheckCircle2,
   Clock,
 } from 'lucide-react-native';
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI } from '../../services/endpoints';

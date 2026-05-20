@@ -20,7 +20,7 @@ const authController = {
       { email: publicUser.email, role: publicUser.role },
       'SUCCESS',
       req.ip
-    ).catch(() => {});
+    ).catch(() => { });
 
     ApiResponse.success(res, {
       message: 'Login successful',
@@ -31,7 +31,7 @@ const authController = {
   socialLogin: asyncHandler(async (req, res) => {
     const user = await authService.socialLogin({ ...req.body, req });
     const { accessToken, refreshToken, user: publicUser } = await authService.generateTokensForUser(user, req);
-    
+
     ApiResponse.success(res, {
       message: user.isNew ? 'Account created successfully' : 'Login successful',
       data: { accessToken, refreshToken, user: publicUser },
@@ -40,7 +40,7 @@ const authController = {
 
   completeOnboarding: asyncHandler(async (req, res) => {
     const user = await authService.completeOnboarding(req.user._id, { ...req.body, req });
-    
+
     ApiResponse.success(res, {
       message: 'Onboarding completed successfully',
       data: { user: user.toPublicJSON() },
@@ -79,7 +79,7 @@ const authController = {
         {},
         'SUCCESS',
         req.ip
-      ).catch(() => {});
+      ).catch(() => { });
     }
     await authService.logout(req.user._id);
     ApiResponse.success(res, { message: 'Logged out successfully' });
@@ -87,7 +87,7 @@ const authController = {
 
   changePassword: asyncHandler(async (req, res) => {
     await authService.changePassword(req.user._id, req.body);
-    auditService.log(req.user._id, 'CHANGE_PASSWORD', 'Auth', req.user._id, {}, 'SUCCESS', req.ip).catch(() => {});
+    auditService.log(req.user._id, 'CHANGE_PASSWORD', 'Auth', req.user._id, {}, 'SUCCESS', req.ip).catch(() => { });
     ApiResponse.success(res, { message: 'Password changed successfully. Please log in again.' });
   }),
 
@@ -105,7 +105,7 @@ const authController = {
   googleCallback: asyncHandler(async (req, res) => {
     // passport.authenticate already attached the user document to req.user
     const { accessToken, refreshToken, user } = await authService.generateTokensForUser(req.user, req);
-    
+
     // Parse state if it exists
     let platform = 'web';
     if (req.query.state) {
@@ -127,14 +127,14 @@ const authController = {
       const targetPath = user.organizationId ? '/dashboard' : '/onboarding';
       redirectUrl = `${clientUrl}${targetPath}?token=${accessToken}&refreshToken=${refreshToken}`;
     }
-    
+
     res.redirect(redirectUrl);
   }),
 
   microsoftCallback: asyncHandler(async (req, res) => {
     // passport.authenticate already attached the user document to req.user
     const { accessToken, refreshToken, user } = await authService.generateTokensForUser(req.user, req);
-    
+
     // Parse state if it exists
     let platform = 'web';
     if (req.query.state) {
@@ -156,7 +156,7 @@ const authController = {
       const targetPath = user.organizationId ? '/dashboard' : '/onboarding';
       redirectUrl = `${clientUrl}${targetPath}?token=${accessToken}&refreshToken=${refreshToken}`;
     }
-    
+
     res.redirect(redirectUrl);
   }),
 };
