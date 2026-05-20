@@ -132,30 +132,52 @@ const ActionBadge = memo(({ action }: { action: string }) => {
   );
 });
 
-const AuditLogCard = memo(({ log, onPress }: { log: AuditLog; onPress: () => void }) => (
-  <TouchableOpacity style={styles.logCard} onPress={onPress} activeOpacity={0.7}>
-    <View style={styles.cardHeader}>
-      <ActionBadge action={log.action} />
-      <StatusBadge status={log.status} />
-    </View>
-    <View style={styles.cardBody}>
-      <View style={styles.userInfo}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{(log.performedBy?.name || 'S').charAt(0).toUpperCase()}</Text>
+const AuditLogCard = memo(({ log, onPress }: { log: AuditLog; onPress: () => void }) => {
+  const initial = (log.performedBy?.name || 'System').charAt(0).toUpperCase();
+
+  return (
+    <TouchableOpacity style={styles.logCard} onPress={onPress} activeOpacity={0.7}>
+      {/* Header */}
+      <View style={styles.cardHeader}>
+        <View style={styles.employeeInfo}>
+          <View style={styles.employeeAvatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.employeeName}>{log.performedBy?.name || 'System'}</Text>
+            <Text style={styles.employeeId}>{log.role}</Text>
+          </View>
         </View>
-        <View>
-          <Text style={styles.userName}>{log.performedBy?.name || 'System'}</Text>
-          <Text style={styles.userRole}>{log.role}</Text>
+        <StatusBadge status={log.status} />
+      </View>
+
+      {/* Details */}
+      <View style={styles.cardContent}>
+        <View style={styles.actionContainer}>
+          <ActionBadge action={log.action} />
+        </View>
+        <View style={styles.cardDetails}>
+          <View style={styles.detailItem}>
+            <LayoutIcon size={14} color="#64748b" />
+            <Text style={styles.detailText}>{log.entity || '—'}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Clock size={14} color="#64748b" />
+            <Text style={styles.detailText}>{log.createdAt ? format(new Date(log.createdAt), 'MMM d, h:mm a') : '—'}</Text>
+          </View>
         </View>
       </View>
-      <View style={styles.cardDetails}>
-        <View style={styles.detailItem}><LayoutIcon size={14} color="#64748b" /><Text style={styles.detailText}>{log.entity || '—'}</Text></View>
-        <View style={styles.detailItem}><Clock size={14} color="#64748b" /><Text style={styles.detailText}>{log.createdAt ? format(new Date(log.createdAt), 'MMM d, h:mm a') : '—'}</Text></View>
+
+      {/* Footer */}
+      <View style={styles.cardFooter}>
+        <View style={styles.footerLeft} />
+        <View style={[styles.actionBtn, { backgroundColor: '#f1f5f9' }]}>
+          <ChevronRight size={16} color="#64748b" />
+        </View>
       </View>
-    </View>
-    <View style={styles.cardFooter}><ChevronRight size={16} color="#94a3b8" /></View>
-  </TouchableOpacity>
-));
+    </TouchableOpacity>
+  );
+});
 
 const DetailModal = memo(({ visible, log, onClose, onExport }: any) => {
   if (!log) return null;
@@ -569,18 +591,84 @@ const styles = StyleSheet.create({
   filterClearText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
   filterApply: { flex: 2, paddingVertical: 10, backgroundColor: '#6366f1', borderRadius: 10, alignItems: 'center' },
   filterApplyText: { fontSize: 13, fontWeight: '600', color: 'white' },
-  logCard: { backgroundColor: 'white', borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 16 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cardBody: { gap: 12 },
-  userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontWeight: '700', color: '#6366f1' },
-  userName: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
-  userRole: { fontSize: 11, color: '#64748b' },
-  cardDetails: { flexDirection: 'row', gap: 16 },
+  logCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    marginBottom: 12, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  employeeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  employeeAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4f46e5',
+  },
+  employeeName: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
+  employeeId: { fontSize: 11, color: '#64748b', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  cardContent: {
+    padding: 16,
+    gap: 12,
+  },
+  actionContainer: {
+    flexDirection: 'row',
+  },
+  cardDetails: { flexDirection: 'row', gap: 16, flexWrap: 'wrap' },
   detailItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   detailText: { fontSize: 12, color: '#475569' },
-  cardFooter: { alignItems: 'flex-end', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#fafafa',
+  },
+  footerLeft: {
+    flex: 1,
+  },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 10, fontWeight: '600' },
   actionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },

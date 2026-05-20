@@ -86,10 +86,12 @@ interface Stats {
 
 // Stat Card Component
 const StatCard = ({ title, value, icon: Icon, color, bgColor, onPress }: any) => (
-  <TouchableOpacity style={[styles.statCard, { backgroundColor: bgColor }]} onPress={onPress} activeOpacity={0.7}>
-    <Icon size={20} color={color} />
-    <Text style={[styles.statValue, { color }]}>{value}</Text>
-    <Text style={styles.statLabel}>{title}</Text>
+  <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>
+    <View style={[styles.statIconContainer, { backgroundColor: bgColor }]}>
+      <Icon size={20} color={color} />
+    </View>
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{title.toUpperCase()}</Text>
   </TouchableOpacity>
 );
 
@@ -110,89 +112,91 @@ const LeaveRequestCard = ({
   isRejecting: boolean;
 }) => {
   const isPending = leave.status === 'pending';
+  const employeeName = leave.userId?.name || 'Unknown';
+  const initial = employeeName.charAt(0).toUpperCase();
 
   return (
     <View style={styles.requestCard}>
-      <View style={styles.requestHeader}>
-        <View>
-          <Text style={styles.employeeName}>{leave.userId?.name}</Text>
-          <Text style={styles.employeeId}>ID: {leave.userId?.employeeId || '—'}</Text>
+      {/* Header */}
+      <View style={styles.cardHeader}>
+        <View style={styles.requestCardEmployeeInfo}>
+          <View style={styles.requestCardEmployeeAvatar}>
+            <Text style={styles.requestCardAvatarText}>{initial}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.employeeName}>{employeeName}</Text>
+            <Text style={styles.employeeId}>ID: {leave.userId?.employeeId || '—'}</Text>
+          </View>
         </View>
         <StatusBadge status={leave.status} />
       </View>
 
-      <View style={styles.requestInfo}>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Leave Type</Text>
-          <Text style={[styles.infoValue, styles.capitalize]}>{leave.leaveType}</Text>
+      {/* Details */}
+      <View style={styles.cardContent}>
+        <View style={styles.requestInfoGrid}>
+          <View style={styles.infoGridItem}>
+            <Text style={styles.infoLabel}>Leave Type</Text>
+            <Text style={[styles.infoValue, styles.capitalize]}>{leave.leaveType}</Text>
+          </View>
+          <View style={styles.infoGridItem}>
+            <Text style={styles.infoLabel}>Leave ID</Text>
+            <Text style={[styles.infoValue, styles.mono]}>{leave.leaveId}</Text>
+          </View>
+          <View style={styles.infoGridItem}>
+            <Text style={styles.infoLabel}>Duration</Text>
+            <Text style={styles.infoValue}>{leave.totalDays} day(s)</Text>
+          </View>
+          <View style={styles.infoGridItem}>
+            <Text style={styles.infoLabel}>Dates</Text>
+            <Text style={styles.infoValue}>
+              {format(new Date(leave.startDate), 'MMM d')} - {format(new Date(leave.endDate), 'MMM d, yyyy')}
+            </Text>
+          </View>
         </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Leave ID</Text>
-          <Text style={[styles.infoValue, styles.mono]}>{leave.leaveId}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Duration</Text>
-          <Text style={styles.infoValue}>{leave.totalDays} day(s)</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>From</Text>
-          <Text style={styles.infoValue}>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>To</Text>
-          <Text style={styles.infoValue}>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Applied On</Text>
-          <Text style={styles.infoValue}>{format(new Date(leave.createdAt), 'MMM dd, yyyy')}</Text>
-        </View>
+
+        {leave.reason && (
+          <View style={styles.reasonBox}>
+            <Text style={styles.reasonLabel}>Reason</Text>
+            <Text style={styles.reasonText}>{leave.reason}</Text>
+          </View>
+        )}
       </View>
 
-      {leave.reason && (
-        <View style={styles.reasonBox}>
-          <Text style={styles.reasonLabel}>Reason</Text>
-          <Text style={styles.reasonText}>{leave.reason}</Text>
-        </View>
-      )}
-
+      {/* Footer */}
       <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.viewButton} onPress={onView}>
-          <Eye size={16} color="#64748b" />
-          <Text style={styles.viewButtonText}>View</Text>
-        </TouchableOpacity>
+        <View style={styles.footerLeft} />
+        <View style={styles.cardActions}>
+          <TouchableOpacity onPress={onView} style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}>
+            <Eye size={16} color="#8b5cf6" />
+          </TouchableOpacity>
 
-        {isPending && (
-          <>
-            <TouchableOpacity
-              style={styles.rejectButton}
-              onPress={onReject}
-              disabled={isRejecting}
-            >
-              {isRejecting ? (
-                <ActivityIndicator size="small" color="#ef4444" />
-              ) : (
-                <>
-                  <XCircle size={16} color="#ef4444" />
-                  <Text style={styles.rejectButtonText}>Reject</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.approveButton}
-              onPress={onApprove}
-              disabled={isApproving}
-            >
-              {isApproving ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <>
-                  <CheckCircle2 size={16} color="white" />
-                  <Text style={styles.approveButtonText}>Approve</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
+          {isPending && (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
+                onPress={onReject}
+                disabled={isRejecting}
+              >
+                {isRejecting ? (
+                  <ActivityIndicator size="small" color="#ef4444" />
+                ) : (
+                  <Ban size={16} color="#ef4444" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#ecfdf5' }]}
+                onPress={onApprove}
+                disabled={isApproving}
+              >
+                {isApproving ? (
+                  <ActivityIndicator size="small" color="#10b981" />
+                ) : (
+                  <CheckCircle2 size={16} color="#10b981" />
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -1397,10 +1401,47 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
   tabTextActive: { color: '#3b82f6' },
 
-  statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  statCard: { flex: 1, borderRadius: 16, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
-  statValue: { fontSize: 20, fontWeight: '800', marginTop: 8 },
-  statLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginTop: 4 },
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    width: '48%',
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    minHeight: 110,
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
 
   searchBar: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
@@ -1414,25 +1455,102 @@ const styles = StyleSheet.create({
   exportButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#10b981' },
   exportButtonText: { color: '#10b981', fontWeight: '600', fontSize: 13 },
 
-  requestCard: { backgroundColor: 'white', borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 16 },
-  requestHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  requestCard: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    marginBottom: 12, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  requestCardEmployeeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  requestCardEmployeeAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  requestCardAvatarText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4f46e5',
+  },
   employeeName: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
   employeeId: { fontSize: 11, color: '#64748b', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   employeeMeta: { fontSize: 10, color: '#64748b', marginTop: 2 },
-  requestInfo: { gap: 8, marginBottom: 12 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoLabel: { fontSize: 11, color: '#64748b' },
-  infoValue: { fontSize: 12, fontWeight: '500', color: '#1e293b' },
-  reasonBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, marginBottom: 12 },
+  cardContent: {
+    padding: 16,
+    gap: 8,
+  },
+  requestInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  infoGridItem: {
+    minWidth: '45%',
+    flex: 1,
+  },
+  infoLabel: { fontSize: 11, color: '#64748b', marginBottom: 2 },
+  infoValue: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
+  reasonBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, marginTop: 4 },
   reasonLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginBottom: 4 },
   reasonText: { fontSize: 12, color: '#475569', lineHeight: 16 },
-  cardFooter: { flexDirection: 'row', gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
-  viewButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f8fafc' },
-  viewButtonText: { fontSize: 12, fontWeight: '500', color: '#64748b' },
-  rejectButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8, backgroundColor: '#fef2f2' },
-  rejectButtonText: { fontSize: 12, fontWeight: '500', color: '#ef4444' },
-  approveButton: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8, backgroundColor: '#3b82f6' },
-  approveButtonText: { fontSize: 12, fontWeight: '500', color: 'white' },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#fafafa',
+  },
+  footerLeft: {
+    flex: 1,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  rejectButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: '#fef2f2' },
+  rejectButtonText: { fontSize: 14, fontWeight: '600', color: '#ef4444' },
+  approveButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
+  approveButtonText: { fontSize: 14, fontWeight: '700', color: 'white' },
 
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   headerText: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },

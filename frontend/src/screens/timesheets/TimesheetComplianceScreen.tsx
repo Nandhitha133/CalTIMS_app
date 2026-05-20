@@ -205,6 +205,12 @@ const FillModal = ({
     dayHours: Array(7).fill('00:00')
   }]);
 
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerTitle, setPickerTitle] = useState('');
+  const [pickerOptions, setPickerOptions] = useState<{ label: string; value: string }[]>([]);
+  const [pickerValue, setPickerValue] = useState<string>('');
+  const [onPickerSelect, setOnPickerSelect] = useState<(val: string) => void>(() => {});
+
   useEffect(() => {
     if (visible) {
       setRows([{
@@ -275,6 +281,30 @@ const FillModal = ({
     return isBefore(day, projectStart);
   };
 
+  const openProjectPicker = (rowId: string, currentValue: string) => {
+    setPickerTitle('Select Project');
+    setPickerOptions(projects.map(p => ({ label: p.name || p.code, value: String(p.id || p._id) })));
+    setPickerValue(currentValue);
+    setOnPickerSelect(() => (val: string) => {
+      handleUpdateRow(rowId, 'projectId', val);
+    });
+    setPickerVisible(true);
+  };
+
+  const openTaskPicker = (rowId: string, projectId: string, currentValue: string) => {
+    const filteredTasks = getFilteredTasks(projectId);
+    setPickerTitle('Select Task');
+    setPickerOptions(filteredTasks.map(t => {
+      const name = typeof t === 'string' ? t : t.name;
+      return { label: name, value: name };
+    }));
+    setPickerValue(currentValue);
+    setOnPickerSelect(() => (val: string) => {
+      handleUpdateRow(rowId, 'taskType', val);
+    });
+    setPickerVisible(true);
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent={true}>
       <View style={modalStyles.overlay}>
@@ -294,85 +324,85 @@ const FillModal = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={modalStyles.content}>
-              {/* Header Row */}
-              <View style={modalStyles.tableHeader}>
-                <Text style={[modalStyles.headerCell, modalStyles.projectCell]}>Project</Text>
-                <Text style={[modalStyles.headerCell, modalStyles.taskCell]}>Task</Text>
-                {weekDays.map((day, i) => (
-                  <View key={i} style={[modalStyles.headerCell, modalStyles.dayCell]}>
-                    <Text style={modalStyles.dayName}>{format(day, 'EEE')}</Text>
-                    <Text style={modalStyles.dayNumber}>{format(day, 'dd')}</Text>
-                  </View>
-                ))}
-                <Text style={[modalStyles.headerCell, modalStyles.actionCell]}>⚡</Text>
+            <ScrollView horizontal={true} showsHorizontalScrollIndicator={true} contentContainerStyle={{ width: 600, flexDirection: 'column' }}>
+              <View style={[modalStyles.content, { width: 600 }]}>
+                {/* Header Row */}
+                <View style={modalStyles.tableHeader}>
+                  <Text style={[modalStyles.headerCell, modalStyles.projectCell]}>Project</Text>
+                  <Text style={[modalStyles.headerCell, modalStyles.taskCell]}>Task</Text>
+                  {weekDays.map((day, i) => (
+                    <View key={i} style={[modalStyles.headerCell, modalStyles.dayCell]}>
+                      <Text style={modalStyles.dayName}>{format(day, 'EEE')}</Text>
+                      <Text style={modalStyles.dayNumber}>{format(day, 'dd')}</Text>
+                    </View>
+                  ))}
+                  <Text style={[modalStyles.headerCell, modalStyles.actionCell]}>⚡</Text>
+                </View>
+
+                {/* Rows */}
+                {rows.map((row, idx) => {
+                  const projectObj = projects.find(p => String(p.id || p._id) === row.projectId);
+                  return (
+                    <View key={row.id} style={modalStyles.tableRow}>
+                      <View style={[modalStyles.cell, modalStyles.projectCell]}>
+                        <TouchableOpacity
+                          style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', height: 40, justifyContent: 'center' }]}
+                          onPress={() => openProjectPicker(row.id, row.projectId)}
+                        >
+                          <Text style={[modalStyles.selectInputText, { color: theme === 'dark' ? '#ffffff' : (row.projectId ? (theme === 'dark' ? '#ffffff' : '#1e293b') : '#94a3b8') }]} numberOfLines={1}>
+                            {projectObj ? projectObj.name : 'Select Project'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={[modalStyles.cell, modalStyles.taskCell]}>
+                        <TouchableOpacity
+                          style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', height: 40, justifyContent: 'center' }]}
+                          onPress={() => openTaskPicker(row.id, row.projectId, row.taskType)}
+                        >
+                          <Text style={[modalStyles.selectInputText, { color: theme === 'dark' ? '#ffffff' : (row.taskType ? (theme === 'dark' ? '#ffffff' : '#1e293b') : '#94a3b8') }]} numberOfLines={1}>
+                            {row.taskType || 'Select Task'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {weekDays.map((day, dayIdx) => {
+                        const isDisabled = isDayBeforeProjectStart(day, row.projectId);
+                        return (
+                          <View key={dayIdx} style={[modalStyles.cell, modalStyles.dayCell]}>
+                            <TextInput
+                              style={[
+                                modalStyles.hourInput,
+                                isDisabled && modalStyles.hourInputDisabled,
+                                { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', color: theme === 'dark' ? '#ffffff' : '#1e293b' }
+                              ]}
+                              value={row.dayHours[dayIdx].split(':')[0]}
+                              onChangeText={(text) => handleUpdateHour(row.id, dayIdx, text)}
+                              keyboardType="numeric"
+                              maxLength={2}
+                              placeholder="00"
+                              placeholderTextColor="#94a3b8"
+                              editable={!isDisabled}
+                            />
+                          </View>
+                        );
+                      })}
+
+                      <View style={[modalStyles.cell, modalStyles.actionCell]}>
+                        <TouchableOpacity onPress={() => handleRemoveRow(row.id)}>
+                          <Trash2 size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                <TouchableOpacity style={modalStyles.addButton} onPress={handleAddRow}>
+                  <Plus size={16} color="#3b82f6" />
+                  <Text style={modalStyles.addButtonText}>Add Another Row</Text>
+                </TouchableOpacity>
               </View>
-
-              {/* Rows */}
-              {rows.map((row, idx) => {
-                const filteredTasks = getFilteredTasks(row.projectId);
-                return (
-                  <View key={row.id} style={modalStyles.tableRow}>
-                    <View style={[modalStyles.cell, modalStyles.projectCell]}>
-                      <View style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc' }]}>
-                        <TextInput
-                          style={[modalStyles.selectInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-                          placeholder="Select Project"
-                          placeholderTextColor="#94a3b8"
-                          value={row.projectId}
-                          onChangeText={(text) => handleUpdateRow(row.id, 'projectId', text)}
-                        />
-                      </View>
-                    </View>
-
-                    <View style={[modalStyles.cell, modalStyles.taskCell]}>
-                      <View style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc' }]}>
-                        <TextInput
-                          style={[modalStyles.selectInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-                          placeholder="Task"
-                          placeholderTextColor="#94a3b8"
-                          value={row.taskType}
-                          onChangeText={(text) => handleUpdateRow(row.id, 'taskType', text)}
-                        />
-                      </View>
-                    </View>
-
-                    {weekDays.map((day, dayIdx) => {
-                      const isDisabled = isDayBeforeProjectStart(day, row.projectId);
-                      return (
-                        <View key={dayIdx} style={[modalStyles.cell, modalStyles.dayCell]}>
-                          <TextInput
-                            style={[
-                              modalStyles.hourInput,
-                              isDisabled && modalStyles.hourInputDisabled,
-                              { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc' }
-                            ]}
-                            value={row.dayHours[dayIdx].split(':')[0]}
-                            onChangeText={(text) => handleUpdateHour(row.id, dayIdx, text)}
-                            keyboardType="numeric"
-                            maxLength={2}
-                            placeholder="00"
-                            placeholderTextColor="#94a3b8"
-                            editable={!isDisabled}
-                          />
-                        </View>
-                      );
-                    })}
-
-                    <View style={[modalStyles.cell, modalStyles.actionCell]}>
-                      <TouchableOpacity onPress={() => handleRemoveRow(row.id)}>
-                        <Trash2 size={16} color="#ef4444" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
-
-              <TouchableOpacity style={modalStyles.addButton} onPress={handleAddRow}>
-                <Plus size={16} color="#3b82f6" />
-                <Text style={modalStyles.addButtonText}>Add Another Row</Text>
-              </TouchableOpacity>
-            </View>
+            </ScrollView>
           </ScrollView>
 
           <View style={modalStyles.footer}>
@@ -396,9 +426,76 @@ const FillModal = ({
           </View>
         </View>
       </View>
+
+      {/* Picker Selector Modal */}
+      <Modal visible={pickerVisible} transparent animationType="fade" onRequestClose={() => setPickerVisible(false)}>
+        <TouchableOpacity 
+          style={modalStyles.pickerOverlay} 
+          activeOpacity={1} 
+          onPress={() => setPickerVisible(false)}
+        >
+          <View style={[modalStyles.pickerContent, { backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff' }]}>
+            <View style={[modalStyles.pickerHeader, { borderBottomColor: theme === 'dark' ? '#334155' : '#f1f5f9' }]}>
+              <Text style={[modalStyles.pickerHeaderTitle, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+                {pickerTitle}
+              </Text>
+              <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={pickerOptions}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    modalStyles.pickerOptionItem,
+                    item.value === pickerValue && modalStyles.pickerSelectedOption
+                  ]}
+                  onPress={() => {
+                    onPickerSelect(item.value);
+                    setPickerVisible(false);
+                  }}
+                >
+                  <Text style={[
+                    modalStyles.pickerOptionText,
+                    { color: theme === 'dark' ? '#cbd5e1' : '#475569' },
+                    item.value === pickerValue && modalStyles.pickerSelectedOptionText
+                  ]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={modalStyles.pickerListContent}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 };
+
+// Success Modal Component
+const SuccessModal = ({ visible, onClose, theme }: { visible: boolean; onClose: () => void; theme: 'light' | 'dark' }) => (
+  <Modal visible={visible} transparent animationType="fade">
+    <View style={successModalStyles.overlay}>
+      <View style={[successModalStyles.container, { backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff' }]}>
+        <View style={successModalStyles.iconWrapper}>
+          <CheckCircle2 size={56} color="#10b981" />
+        </View>
+        <Text style={[successModalStyles.title, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
+          Success!
+        </Text>
+        <Text style={successModalStyles.message}>
+          Timesheet has been filled and recorded successfully by Admin.
+        </Text>
+        <TouchableOpacity style={successModalStyles.doneButton} onPress={onClose}>
+          <Text style={successModalStyles.doneButtonText}>Done</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default function TimesheetComplianceScreen({ navigation }: { navigation: any }) {
   const [user, setUser] = useState<User | null>(null);
@@ -410,6 +507,7 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskCategories, setTaskCategories] = useState<string[]>(DEFAULT_TASK_TYPES);
@@ -463,7 +561,8 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const fetchProjects = async () => {
     try {
       const response = await projectAPI.getAll({ status: 'active' });
-      setProjects((response as any)?.data?.data || []);
+      const data = (response as any)?.data || [];
+      setProjects(Array.isArray(data) ? data : data?.data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
     }
@@ -472,7 +571,8 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const fetchTasks = async () => {
     try {
       const response = await taskAPI.getAll({ isActive: true });
-      setTasks((response as any)?.data?.data || []);
+      const data = (response as any)?.data || [];
+      setTasks(Array.isArray(data) ? data : data?.data || []);
     } catch (error) {
       console.error('Error fetching tasks:', error);
     }
@@ -481,7 +581,8 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const fetchTaskCategories = async () => {
     try {
       const response = await settingsAPI.getTimesheetSettings();
-      const categories = (response as any)?.data?.data?.taskCategories;
+      const data = (response as any)?.data || {};
+      const categories = data.taskCategories || data.data?.taskCategories;
       if (categories && categories.length > 0) {
         setTaskCategories(categories);
       }
@@ -493,7 +594,8 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const fetchUserProjects = async (userId: string) => {
     try {
       const response = await projectAPI.getAll({ status: 'active', assignedOnly: true, userId });
-      setUserProjects((response as any)?.data?.data || []);
+      const data = (response as any)?.data || [];
+      setUserProjects(Array.isArray(data) ? data : data?.data || []);
     } catch (error) {
       console.error('Error fetching user projects:', error);
     }
@@ -502,7 +604,7 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const fetchUserTasks = async (userId: string, orgId?: string) => {
     try {
       const response = await taskAPI.getAll({ isActive: true, assignedOnly: false, organizationId: orgId });
-      const data = (response as any)?.data;
+      const data = (response as any)?.data || [];
       setUserTasks(Array.isArray(data) ? data : data?.data || []);
     } catch (error) {
       console.error('Error fetching user tasks:', error);
@@ -584,8 +686,8 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
         rows: payloadRows
       });
 
-      Alert.alert('Success', 'Timesheet filled successfully');
       setShowModal(false);
+      setShowSuccessModal(true);
       fetchComplianceData();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to fill timesheet');
@@ -742,6 +844,13 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
           taskCategories={taskCategories}
           onSave={handleSaveAdminFill}
           isSaving={isSaving}
+          theme={theme}
+        />
+
+        {/* Success Modal */}
+        <SuccessModal
+          visible={showSuccessModal}
+          onClose={() => setShowSuccessModal(false)}
           theme={theme}
         />
       </Layout>
@@ -1119,5 +1228,109 @@ const modalStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: 'white',
+  },
+  selectInputText: {
+    paddingHorizontal: 8,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  pickerContent: {
+    borderRadius: 24,
+    width: '90%',
+    maxHeight: '60%',
+    overflow: 'hidden',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  pickerHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pickerListContent: {
+    paddingVertical: 8,
+  },
+  pickerOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  pickerSelectedOption: {
+    backgroundColor: '#f5f7ff',
+  },
+  pickerOptionText: {
+    fontSize: 15,
+  },
+  pickerSelectedOptionText: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+});
+
+const successModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  container: {
+    width: '85%',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  iconWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#ecfdf5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  message: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 24,
+  },
+  doneButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 12,
+    paddingHorizontal: 36,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

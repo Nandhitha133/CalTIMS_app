@@ -50,24 +50,47 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  statCard: { 
-    flex: 1, 
-    borderRadius: 16, 
-    padding: 16, 
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    width: '48%',
     backgroundColor: 'white',
-    borderWidth: 1, 
-    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2
+    shadowRadius: 8,
+    elevation: 2,
+    minHeight: 110,
   },
-  statCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  statValue: { fontSize: 22, fontWeight: '800' },
-  statLabel: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
 
   searchContainer: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
@@ -114,23 +137,72 @@ const styles = StyleSheet.create({
 
   resultsCount: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginBottom: 12, letterSpacing: 1 },
 
-  card: { backgroundColor: 'white', borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 16 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  card: { 
+    backgroundColor: 'white', 
+    borderRadius: 16, 
+    marginBottom: 12, 
+    borderWidth: 1, 
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    padding: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#f1f5f9' 
+  },
   taskInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  taskIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
+  taskIcon: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    backgroundColor: '#eef2ff', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    borderWidth: 1, 
+    borderColor: '#c7d2fe' 
+  },
+  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#4f46e5' },
   taskName: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
   projectName: { fontSize: 12, color: '#64748b', marginTop: 2 },
   priorityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   priorityText: { fontSize: 10, fontWeight: '600' },
-  taskDescription: { fontSize: 13, color: '#475569', marginBottom: 12, lineHeight: 18 },
-  dueDateContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-  dueDateText: { fontSize: 11, color: '#64748b' },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  cardContent: { padding: 16, gap: 8 },
+  taskDescription: { fontSize: 13, color: '#475569', marginBottom: 4, lineHeight: 18 },
+  dueDateContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dueDateText: { fontSize: 12, color: '#64748b' },
+  cardFooter: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    padding: 12, 
+    borderTopWidth: 1, 
+    borderTopColor: '#f1f5f9', 
+    backgroundColor: '#fafafa' 
+  },
+  footerLeft: { flex: 1 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 10, fontWeight: '600' },
-  createdDate: { fontSize: 11, color: '#94a3b8' },
-  actionButtons: { flexDirection: 'row', gap: 12 },
-  actionIcon: { padding: 4 },
+  actionButtons: { flexDirection: 'row', gap: 8 },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
 
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, backgroundColor: 'white', borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0' },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginTop: 16 },
@@ -422,17 +494,16 @@ interface StatCardProps {
   value: number;
   icon: React.ComponentType<any>;
   color: string;
+  bgColor: string;
 }
 
-const StatCard = memo(({ title, value, icon: Icon, color }: StatCardProps) => (
+const StatCard = memo(({ title, value, icon: Icon, color, bgColor }: StatCardProps) => (
   <View style={styles.statCard}>
-    <View style={styles.statCardHeader}>
-      <View style={[styles.statIcon, { backgroundColor: `${color}15` }]}>
-        <Icon size={20} color={color} />
-      </View>
-      <Text style={[styles.statValue, { color: '#1e293b' }]}>{value}</Text>
+    <View style={[styles.statIconContainer, { backgroundColor: bgColor }]}>
+      <Icon size={20} color={color} />
     </View>
-    <Text style={styles.statLabel}>{title}</Text>
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{title.toUpperCase()}</Text>
   </View>
 ));
 
@@ -453,22 +524,56 @@ const TaskCard = memo(({ task, onView, onEdit, onDelete, getStatusStyle, getPrio
 
   return (
     <View style={styles.card}>
+      {/* Header */}
       <View style={styles.cardHeader}>
         <View style={styles.taskInfo}>
-          <View style={styles.taskIcon}><ListTodo size={20} color="#3b82f6" /></View>
-          <View><Text style={styles.taskName}>{task.name}</Text><Text style={styles.projectName}>{projectName}</Text></View>
+          <View style={styles.taskIcon}>
+            <Text style={styles.avatarText}>{(task.name || '?').charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.taskName} numberOfLines={1}>{task.name}</Text>
+            <Text style={styles.projectName}>{projectName}</Text>
+          </View>
         </View>
-        <View style={[styles.priorityBadge, { backgroundColor: priorityStyle.bg }]}><Text style={[styles.priorityText, { color: priorityStyle.text }]}>{priorityStyle.label}</Text></View>
+        <View style={[styles.priorityBadge, { backgroundColor: priorityStyle.bg }]}>
+          <Text style={[styles.priorityText, { color: priorityStyle.text }]}>{priorityStyle.label}</Text>
+        </View>
       </View>
-      {task.description && <Text style={styles.taskDescription} numberOfLines={2}>{task.description}</Text>}
-      {task.dueDate && (<View style={styles.dueDateContainer}><Calendar size={12} color="#64748b" /><Text style={styles.dueDateText}>Due: {formatDate(task.dueDate)}</Text></View>)}
+
+      {/* Details */}
+      <View style={styles.cardContent}>
+        {task.description ? (
+          <Text style={styles.taskDescription} numberOfLines={2}>{task.description}</Text>
+        ) : null}
+        {task.dueDate ? (
+          <View style={styles.dueDateContainer}>
+            <Calendar size={13} color="#64748b" />
+            <Text style={styles.dueDateText}>Due: {formatDate(task.dueDate)}</Text>
+          </View>
+        ) : null}
+        <View style={styles.dueDateContainer}>
+          <Calendar size={13} color="#64748b" />
+          <Text style={styles.dueDateText}>Created: {formatDate(task.createdAt)}</Text>
+        </View>
+      </View>
+
+      {/* Footer */}
       <View style={styles.cardFooter}>
-        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}><Text style={[styles.statusText, { color: statusStyle.text }]}>{statusStyle.label}</Text></View>
-        <Text style={styles.createdDate}>Created: {formatDate(task.createdAt)}</Text>
+        <View style={styles.footerLeft}>
+          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+            <Text style={[styles.statusText, { color: statusStyle.text }]}>{statusStyle.label}</Text>
+          </View>
+        </View>
         <View style={styles.actionButtons}>
-          <TouchableOpacity onPress={() => onView(task)} style={styles.actionIcon}><Eye size={16} color="#64748b" /></TouchableOpacity>
-          <TouchableOpacity onPress={() => onEdit(task)} style={styles.actionIcon}><Pencil size={16} color="#f59e0b" /></TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(task)} style={styles.actionIcon}><Trash2 size={16} color="#ef4444" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => onView(task)} style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}>
+            <Eye size={16} color="#8b5cf6" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => onEdit(task)} style={[styles.actionBtn, { backgroundColor: '#fffbeb' }]}>
+            <Pencil size={16} color="#f59e0b" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => onDelete(task)} style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}>
+            <Trash2 size={16} color="#ef4444" />
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -966,10 +1071,10 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
             />
             {/* Stats Row */}
             <View style={styles.statsContainer}>
-              <StatCard title="Total" value={stats.total} icon={ListTodo} color="#3b82f6" />
-              <StatCard title="Pending" value={stats.pending} icon={BarChart} color="#f59e0b" />
-              <StatCard title="In Progress" value={stats.inProgress} icon={BarChart} color="#3b82f6" />
-              <StatCard title="Completed" value={stats.completed} icon={BarChart} color="#10b981" />
+              <StatCard title="Total" value={stats.total} icon={ListTodo} color="#3b82f6" bgColor="#eff6ff" />
+              <StatCard title="Pending" value={stats.pending} icon={BarChart} color="#f59e0b" bgColor="#fffbeb" />
+              <StatCard title="In Progress" value={stats.inProgress} icon={BarChart} color="#3b82f6" bgColor="#eff6ff" />
+              <StatCard title="Completed" value={stats.completed} icon={BarChart} color="#10b981" bgColor="#ecfdf5" />
             </View>
 
             {/* Search and Filter */}

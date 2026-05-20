@@ -25,6 +25,7 @@ import {
   Send,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Calendar,
   AlertTriangle,
   Clock,
@@ -32,6 +33,7 @@ import {
   Briefcase,
   CheckCircle2,
   XCircle,
+  Info,
 } from 'lucide-react-native';
 import {
   timesheetAPI,
@@ -184,10 +186,10 @@ const TimesheetRow = ({
             onPress={() => onOpenProjectPicker(row.id)}
             disabled={isRowLocked(row)}
           >
-            <Text style={[styles.selectButtonText, !row.projectId && styles.placeholderText]}>
+            <Text style={[styles.selectButtonText, !row.projectId && styles.placeholderText]} numberOfLines={1}>
               {row.projectId ? getProjectName(row.projectId) : 'Select Project'}
             </Text>
-            <Briefcase size={16} color="#64748b" />
+            <ChevronDown size={14} color="#64748b" />
           </TouchableOpacity>
         )}
       </View>
@@ -208,10 +210,10 @@ const TimesheetRow = ({
             onPress={() => onOpenTaskPicker(row.id, row.projectId)}
             disabled={isRowLocked(row) || !row.projectId}
           >
-            <Text style={[styles.selectButtonText, row.taskType === 'Select Task' && styles.placeholderText]}>
+            <Text style={[styles.selectButtonText, row.taskType === 'Select Task' && styles.placeholderText]} numberOfLines={1}>
               {getTaskName(row.taskType)}
             </Text>
-            <ChevronRight size={16} color="#64748b" />
+            <ChevronDown size={14} color="#64748b" />
           </TouchableOpacity>
         )}
       </View>
@@ -244,7 +246,7 @@ const TimesheetRow = ({
             {isLop && isLeaveCell ? (
               <Text style={styles.lopText}>0</Text>
             ) : (
-              <View style={styles.hourInputContainer}>
+              <View style={[styles.hourInputContainer, isDisabledInput && styles.cellDisabled]}>
                 <TextInput
                   style={[styles.hourInput, isDisabledInput && styles.hourInputDisabled]}
                   value={row.dayHours[dayIdx].split(':')[0]}
@@ -300,8 +302,12 @@ const TimesheetRow = ({
       {/* Action */}
       <View style={[styles.cell, styles.cellAction]}>
         {!row.isLeaveRow && (
-          <TouchableOpacity onPress={() => onRemoveRow(row.id)} disabled={isRowLocked(row)}>
-            <Trash2 size={18} color={isRowLocked(row) ? '#cbd5e1' : '#ef4444'} />
+          <TouchableOpacity
+            onPress={() => onRemoveRow(row.id)}
+            disabled={isRowLocked(row)}
+            style={[styles.deleteButtonContainer, isRowLocked(row) && styles.deleteButtonDisabled]}
+          >
+            <Trash2 size={16} color={isRowLocked(row) ? '#cbd5e1' : '#ef4444'} />
           </TouchableOpacity>
         )}
       </View>
@@ -913,6 +919,56 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     return acc + h + (m / 60);
   }, 0);
 
+  const getSwipeHoursForDay = (day: Date) => {
+    const dayStr = format(day, 'yyyy-MM-dd');
+    const logsForDay = attendanceLogs
+      .filter((log: any) => {
+        try {
+          return format(new Date(log.timestamp), 'yyyy-MM-dd') === dayStr;
+        } catch {
+          return false;
+        }
+      })
+      .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    if (logsForDay.length === 0) return '—';
+
+    let totalMs = 0;
+    let currentCheckIn: number | null = null;
+
+    logsForDay.forEach((log: any) => {
+      const type = log.type?.toLowerCase();
+      const time = new Date(log.timestamp).getTime();
+      if (type === 'check-in') {
+        if (currentCheckIn === null) {
+          currentCheckIn = time;
+        }
+      } else if (type === 'check-out') {
+        if (currentCheckIn !== null) {
+          totalMs += (time - currentCheckIn);
+          currentCheckIn = null;
+        }
+      }
+    });
+
+    if (totalMs === 0) {
+      const checkIns = logsForDay.filter((l: any) => l.type?.toLowerCase() === 'check-in');
+      const checkOuts = logsForDay.filter((l: any) => l.type?.toLowerCase() === 'check-out');
+      if (checkIns.length > 0 && checkOuts.length > 0) {
+        const firstIn = new Date(checkIns[0].timestamp).getTime();
+        const lastOut = new Date(checkOuts[checkOuts.length - 1].timestamp).getTime();
+        if (lastOut > firstIn) {
+          totalMs = lastOut - firstIn;
+        }
+      }
+    }
+
+    if (totalMs <= 0) return '—';
+
+    const totalHours = totalMs / (1000 * 60 * 60);
+    return formatHours(totalHours);
+  };
+
   if (loading && !refreshing) return <LoadingSpinner />;
 
   return (
@@ -928,81 +984,156 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
 
 
-          <View style={styles.navContainer}>
-            <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.navButton}>
-              <ChevronLeft size={20} color="#64748b" />
-            </TouchableOpacity>
-            <View style={styles.weekInfo}>
-              <Calendar size={16} color="#6366f1" />
-              <Text style={styles.weekDate}>
-                {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
-              </Text>
-              <Text style={styles.weekNumber}>Week {getWeek(weekStart)}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleWeekChange(1)}
-              disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
-              style={[styles.navButton, isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 })) && styles.navButtonDisabled]}
-            >
-              <ChevronRight size={20} color="#64748b" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={[styles.actionButton, styles.addButton]} onPress={handleAddRow} disabled={isWeekSubmitted}>
-              <Plus size={16} color="white" />
-              <Text style={styles.actionButtonText}>Add Project</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, styles.permissionButton]} onPress={handleAddPermission} disabled={isWeekSubmitted}>
-              <Clock size={16} color="white" />
-              <Text style={styles.actionButtonText}>Add Permission</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, styles.saveButton]} onPress={handleSaveDraft} disabled={isSaving || isWeekSubmitted}>
-              {isSaving ? <ActivityIndicator size="small" color="white" /> : <Save size={16} color="white" />}
-              <Text style={styles.actionButtonText}>Save Draft</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.tableContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View>
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.headerCell, styles.headerSno]}>#</Text>
-                  <Text style={[styles.headerCell, styles.headerProject]}>Project Name</Text>
-                  <Text style={[styles.headerCell, styles.headerTask]}>Task / Leave Type</Text>
-                  {weekDays.map((day, i) => isWorkingDay(day) && (
-                    <View key={i} style={[styles.headerCell, styles.headerDay]}>
-                      <Text style={styles.dayName}>{format(day, 'EEE')}</Text>
-                      <Text style={styles.dayDate}>{format(day, 'MMM d')}</Text>
-                    </View>
-                  ))}
-                  <Text style={[styles.headerCell, styles.headerTotal]}>Hours</Text>
-                  <Text style={[styles.headerCell, styles.headerAction]}>Action</Text>
+          <View style={styles.headerContainer}>
+            <View style={styles.headerTopRow}>
+              <View style={styles.navWrapper}>
+                <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.navButton}>
+                  <ChevronLeft size={16} color="#64748b" />
+                </TouchableOpacity>
+                <View style={styles.weekInfo}>
+                  <Calendar size={14} color="#6366f1" />
+                  <Text style={styles.weekMonthText}>{format(weekStart, 'MMMM yyyy')}</Text>
                 </View>
-                {rows.map((row, index) => (
-                  <TimesheetRow
-                    key={row.id}
-                    row={row}
-                    index={index}
-                    weekDays={weekDays}
-                    projects={projects}
-                    allTasks={allTasks}
-                    tsSettings={tsSettings}
-                    leaveTaskTypes={leaveTaskTypes}
-                    isRowLocked={isRowLocked}
-                    lockedDays={lockedDays}
-                    holidays={holidays}
-                    onUpdateRow={handleUpdateRow}
-                    onUpdateHour={handleUpdateHour}
-                    onRemoveRow={handleRemoveRow}
-                    isWorkingDay={isWorkingDay}
-                    workingHoursPerDay={workingHoursPerDay}
-                    onOpenProjectPicker={handleOpenProjectPicker}
-                    onOpenTaskPicker={handleOpenTaskPicker}
-                  />
-                ))}
+                <TouchableOpacity
+                  onPress={() => handleWeekChange(1)}
+                  disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
+                  style={[styles.navButton, isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 })) && styles.navButtonDisabled]}
+                >
+                  <ChevronRight size={16} color="#64748b" />
+                </TouchableOpacity>
               </View>
-            </ScrollView>
+              
+              <TouchableOpacity
+                onPress={() => setCurrentDate(new Date())}
+                style={styles.currentWeekButton}
+              >
+                <Calendar size={14} color="white" />
+                <Text style={styles.currentWeekButtonText}>CURRENT WEEK</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekSubBanner}>
+              <Info size={12} color="#6366f1" />
+              <Text style={styles.weekSubText}>
+                Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')} (Week {getWeek(weekStart)})
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.mainCard}>
+            <View style={styles.mainCardHeader}>
+              <View style={styles.mainCardHeaderTop}>
+                <Text style={styles.cardTitle}>Week Entry</Text>
+                <View style={[styles.statusBadge, isWeekSubmitted ? styles.statusBadgeSubmitted : styles.statusBadgeDraft]}>
+                  <Text style={[styles.statusBadgeText, isWeekSubmitted ? styles.statusBadgeTextSubmitted : styles.statusBadgeTextDraft]}>
+                    {isWeekSubmitted ? 'Submitted' : 'Draft'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[styles.cardButton, styles.projectButton]}
+                  onPress={handleAddRow}
+                  disabled={isWeekSubmitted}
+                >
+                  <Plus size={12} color="#4f46e5" />
+                  <Text style={styles.projectButtonText}>ADD PROJECT</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cardButton, styles.permissionButton]}
+                  onPress={handleAddPermission}
+                  disabled={isWeekSubmitted}
+                >
+                  <Plus size={12} color="#7c3aed" />
+                  <Text style={styles.permissionButtonText}>ADD PERMISSION</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cardButton, styles.saveButton]}
+                  onPress={handleSaveDraft}
+                  disabled={isSaving || isWeekSubmitted}
+                >
+                  {isSaving ? <ActivityIndicator size="small" color="#475569" /> : <Save size={12} color="#475569" />}
+                  <Text style={styles.saveButtonText}>SAVE DRAFT</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.tableContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.headerCell, styles.headerSno]}>S.NO</Text>
+                    <Text style={[styles.headerCell, styles.headerProject]}>PROJECT NAME</Text>
+                    <Text style={[styles.headerCell, styles.headerTask]}>TASK / LEAVE TYPE</Text>
+                    {weekDays.map((day, i) => {
+                      if (!isWorkingDay(day)) return null;
+                      const dayTotal = calculateDayTotal(i);
+                      const isLowHours = dayTotal > 0 && dayTotal < workingHoursPerDay;
+                      return (
+                        <View key={i} style={[styles.headerCell, styles.headerDay]}>
+                          <Text style={styles.dayName}>{format(day, 'EEE')}</Text>
+                          <Text style={styles.dayDate}>{format(day, 'MMM d')}</Text>
+                          {isLowHours && (
+                            <View style={styles.lowHoursBadge}>
+                              <AlertTriangle size={8} color="#ea580c" />
+                              <Text style={styles.lowHoursText}>LOW HOURS</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                    <Text style={[styles.headerCell, styles.headerTotal]}>WORK HOURS</Text>
+                    <Text style={[styles.headerCell, styles.headerAction]}>ACTION</Text>
+                  </View>
+                  
+                  {rows.map((row, index) => (
+                    <TimesheetRow
+                      key={row.id}
+                      row={row}
+                      index={index}
+                      weekDays={weekDays}
+                      projects={projects}
+                      allTasks={allTasks}
+                      tsSettings={tsSettings}
+                      leaveTaskTypes={leaveTaskTypes}
+                      isRowLocked={isRowLocked}
+                      lockedDays={lockedDays}
+                      holidays={holidays}
+                      onUpdateRow={handleUpdateRow}
+                      onUpdateHour={handleUpdateHour}
+                      onRemoveRow={handleRemoveRow}
+                      isWorkingDay={isWorkingDay}
+                      workingHoursPerDay={workingHoursPerDay}
+                      onOpenProjectPicker={handleOpenProjectPicker}
+                      onOpenTaskPicker={handleOpenTaskPicker}
+                    />
+                  ))}
+
+                  {/* BOTTOM ROW: Office Presence (Swipe Hours) */}
+                  <View style={styles.swipeRowContainer}>
+                    <View style={styles.swipeLabelCell}>
+                      <Text style={styles.swipeLabelText}>Office Presence (Swipe Hours)</Text>
+                      <Info size={14} color="#64748b" style={{ marginLeft: 6 }} />
+                    </View>
+                    {weekDays.map((day, i) => {
+                      if (!isWorkingDay(day)) return null;
+                      return (
+                        <View key={i} style={[styles.cell, styles.cellHour, styles.swipeValueCell]}>
+                          <Text style={styles.swipeValueText}>{getSwipeHoursForDay(day)}</Text>
+                        </View>
+                      );
+                    })}
+                    <View style={[styles.cell, styles.cellTotal, styles.swipeValueCell]}>
+                      <Text style={styles.swipeValueText}>—</Text>
+                    </View>
+                    <View style={[styles.cell, styles.cellAction, styles.swipeValueCell]}>
+                      <Text style={styles.swipeValueText} />
+                    </View>
+                  </View>
+
+                </View>
+              </ScrollView>
+            </View>
           </View>
 
           <View style={styles.footerStats}>
@@ -1115,55 +1246,221 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  navContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 12,
+  // Top header and week selector layout
+  headerContainer: {
     marginHorizontal: 16,
     marginBottom: 16,
+    marginTop: 8,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  navWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    flexShrink: 1,
   },
-  navButton: { padding: 8, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  navButton: { padding: 6, borderRadius: 8, backgroundColor: '#f8fafc' },
   navButtonDisabled: { opacity: 0.5 },
-  weekInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  weekDate: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
-  weekNumber: { fontSize: 11, color: '#64748b', marginLeft: 4 },
+  weekInfo: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 6, gap: 6 },
+  weekMonthText: { fontSize: 13, fontWeight: 'bold', color: '#1e293b' },
+  weekSeparator: { color: '#cbd5e1', fontSize: 14, fontWeight: '300' },
+  weekDateText: { fontSize: 12, color: '#64748b', fontStyle: 'italic' },
+  currentWeekButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#6366f1',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    marginLeft: 8,
+  },
+  currentWeekButtonText: { color: 'white', fontWeight: 'bold', fontSize: 11 },
+  weekSubBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 6,
+  },
+  weekSubText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '500',
+  },
 
-  actionButtons: { flexDirection: 'row', gap: 12, marginHorizontal: 16, marginBottom: 16 },
-  actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12 },
-  addButton: { backgroundColor: '#6366f1' },
-  permissionButton: { backgroundColor: '#f59e0b' },
-  saveButton: { backgroundColor: '#64748b' },
-  actionButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
+  // Main Card styling
+  mainCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    overflow: 'hidden',
+  },
+  mainCardHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  mainCardHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  statusBadgeDraft: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+  },
+  statusBadgeSubmitted: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  statusBadgeTextDraft: {
+    color: '#1d4ed8',
+  },
+  statusBadgeTextSubmitted: {
+    color: '#047857',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    width: '100%',
+  },
+  cardButton: {
+    flex: 1,
+    minWidth: 105,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  projectButton: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#c7d2fe',
+  },
+  projectButtonText: {
+    color: '#4f46e5',
+    fontWeight: 'bold',
+    fontSize: 10,
+  },
+  permissionButton: {
+    backgroundColor: '#f5f3ff',
+    borderColor: '#ddd6fe',
+  },
+  permissionButtonText: {
+    color: '#7c3aed',
+    fontWeight: 'bold',
+    fontSize: 10,
+  },
+  saveButton: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#cbd5e1',
+  },
+  saveButtonText: {
+    color: '#475569',
+    fontWeight: 'bold',
+    fontSize: 10,
+  },
 
-  tableContainer: { marginHorizontal: 16, marginBottom: 16, backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0' },
+  // Table styling
+  tableContainer: {
+    backgroundColor: 'white',
+  },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  headerCell: { paddingVertical: 12, paddingHorizontal: 8, fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' },
-  headerSno: { width: 40, textAlign: 'center' },
-  headerProject: { width: 160 },
-  headerTask: { width: 140 },
-  headerDay: { width: 80, alignItems: 'center' },
-  headerTotal: { width: 70, textAlign: 'center' },
-  headerAction: { width: 50, textAlign: 'center' },
-  dayName: { fontSize: 11, fontWeight: 'bold' },
-  dayDate: { fontSize: 9, color: '#94a3b8' },
+  headerCell: { paddingVertical: 12, paddingHorizontal: 8, fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', justifyContent: 'center' },
+  headerSno: { width: 50, textAlign: 'center' },
+  headerProject: { width: 180 },
+  headerTask: { width: 180 },
+  headerDay: { width: 90, alignItems: 'center', justifyContent: 'center' },
+  headerTotal: { width: 100, textAlign: 'center' },
+  headerAction: { width: 70, textAlign: 'center' },
+  dayName: { fontSize: 11, fontWeight: 'bold', color: '#1e293b' },
+  dayDate: { fontSize: 9, color: '#94a3b8', marginTop: 2 },
+
+  // LOW HOURS WARNING BADGE
+  lowHoursBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    borderRadius: 20,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    marginTop: 4,
+  },
+  lowHoursText: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: '#ea580c',
+  },
 
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   permissionRow: { backgroundColor: '#fefce8' },
   cell: { paddingVertical: 10, paddingHorizontal: 8, justifyContent: 'center' },
-  cellSno: { width: 40, alignItems: 'center' },
+  cellSno: { width: 50, alignItems: 'center' },
   snoText: { fontSize: 13, color: '#64748b' },
-  cellProject: { width: 160 },
-  cellTask: { width: 140 },
-  cellHour: { width: 80, alignItems: 'center' },
-  cellTotal: { width: 70, alignItems: 'center' },
-  cellAction: { width: 50, alignItems: 'center' },
+  cellProject: { width: 180 },
+  cellTask: { width: 180 },
+  cellHour: { width: 90, alignItems: 'center' },
+  cellTotal: { width: 100, alignItems: 'center' },
+  cellAction: { width: 70, alignItems: 'center' },
 
-  selectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#f8fafc' },
+  selectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#f8fafc', height: 44 },
   selectButtonText: { fontSize: 12, color: '#1e293b', flex: 1 },
   placeholderText: { color: '#94a3b8' },
   permissionCell: { backgroundColor: '#fef3c7', padding: 8, borderRadius: 8 },
@@ -1173,23 +1470,66 @@ const styles = StyleSheet.create({
   leaveCell: { backgroundColor: '#ecfdf5', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#d1fae5' },
   leaveText: { fontSize: 12, fontWeight: '600', color: '#10b981' },
 
-  hourInputContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  hourInput: { width: 30, textAlign: 'center', fontSize: 13, fontWeight: '500', padding: 4, backgroundColor: 'transparent' },
+  // Refined input styles
+  hourInputContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, backgroundColor: '#f8fafc', width: 75, height: 40 },
+  hourInput: { width: 25, textAlign: 'center', fontSize: 13, fontWeight: '500', padding: 0, backgroundColor: 'transparent', color: '#1e293b' },
   hourInputDisabled: { opacity: 0.5 },
-  hourSeparator: { fontSize: 13, fontWeight: '500', color: '#64748b' },
+  hourSeparator: { fontSize: 13, fontWeight: '500', color: '#94a3b8', paddingHorizontal: 2 },
 
-  cellNormal: { backgroundColor: '#f8fafc', borderRadius: 8 },
-  cellDisabled: { backgroundColor: '#f1f5f9', borderRadius: 8, opacity: 0.5 },
-  cellPending: { backgroundColor: '#fffbeb', borderRadius: 8, borderWidth: 1, borderColor: '#fef3c7' },
-  cellApproved: { backgroundColor: '#ecfdf5', borderRadius: 8, borderWidth: 1, borderColor: '#d1fae5' },
-  cellHoliday: { backgroundColor: '#eff6ff', borderRadius: 8, borderWidth: 1, borderColor: '#dbeafe' },
-  cellLopPending: { backgroundColor: '#fef2f2', borderRadius: 8, borderWidth: 1, borderColor: '#fee2e2' },
-  cellLopApproved: { backgroundColor: '#fef2f2', borderRadius: 8, borderWidth: 1, borderColor: '#fee2e2' },
+  cellNormal: { backgroundColor: 'white' },
+  cellDisabled: { backgroundColor: '#f1f5f9', opacity: 0.5 },
+  cellPending: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fef3c7' },
+  cellApproved: { backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#d1fae5' },
+  cellHoliday: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#dbeafe' },
+  cellLopPending: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fee2e2' },
+  cellLopApproved: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fee2e2' },
   lopText: { fontSize: 13, fontWeight: 'bold', color: '#ef4444' },
   leaveCellText: { fontSize: 8, marginTop: 2, textAlign: 'center' },
 
-  totalHours: { fontSize: 14, fontWeight: 'bold', color: '#1e293b' },
+  totalHours: { fontSize: 14, fontWeight: 'bold', color: '#22c55e' }, // Forest green totals
   leaveTotalHours: { color: '#10b981' },
+
+  // Delete Action Button
+  deleteButtonContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fef2f2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#f1f5f9',
+  },
+
+  // Swipe Hours bottom row
+  swipeRowContainer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    height: 50,
+  },
+  swipeLabelCell: {
+    width: 410,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  swipeLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  swipeValueCell: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swipeValueText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
 
   footerStats: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   statsRow: { flexDirection: 'row', gap: 8 },

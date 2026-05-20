@@ -494,12 +494,13 @@ const TimesheetCard = ({
 
   return (
     <View style={[styles.timesheetCard, { backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff' }]}>
+      {/* Header */}
       <View style={styles.cardHeader}>
-        <View style={styles.weekInfo}>
-          <View style={styles.calendarIcon}>
-            <Calendar size={18} color="#6366f1" />
+        <View style={styles.employeeInfo}>
+          <View style={styles.employeeAvatar}>
+            <Text style={styles.avatarText}>W</Text>
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={[styles.weekDate, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
               {format(new Date(item.weekStartDate), 'MMM d')} - {format(new Date(new Date(item.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000), 'MMM d, yyyy')}
             </Text>
@@ -511,43 +512,48 @@ const TimesheetCard = ({
         <StatusBadge status={status} />
       </View>
 
-      <View style={styles.cardProjects}>
-        {item.projects?.map((project: string, idx: number) => (
-          <View key={idx} style={styles.projectTag}>
-            <View style={[styles.projectDot, { backgroundColor: COLORS[idx % COLORS.length] }]} />
-            <Text style={styles.projectName}>{project}</Text>
-          </View>
-        ))}
+      {/* Details */}
+      <View style={styles.cardContent}>
+        <View style={styles.cardProjects}>
+          {item.projects?.map((project: string, idx: number) => (
+            <View key={idx} style={styles.projectTag}>
+              <View style={[styles.projectDot, { backgroundColor: COLORS[idx % COLORS.length] }]} />
+              <Text style={styles.projectName}>{project}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.infoRow}>
+          <Clock size={14} color="#64748b" />
+          <Text style={styles.infoText}>Total Hours: {formatHours(item.totalHours)}</Text>
+        </View>
       </View>
 
+      {/* Footer */}
       <View style={styles.cardFooter}>
-        <View style={styles.totalHours}>
-          <Clock size={14} color="#64748b" />
-          <Text style={styles.totalHoursText}>Total: {formatHours(item.totalHours)}</Text>
-        </View>
-        
+        <View style={styles.footerLeft} />
         <View style={styles.cardActions}>
-          <TouchableOpacity onPress={onView} style={styles.actionButton}>
-            <Eye size={18} color="#6366f1" />
+          <TouchableOpacity onPress={onView} style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}>
+            <Eye size={16} color="#8b5cf6" />
           </TouchableOpacity>
           
           {isDraft && (
             <>
-              <TouchableOpacity onPress={onEdit} style={styles.actionButton}>
-                <Pencil size={18} color="#f59e0b" />
+              <TouchableOpacity onPress={onEdit} style={[styles.actionBtn, { backgroundColor: '#fffbeb' }]}>
+                <Pencil size={16} color="#f59e0b" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={onDelete} style={styles.actionButton}>
-                <Trash2 size={18} color="#ef4444" />
+              <TouchableOpacity onPress={onDelete} style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}>
+                <Trash2 size={16} color="#ef4444" />
               </TouchableOpacity>
             </>
           )}
           
           <TouchableOpacity 
             onPress={onReport} 
-            style={[styles.actionButton, !isPro && styles.actionButtonDisabled]}
+            style={[styles.actionBtn, { backgroundColor: '#f1f5f9' }, !isPro && styles.actionBtnDisabled]}
             disabled={!isPro}
           >
-            {!isPro ? <Lock size={16} color="#94a3b8" /> : <AlertTriangle size={18} color="#64748b" />}
+            {!isPro ? <Lock size={16} color="#94a3b8" /> : <AlertTriangle size={16} color="#64748b" />}
           </TouchableOpacity>
         </View>
       </View>
@@ -1113,45 +1119,63 @@ const styles = StyleSheet.create({
   },
   timesheetCard: {
     borderRadius: 16,
-    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    marginBottom: 12,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
-  weekInfo: {
+  employeeInfo: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
-  calendarIcon: {
+  employeeAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: '#6366f115',
+    borderRadius: 20,
+    backgroundColor: '#eef2ff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4f46e5',
   },
   weekDate: {
     fontSize: 14,
     fontWeight: '700',
   },
   lastUpdated: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#64748b',
     marginTop: 2,
+  },
+  cardContent: {
+    padding: 16,
+    gap: 8,
   },
   cardProjects: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   projectTag: {
     flexDirection: 'row',
@@ -1172,37 +1196,45 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#475569',
   },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#475569',
+    flex: 1,
+  },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
+    padding: 12,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#fafafa',
   },
-  totalHours: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  totalHoursText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
+  footerLeft: {
+    flex: 1,
   },
   cardActions: {
     flexDirection: 'row',
     gap: 8,
   },
-  actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
   },
-  actionButtonDisabled: {
+  actionBtnDisabled: {
     opacity: 0.5,
   },
   emptyContainer: {

@@ -195,85 +195,84 @@ const ProjectGridCard = memo(({
       activeOpacity={0.9}
     >
       {/* Header */}
-      <View style={styles.gridCardHeader}>
-        <View style={styles.gridProjectIcon}>
-          <FolderOpen size={24} color="#3b82f6" />
+      <View style={styles.cardHeader}>
+        <View style={styles.employeeInfo}>
+          <View style={styles.employeeAvatar}>
+            <Text style={styles.avatarText}>{(project.name || '?').charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.employeeName} numberOfLines={1}>{project.name}</Text>
+            <Text style={styles.employeeId}>{project.code}</Text>
+          </View>
         </View>
         <View style={[styles.gridStatusBadge, { backgroundColor: statusStyle.bg }]}>
           <Text style={[styles.gridStatusText, { color: statusStyle.text }]}>{statusStyle.label}</Text>
         </View>
       </View>
 
-      {/* Project Info */}
-      <View style={styles.gridProjectInfo}>
-        <Text style={styles.gridProjectName} numberOfLines={1}>{project.name}</Text>
-        <Text style={styles.gridProjectCode}>{project.code}</Text>
-      </View>
-
       {/* Details */}
-      <View style={styles.gridDetails}>
-        <View style={styles.gridDetailRow}>
+      <View style={styles.cardContent}>
+        <View style={styles.infoRow}>
           <Building2 size={14} color="#64748b" />
-          <Text style={styles.gridDetailText} numberOfLines={1}>{managerName}</Text>
+          <Text style={styles.infoText} numberOfLines={1}>{managerName}</Text>
         </View>
         {project.clientName && (
-          <View style={styles.gridDetailRow}>
+          <View style={styles.infoRow}>
             <Briefcase size={14} color="#64748b" />
-            <Text style={styles.gridDetailText} numberOfLines={1}>{project.clientName}</Text>
+            <Text style={styles.infoText} numberOfLines={1}>{project.clientName}</Text>
           </View>
         )}
-        <View style={styles.gridDetailRow}>
+        <View style={styles.infoRow}>
           <Calendar size={14} color="#64748b" />
-          <Text style={styles.gridDetailText}>
+          <Text style={styles.infoText}>
             {formatDate(project.startDate)} {project.endDate ? `→ ${formatDate(project.endDate)}` : ''}
           </Text>
         </View>
-        <View style={styles.gridDetailRow}>
+        <View style={styles.infoRow}>
           <Users size={14} color="#64748b" />
-          <Text style={styles.gridDetailText}>{teamCount} members</Text>
+          <Text style={styles.infoText}>{teamCount} members</Text>
         </View>
+
+        {/* Progress Bar inside Card Content */}
+        {project.budgetHours > 0 && (
+          <View style={styles.gridProgressSection}>
+            <View style={styles.gridProgressBar}>
+              <View style={[styles.gridProgressFill, { width: `${progressPercent}%` }]} />
+            </View>
+            <Text style={styles.gridProgressText}>{Math.round(progressPercent)}% of budget</Text>
+          </View>
+        )}
       </View>
 
-      {/* Progress Bar */}
-      {project.budgetHours > 0 && (
-        <View style={styles.gridProgressSection}>
-          <View style={styles.gridProgressBar}>
-            <View style={[styles.gridProgressFill, { width: `${progressPercent}%` }]} />
-          </View>
-          <Text style={styles.gridProgressText}>{Math.round(progressPercent)}% of budget</Text>
+      {/* Actions */}
+      <View style={styles.cardFooter}>
+        <View style={styles.footerLeft} />
+        <View style={styles.cardActions}>
+          <TouchableOpacity 
+            style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]} 
+            onPress={() => onProductivity(project)}
+          >
+            <BarChart3 size={16} color="#8b5cf6" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionBtn, { backgroundColor: '#eef2ff' }]} 
+            onPress={() => onCostAnalysis(project)}
+          >
+            <Brain size={16} color="#6366f1" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionBtn, { backgroundColor: '#fffbeb' }]} 
+            onPress={() => onEdit(project)}
+          >
+            <Pencil size={16} color="#f59e0b" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]} 
+            onPress={() => onDelete(project)}
+          >
+            <Trash2 size={16} color="#ef4444" />
+          </TouchableOpacity>
         </View>
-      )}
-
-      {/* Action Buttons */}
-      <View style={styles.gridActions}>
-        <TouchableOpacity 
-          style={styles.gridActionBtn} 
-          onPress={() => onProductivity(project)}
-        >
-          <BarChart3 size={16} color="#8b5cf6" />
-          <Text style={[styles.gridActionText, { color: '#8b5cf6' }]}>Analytics</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.gridActionBtn} 
-          onPress={() => onCostAnalysis(project)}
-        >
-          <Brain size={16} color="#6366f1" />
-          <Text style={[styles.gridActionText, { color: '#6366f1' }]}>AI Cost</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.gridActionBtn} 
-          onPress={() => onEdit(project)}
-        >
-          <Pencil size={16} color="#f59e0b" />
-          <Text style={[styles.gridActionText, { color: '#f59e0b' }]}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.gridActionBtn} 
-          onPress={() => onDelete(project)}
-        >
-          <Trash2 size={16} color="#ef4444" />
-          <Text style={[styles.gridActionText, { color: '#ef4444' }]}>Delete</Text>
-        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -1249,32 +1248,32 @@ export default function ProjectsScreen() {
           {/* Stats Row */}
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#3b82f615' }]}>
+              <View style={[styles.statIcon, { backgroundColor: '#eff6ff' }]}>
                 <Briefcase size={20} color="#3b82f6" />
               </View>
               <Text style={styles.statValue}>{stats.total}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statLabel}>TOTAL</Text>
             </View>
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#10b98115' }]}>
+              <View style={[styles.statIcon, { backgroundColor: '#ecfdf5' }]}>
                 <TrendingUp size={20} color="#10b981" />
               </View>
               <Text style={styles.statValue}>{stats.active}</Text>
-              <Text style={styles.statLabel}>Active</Text>
+              <Text style={styles.statLabel}>ACTIVE</Text>
             </View>
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#f59e0b15' }]}>
+              <View style={[styles.statIcon, { backgroundColor: '#fffbeb' }]}>
                 <AlertCircle size={20} color="#f59e0b" />
               </View>
               <Text style={styles.statValue}>{stats.onHold}</Text>
-              <Text style={styles.statLabel}>On Hold</Text>
+              <Text style={styles.statLabel}>ON HOLD</Text>
             </View>
             <View style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: '#3b82f615' }]}>
+              <View style={[styles.statIcon, { backgroundColor: '#eff6ff' }]}>
                 <CheckCircle2 size={20} color="#3b82f6" />
               </View>
               <Text style={styles.statValue}>{stats.completed}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
+              <Text style={styles.statLabel}>COMPLETED</Text>
             </View>
           </View>
 
@@ -1902,29 +1901,29 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: 20,
+    justifyContent: 'space-between',
   },
   statCard: {
-    flex: 1,
-    minWidth: (width - 56) / 4,
+    width: '48%',
     backgroundColor: 'white',
     borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#f1f5f9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 2,
+    minHeight: 110,
   },
   statIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   statValue: {
     fontSize: 22,
@@ -1932,10 +1931,11 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#64748b',
-    marginTop: 2,
+    marginTop: 4,
+    letterSpacing: 0.5,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -2082,33 +2082,57 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   gridCard: {
-    width: isTablet ? (width - 56) / 3 : (width - 44) / 2,
     backgroundColor: 'white',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    marginBottom: 16,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    width: '100%',
   },
-  gridCardHeader: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
-  gridProjectIcon: {
+  employeeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  employeeAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
+    borderRadius: 20,
+    backgroundColor: '#eef2ff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  avatarText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4f46e5',
+  },
+  employeeName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  employeeId: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
   },
   gridStatusBadge: {
     paddingHorizontal: 8,
@@ -2119,38 +2143,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  gridProjectInfo: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  gridProjectName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  gridProjectCode: {
-    fontSize: 11,
-    color: '#64748b',
-    marginTop: 2,
-  },
-  gridDetails: {
-    padding: 12,
+  cardContent: {
+    padding: 16,
     gap: 8,
   },
-  gridDetailRow: {
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  gridDetailText: {
-    fontSize: 12,
+  infoText: {
+    fontSize: 13,
     color: '#475569',
     flex: 1,
   },
   gridProgressSection: {
-    paddingHorizontal: 12,
-    paddingBottom: 8,
+    marginTop: 8,
   },
   gridProgressBar: {
     height: 4,
@@ -2168,26 +2176,33 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 4,
   },
-  gridActions: {
+  cardFooter: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
-    gap: 4,
+    backgroundColor: '#fafafa',
   },
-  gridActionBtn: {
+  footerLeft: {
+    flex: 1,
+  },
+  cardActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#f8fafc',
+    gap: 8,
   },
-  gridActionText: {
-    fontSize: 10,
-    fontWeight: '500',
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
   },
   emptyContainer: {
     alignItems: 'center',

@@ -69,6 +69,17 @@ const BalanceCard = ({ title, value, color }: { title: string; value: number; co
     </View>
 );
 
+// Stat Card Component
+const StatCard = ({ title, value, icon: Icon, color, bgColor, onPress }: any) => (
+  <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>
+    <View style={[styles.statIconContainer, { backgroundColor: bgColor }]}>
+      <Icon size={20} color={color} />
+    </View>
+    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statLabel}>{title.toUpperCase()}</Text>
+  </TouchableOpacity>
+);
+
 // Leave Request Card
 const LeaveRequestCard = ({
     leave,
@@ -93,10 +104,16 @@ const LeaveRequestCard = ({
 
     return (
         <View style={styles.requestCard}>
-            <View style={styles.requestHeader}>
-                <View>
-                    <Text style={styles.leaveType}>{leave.leaveType.toUpperCase()}</Text>
-                    <Text style={styles.leaveId}>ID: {leave.leaveId}</Text>
+            {/* Header */}
+            <View style={styles.cardHeader}>
+                <View style={styles.employeeInfo}>
+                    <View style={styles.employeeAvatar}>
+                        <Text style={styles.avatarText}>{(leave.leaveType || '?').charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.leaveType}>{leave.leaveType.toUpperCase()}</Text>
+                        <Text style={styles.leaveId}>ID: {leave.leaveId}</Text>
+                    </View>
                 </View>
                 <View style={[styles.statusContainer, { backgroundColor: `${getStatusColor()}15` }]}>
                     <Text style={[styles.statusText, { color: getStatusColor() }]}>
@@ -105,31 +122,37 @@ const LeaveRequestCard = ({
                 </View>
             </View>
 
-            <View style={styles.requestDates}>
-                <View style={styles.dateItem}>
-                    <Text style={styles.dateLabel}>From</Text>
-                    <Text style={styles.dateValue}>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</Text>
+            {/* Details */}
+            <View style={styles.cardContent}>
+                <View style={styles.requestDates}>
+                    <View style={styles.dateItem}>
+                        <Text style={styles.dateLabel}>From</Text>
+                        <Text style={styles.dateValue}>{format(new Date(leave.startDate), 'MMM dd, yyyy')}</Text>
+                    </View>
+                    <View style={styles.dateDivider} />
+                    <View style={styles.dateItem}>
+                        <Text style={styles.dateLabel}>To</Text>
+                        <Text style={styles.dateValue}>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</Text>
+                    </View>
                 </View>
-                <View style={styles.dateDivider} />
-                <View style={styles.dateItem}>
-                    <Text style={styles.dateLabel}>To</Text>
-                    <Text style={styles.dateValue}>{format(new Date(leave.endDate), 'MMM dd, yyyy')}</Text>
+
+                <View style={styles.infoRow}>
+                    <Calendar size={14} color="#64748b" />
+                    <Text style={styles.infoText}>{leave.totalDays} day(s)</Text>
                 </View>
             </View>
 
-            <View style={styles.requestFooter}>
-                <View style={styles.daysContainer}>
-                    <Calendar size={14} color="#64748b" />
-                    <Text style={styles.daysText}>{leave.totalDays} day(s)</Text>
-                </View>
+            {/* Footer */}
+            <View style={styles.cardFooter}>
+                <View style={styles.footerLeft} />
                 <View style={styles.actionButtons}>
-                    <TouchableOpacity onPress={onView} style={styles.actionButton}>
-                        <Eye size={16} color="#3b82f6" />
+                    <TouchableOpacity onPress={onView} style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}>
+                        <Eye size={16} color="#8b5cf6" />
                     </TouchableOpacity>
                     {leave.status === 'pending' && (
                         <TouchableOpacity
                             onPress={onCancel}
-                            style={styles.actionButton}
+                            style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
                             disabled={isCancelling}
                         >
                             <Ban size={16} color="#ef4444" />
@@ -310,14 +333,14 @@ const LeaveDetailModal = ({
                             {isAdmin && leave.status === 'pending' && (
                                 <View style={{ flexDirection: 'row', gap: 8 }}>
                                     <TouchableOpacity 
-                                        style={[styles.actionButton, { backgroundColor: '#fef2f2' }]} 
+                                        style={[styles.actionBtn, { backgroundColor: '#fef2f2' }]} 
                                         onPress={() => onReject(leave.id, '')}
                                         disabled={isProcessing}
                                     >
                                         <X size={16} color="#ef4444" />
                                     </TouchableOpacity>
                                     <TouchableOpacity 
-                                        style={[styles.actionButton, { backgroundColor: '#ecfdf5' }]} 
+                                        style={[styles.actionBtn, { backgroundColor: '#ecfdf5' }]} 
                                         onPress={() => onApprove(leave.id)}
                                         disabled={isProcessing}
                                     >
@@ -804,25 +827,10 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
 
                     {/* Stats */}
                     <View style={styles.statsContainer}>
-                        <View style={styles.statItem}>
-                            <Text style={[styles.statValue, { color: '#3b82f6' }]}>{stats.total}</Text>
-                            <Text style={styles.statLabel}>Total</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={[styles.statValue, { color: '#f59e0b' }]}>{stats.pending}</Text>
-                            <Text style={styles.statLabel}>Pending</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={[styles.statValue, { color: '#10b981' }]}>{stats.approved}</Text>
-                            <Text style={styles.statLabel}>Approved</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={[styles.statValue, { color: '#ef4444' }]}>{stats.rejected}</Text>
-                            <Text style={styles.statLabel}>Rejected</Text>
-                        </View>
+                        <StatCard title="Total" value={stats.total} icon={FileText} color="#3b82f6" bgColor="#eff6ff" />
+                        <StatCard title="Pending" value={stats.pending} icon={AlertCircle} color="#f59e0b" bgColor="#fffbeb" />
+                        <StatCard title="Approved" value={stats.approved} icon={CheckCircle2} color="#10b981" bgColor="#ecfdf5" />
+                        <StatCard title="Rejected" value={stats.rejected} icon={XCircle} color="#ef4444" bgColor="#fef2f2" />
                     </View>
 
                     {/* Leave Requests List */}
@@ -925,30 +933,140 @@ const styles = StyleSheet.create({
     balanceTitle: { fontSize: 12, fontWeight: '600', color: '#1e293b', marginTop: 4 },
     balanceLabel: { fontSize: 10, color: '#64748b', marginTop: 2 },
 
-    statsContainer: { flexDirection: 'row', backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 20, alignItems: 'center', justifyContent: 'space-around', borderWidth: 1, borderColor: '#e2e8f0' },
-    statItem: { alignItems: 'center', flex: 1 },
-    statValue: { fontSize: 20, fontWeight: '800' },
-    statLabel: { fontSize: 11, color: '#64748b', marginTop: 4 },
-    statDivider: { width: 1, height: 30, backgroundColor: '#e2e8f0' },
+    statsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        marginBottom: 20,
+        justifyContent: 'space-between',
+    },
+    statCard: {
+        width: '48%',
+        backgroundColor: 'white',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+        minHeight: 110,
+    },
+    statIconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    statValue: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: '#1e293b',
+    },
+    statLabel: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#64748b',
+        marginTop: 4,
+        letterSpacing: 0.5,
+    },
 
     sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
 
-    requestCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-    requestHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+    requestCard: { 
+        backgroundColor: 'white', 
+        borderRadius: 16, 
+        marginBottom: 12, 
+        borderWidth: 1, 
+        borderColor: '#e2e8f0',
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    employeeInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    employeeAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#eef2ff',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#c7d2fe',
+    },
+    avatarText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#4f46e5',
+    },
     leaveType: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
     leaveId: { fontSize: 10, color: '#64748b', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
     statusContainer: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
     statusText: { fontSize: 10, fontWeight: '600' },
-    requestDates: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    cardContent: {
+        padding: 16,
+        gap: 8,
+    },
+    requestDates: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
     dateItem: { alignItems: 'center' },
     dateLabel: { fontSize: 10, color: '#64748b', marginBottom: 2 },
     dateValue: { fontSize: 12, fontWeight: '500', color: '#1e293b' },
     dateDivider: { width: 1, height: 20, backgroundColor: '#e2e8f0' },
-    requestFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    daysContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    daysText: { fontSize: 12, color: '#64748b' },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    infoText: {
+        fontSize: 13,
+        color: '#475569',
+        flex: 1,
+    },
+    cardFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        backgroundColor: '#fafafa',
+    },
+    footerLeft: {
+        flex: 1,
+    },
     actionButtons: { flexDirection: 'row', gap: 8 },
-    actionButton: { padding: 8, borderRadius: 8, backgroundColor: '#f8fafc' },
+    actionBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 1,
+        elevation: 1,
+    },
 
     loader: { padding: 40 },
 
