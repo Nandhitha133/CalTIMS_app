@@ -21,7 +21,7 @@ interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: string;
   read: boolean;
   createdAt: Date;
 }
@@ -106,10 +106,14 @@ export default function Header({
       // Robust data extraction
       let rawData = [];
       if (response) {
-        if (Array.isArray(response.data?.data)) {
+        if (Array.isArray(response.data?.notifications)) {
+          rawData = response.data.notifications;
+        } else if (Array.isArray(response.data?.data)) {
           rawData = response.data.data;
         } else if (Array.isArray(response.data)) {
           rawData = response.data;
+        } else if (Array.isArray(response.notifications)) {
+          rawData = response.notifications;
         } else if (Array.isArray(response)) {
           rawData = response;
         }
@@ -172,6 +176,52 @@ export default function Header({
     }
   };
 
+  const handleNotificationPress = async (notification: Notification) => {
+    try {
+      // 1. Mark as read in background
+      await markAsRead(notification.id);
+      
+      // 2. Close notification modal
+      setShowNotifications(false);
+      
+      // 3. Robust routing based on type/title/message keywords
+      const typeLower = (notification.type || '').toLowerCase();
+      const titleLower = (notification.title || '').toLowerCase();
+      const msgLower = (notification.message || '').toLowerCase();
+      
+      if (
+        typeLower.includes('announcement') || 
+        titleLower.includes('announcement') || 
+        msgLower.includes('announcement')
+      ) {
+        navigation.navigate('Announcements');
+      } else if (
+        typeLower.includes('leave') || 
+        titleLower.includes('leave') || 
+        msgLower.includes('leave')
+      ) {
+        navigation.navigate('LeaveTracker');
+      } else if (
+        typeLower.includes('timesheet') || 
+        titleLower.includes('timesheet') || 
+        msgLower.includes('timesheet')
+      ) {
+        navigation.navigate('TimesheetEntry');
+      } else if (
+        typeLower.includes('incident') || 
+        typeLower.includes('ticket') || 
+        titleLower.includes('incident') || 
+        titleLower.includes('ticket') || 
+        msgLower.includes('incident') || 
+        msgLower.includes('ticket')
+      ) {
+        navigation.navigate('Incidents');
+      }
+    } catch (error) {
+      console.error('Error handling notification press:', error);
+    }
+  };
+
   const markAllAsRead = async () => {
     try {
       if (notificationAPI?.markAllRead) {
@@ -186,12 +236,32 @@ export default function Header({
   };
 
   const getNotificationColor = (type: string) => {
-    switch (type) {
-      case 'success': return '#10b981';
-      case 'warning': return '#f59e0b';
-      case 'error': return '#ef4444';
-      default: return '#3b82f6';
+    const typeLower = (type || '').toLowerCase();
+    if (
+      typeLower.includes('success') || 
+      typeLower.includes('approve') || 
+      typeLower.includes('resolve')
+    ) {
+      return '#10b981'; // Green for successes/approvals/resolutions
     }
+    if (
+      typeLower.includes('warning') || 
+      typeLower.includes('reject') || 
+      typeLower.includes('pending')
+    ) {
+      return '#f59e0b'; // Yellow/Orange for warnings/rejections/pending states
+    }
+    if (
+      typeLower.includes('error') || 
+      typeLower.includes('fail') || 
+      typeLower.includes('cancel')
+    ) {
+      return '#ef4444'; // Red for errors/cancellations
+    }
+    if (typeLower.includes('announcement')) {
+      return '#8b5cf6'; // Beautiful Purple for announcements
+    }
+    return '#3b82f6'; // Premium Blue for standard info
   };
 
 
@@ -224,7 +294,7 @@ export default function Header({
             renderItem={({ item }) => (
               <TouchableOpacity 
                 style={[styles.notificationItem, !item.read && styles.unreadItem]}
-                onPress={() => markAsRead(item.id)}
+                onPress={() => handleNotificationPress(item)}
               >
                 <View style={[styles.notificationTypeIndicator, { backgroundColor: getNotificationColor(item.type) }]} />
                 <View style={styles.notificationTextContent}>

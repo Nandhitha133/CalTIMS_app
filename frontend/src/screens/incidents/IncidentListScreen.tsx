@@ -562,7 +562,7 @@ export default function IncidentListScreen() {
     );
   };
 
-  const FilterModal = () => (
+  const renderFilterModal = () => (
     <Modal visible={showFilterModal} animationType="slide" transparent={true}>
       <View style={styles.modalOverlay}>
         <View style={styles.filterModal}>
@@ -625,11 +625,11 @@ export default function IncidentListScreen() {
     </Modal>
   );
 
-  const CreateIncidentModal = () => (
+  const renderCreateIncidentModal = () => (
     <Modal visible={showCreateModal} animationType="slide" transparent={true}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { paddingHorizontal: 20, paddingTop: 20 }]}>
             <Text style={styles.modalTitle}>Report an Issue</Text>
             <TouchableOpacity onPress={() => setShowCreateModal(false)}>
               <X size={24} color="#64748b" />
@@ -751,7 +751,6 @@ export default function IncidentListScreen() {
         <PageHeader
           title="My Incidents"
           subtitle="Manage internal incidents and support requests"
-          onMenuPress={() => setSidebarVisible(true)}
           rightElement={
             <TouchableOpacity
               style={styles.createButton}
@@ -850,8 +849,8 @@ export default function IncidentListScreen() {
         )}
       </View>
 
-      <FilterModal />
-      <CreateIncidentModal />
+      {renderFilterModal()}
+      {renderCreateIncidentModal()}
 
       <DropdownModal
         visible={showStatusDropdown}
