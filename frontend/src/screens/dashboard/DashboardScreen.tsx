@@ -664,8 +664,6 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     setSelectedDate(date);
     if (dayEvents.length > 0) {
       Alert.alert(format(date, 'MMMM dd, yyyy'), dayEvents.map(e => `• ${e.title} (${e.eventType})`).join('\n'), [{ text: 'OK' }]);
-    } else {
-      setTimesheetModalVisible(true);
     }
   };
 
@@ -731,7 +729,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
                   <View style={[styles.progressBar, { width: `${progressPct}%`, backgroundColor: isComplete ? COLORS.success : COLORS.primary }]} />
                 </View>
                 <View style={styles.actionButtons}>
-                  <TouchableOpacity onPress={() => setTimesheetModalVisible(true)} style={[styles.actionButton, styles.primaryButton]}>
+                  <TouchableOpacity onPress={() => navigation.navigate('TimesheetEntry')} style={[styles.actionButton, styles.primaryButton]}>
                     <Text style={styles.actionButtonText}>{isComplete ? 'Review Timesheet' : 'Continue Timesheet'}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => navigation.navigate('TimesheetHistory')} style={[styles.actionButton, styles.secondaryButton]}>
@@ -752,7 +750,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
           {/* Quick Action Buttons */}
           <View style={styles.quickActions}>
-            <TouchableOpacity style={[styles.quickAction, { backgroundColor: preferences.theme === 'dark' ? COLORS.dark : COLORS.white }]} onPress={() => setTimesheetModalVisible(true)}>
+            <TouchableOpacity style={[styles.quickAction, { backgroundColor: preferences.theme === 'dark' ? COLORS.dark : COLORS.white }]} onPress={() => navigation.navigate('TimesheetEntry')}>
               <View style={[styles.quickActionIcon, { backgroundColor: `${COLORS.primary}15` }]}><Clock size={20} color={COLORS.primary} /></View>
               <Text style={[styles.quickActionText, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Log Time</Text>
             </TouchableOpacity>
@@ -828,7 +826,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
                     ) : (
                       <StatCard title="Sick Leave" value={leaveBalance.sick || 0} icon={AlertCircle} color={COLORS.warning} onPress={() => navigation.navigate('LeaveTracker')} subtitle="Available balance" loading={loading} theme={preferences.theme} />
                     )}
-                    <StatCard title="This Week" value={`${loggedHoursThisWeek.toFixed(1)}h`} icon={Clock} color={COLORS.primary} onPress={() => setTimesheetModalVisible(true)} subtitle={`of ${targetHours}h target`} loading={loading} theme={preferences.theme} />
+                    <StatCard title="This Week" value={`${loggedHoursThisWeek.toFixed(1)}h`} icon={Clock} color={COLORS.primary} onPress={() => navigation.navigate('TimesheetEntry')} subtitle={`of ${targetHours}h target`} loading={loading} theme={preferences.theme} />
                   </View>
                 </>
               )}
@@ -902,7 +900,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               <View style={styles.insightContent}>
                 <Text style={styles.insightTitle}>Insight</Text>
                 <Text style={styles.insightText}>You've logged {loggedHoursThisWeek.toFixed(1)} hours this week. {targetHours - loggedHoursThisWeek > 0 ? `${(targetHours - loggedHoursThisWeek).toFixed(1)} hours remaining` : 'Great job meeting your target!'}</Text>
-                <TouchableOpacity onPress={() => setTimesheetModalVisible(true)}><Text style={styles.insightLink}>Review Entries →</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('TimesheetEntry')}><Text style={styles.insightLink}>Review Entries →</Text></TouchableOpacity>
               </View>
             </View>
           )}

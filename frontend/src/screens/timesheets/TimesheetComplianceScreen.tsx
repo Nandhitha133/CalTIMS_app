@@ -349,7 +349,7 @@ const FillModal = ({
                           style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', height: 40, justifyContent: 'center' }]}
                           onPress={() => openProjectPicker(row.id, row.projectId)}
                         >
-                          <Text style={[modalStyles.selectInputText, { color: theme === 'dark' ? '#ffffff' : (row.projectId ? (theme === 'dark' ? '#ffffff' : '#1e293b') : '#94a3b8') }]} numberOfLines={1}>
+                          <Text style={[modalStyles.selectInputText, { color: theme === 'dark' ? '#ffffff' : (row.projectId ? '#1e293b' : '#94a3b8') }]} numberOfLines={1}>
                             {projectObj ? projectObj.name : 'Select Project'}
                           </Text>
                         </TouchableOpacity>
@@ -360,7 +360,7 @@ const FillModal = ({
                           style={[modalStyles.selectWrapper, { backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc', height: 40, justifyContent: 'center' }]}
                           onPress={() => openTaskPicker(row.id, row.projectId, row.taskType)}
                         >
-                          <Text style={[modalStyles.selectInputText, { color: theme === 'dark' ? '#ffffff' : (row.taskType ? (theme === 'dark' ? '#ffffff' : '#1e293b') : '#94a3b8') }]} numberOfLines={1}>
+                          <Text style={[modalStyles.selectInputText, { color: theme === 'dark' ? '#ffffff' : (row.taskType ? '#1e293b' : '#94a3b8') }]} numberOfLines={1}>
                             {row.taskType || 'Select Task'}
                           </Text>
                         </TouchableOpacity>

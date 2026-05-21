@@ -149,7 +149,9 @@ const TimesheetRow = ({
   const isPermission = isPermissionRow(row.taskType);
   const rowTotal = row.dayHours.reduce((acc: number, time: string) => {
     if (!time || time === '-8') return acc;
-    const [h, m] = time.split(':').map(Number);
+    const [hStr, mStr] = time.split(':');
+    const h = parseInt(hStr, 10) || 0;
+    const m = parseInt(mStr, 10) || 0;
     return acc + h + (m / 60);
   }, 0);
 
@@ -260,16 +262,22 @@ const TimesheetRow = ({
                   placeholder="00"
                   placeholderTextColor="#94a3b8"
                   editable={!isDisabledInput}
+                  onBlur={() => {
+                    let hStr = row.dayHours[dayIdx].split(':')[0] || '00';
+                    if (hStr === '') hStr = '00';
+                    else hStr = String(Math.min(24, parseInt(hStr, 10) || 0)).padStart(2, '0');
+                    const mStr = row.dayHours[dayIdx].split(':')[1] || '00';
+                    onUpdateHour(row.id, dayIdx, `${hStr}:${mStr}`);
+                  }}
                 />
                 <Text style={styles.hourSeparator}>:</Text>
                 <TextInput
                   style={[styles.hourInput, isDisabledInput && styles.hourInputDisabled]}
                   value={row.dayHours[dayIdx].split(':')[1]}
                   onChangeText={(text) => {
-                    let m = parseInt(text.replace(/\D/g, ''), 10) || 0;
-                    if (m > 59) m = 59;
+                    const m = text.replace(/\D/g, '').slice(0, 2);
                     const h = row.dayHours[dayIdx].split(':')[0] || '00';
-                    onUpdateHour(row.id, dayIdx, `${h}:${String(m).padStart(2, '0')}`);
+                    onUpdateHour(row.id, dayIdx, `${h}:${m}`);
                   }}
                   keyboardType="numeric"
                   maxLength={2}
@@ -277,10 +285,15 @@ const TimesheetRow = ({
                   placeholderTextColor="#94a3b8"
                   editable={!isDisabledInput}
                   onBlur={() => {
-                    let m = parseInt(row.dayHours[dayIdx].split(':')[1], 10) || 0;
-                    if (m > 59) m = 59;
-                    const h = row.dayHours[dayIdx].split(':')[0] || '00';
-                    onUpdateHour(row.id, dayIdx, `${h}:${String(m).padStart(2, '0')}`);
+                    const hStr = row.dayHours[dayIdx].split(':')[0] || '00';
+                    let mStr = row.dayHours[dayIdx].split(':')[1] || '00';
+                    if (mStr === '') mStr = '00';
+                    else {
+                      let mNum = parseInt(mStr, 10) || 0;
+                      if (mNum > 59) mNum = 59;
+                      mStr = String(mNum).padStart(2, '0');
+                    }
+                    onUpdateHour(row.id, dayIdx, `${hStr}:${mStr}`);
                   }}
                 />
               </View>
@@ -713,12 +726,15 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         projectId: row.projectId,
         category: row.taskType,
         weekStartDate: format(weekStart, 'yyyy-MM-dd'),
-        entries: weekDays.map((day, i) => {
+        entries: weekDays.filter(day => isWorkingDay(day)).map((day) => {
+          const i = weekDays.indexOf(day);
           const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
           const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
           let hoursWorked = 0;
           if (!isFullDay) {
-            const [h, m] = row.dayHours[i].split(':').map(Number);
+            const [hStr, mStr] = row.dayHours[i].split(':');
+            const h = parseInt(hStr, 10) || 0;
+            const m = parseInt(mStr, 10) || 0;
             hoursWorked = h + (m / 60);
           }
           return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
@@ -736,18 +752,49 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   };
 
   const handleSubmitWeek = async () => {
+    // Validation 1: Check if it's Friday or later of the current week
+    const friday = addDays(weekStart, 4);
+    friday.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (today < friday) {
+      Alert.alert('Validation Error', 'You can only submit the timesheet on or after Friday of the selected week.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      // Validation 2: Check for pending previous weeks
+      const historyResponse = await timesheetAPI.getAll({ userId: user?.id, limit: 100 });
+      const allTimesheets = extractData(historyResponse, []);
+      const previousPending = allTimesheets.find((ts: any) => {
+        const tsDate = new Date(typeof ts.weekStartDate === 'string' ? ts.weekStartDate.split('T')[0] : ts.weekStartDate);
+        tsDate.setHours(0, 0, 0, 0);
+        const currentWeekStart = new Date(weekStart);
+        currentWeekStart.setHours(0, 0, 0, 0);
+        return tsDate < currentWeekStart && ['draft', 'rejected', 'pending'].includes(ts.status?.toLowerCase());
+      });
+
+      if (previousPending) {
+        Alert.alert('Validation Error', 'You have pending timesheets from previous weeks. Please complete and submit them first.');
+        setIsSubmitting(false);
+        return;
+      }
+
       const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS' && !isPermissionRow(r.taskType)).map(row => ({
         projectId: row.projectId,
         category: row.taskType,
         weekStartDate: format(weekStart, 'yyyy-MM-dd'),
-        entries: weekDays.map((day, i) => {
+        entries: weekDays.filter(day => isWorkingDay(day)).map((day) => {
+          const i = weekDays.indexOf(day);
           const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
           const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
           let hoursWorked = 0;
           if (!isFullDay) {
-            const [h, m] = row.dayHours[i].split(':').map(Number);
+            const [hStr, mStr] = row.dayHours[i].split(':');
+            const h = parseInt(hStr, 10) || 0;
+            const m = parseInt(mStr, 10) || 0;
             hoursWorked = h + (m / 60);
           }
           return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
@@ -796,7 +843,9 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
   const handleUpdateHour = (rowId: number, dayIndex: number, value: string) => {
     const [hStr, mStr] = value.split(':');
-    if (parseInt(hStr, 10) + (parseInt(mStr, 10) / 60) > 24) {
+    const h = parseInt(hStr, 10) || 0;
+    const m = parseInt(mStr, 10) || 0;
+    if (h + (m / 60) > 24) {
       Alert.alert('Error', 'Individual entry cannot exceed 24 hours');
       return;
     }
@@ -968,6 +1017,14 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     const totalHours = totalMs / (1000 * 60 * 60);
     return formatHours(totalHours);
   };
+
+  const isSubmitAllowed = useMemo(() => {
+    const friday = addDays(weekStart, 4);
+    friday.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today >= friday;
+  }, [weekStart]);
 
   if (loading && !refreshing) return <LoadingSpinner />;
 
@@ -1148,9 +1205,9 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
           </View>
 
           <TouchableOpacity
-            style={[styles.submitButton, (isWeekSubmitted || isSubmitting) && styles.submitButtonDisabled]}
+            style={[styles.submitButton, (isWeekSubmitted || isSubmitting || !isSubmitAllowed) && styles.submitButtonDisabled]}
             onPress={handleSubmitWeek}
-            disabled={isWeekSubmitted || isSubmitting}
+            disabled={isWeekSubmitted || isSubmitting || !isSubmitAllowed}
           >
             {isSubmitting ? (
               <ActivityIndicator size="small" color="white" />
@@ -1158,7 +1215,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
               <>
                 <Send size={18} color="white" />
                 <Text style={styles.submitButtonText}>
-                  {isWeekSubmitted ? 'Week Submitted' : `Submit Week (${formatHours(totalWeekHours)})`}
+                  {isWeekSubmitted ? 'Week Submitted' : (!isSubmitAllowed ? 'Cannot Submit Before Friday' : `Submit Week (${formatHours(totalWeekHours)})`)}
                 </Text>
               </>
             )}

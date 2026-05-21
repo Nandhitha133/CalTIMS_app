@@ -102,8 +102,14 @@ const timesheetController = {
   }),
 
   getDetails: asyncHandler(async (req, res) => {
-    const { userId, weekStartDate } = req.query;
-    const ts = await timesheetService.getDetailsByUserAndWeek(userId, weekStartDate, req.organizationId);
+    const { userId, weekStartDate, id, timesheetId } = req.query;
+    const ts = await timesheetService.getDetailsByUserAndWeek(
+      userId,
+      weekStartDate,
+      req.user,
+      req.organizationId,
+      id || timesheetId
+    );
     ApiResponse.success(res, { data: ts });
   }),
 

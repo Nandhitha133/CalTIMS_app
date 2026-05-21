@@ -64,7 +64,7 @@ async function getWeekStartDay(organizationId) {
 async function getFreezeInfo(weekStartDate, organizationId) {
   const policy = await policyService.getPolicy(organizationId);
   const freezeDay = policy?.compliance?.timesheetFreezeDay || 28;
-  
+
   const today = new Date();
   const currentDay = today.getDate();
   const currentMonth = today.getMonth();
@@ -103,11 +103,11 @@ const timesheetService = {
     });
 
     logAction({
-        userId,
-        action: 'CREATE_TIMESHEET',
-        entityType: 'Timesheet',
-        entityId: ts._id,
-        details: { weekStartDate: weekStart }
+      userId,
+      action: 'CREATE_TIMESHEET',
+      entityType: 'Timesheet',
+      entityId: ts._id,
+      details: { weekStartDate: weekStart }
     });
 
     return ts;
@@ -117,7 +117,7 @@ const timesheetService = {
     const ts = await Timesheet.findOne({ _id: id, organizationId });
     if (!ts) throw new AppError('Timesheet not found', 404);
     if (ts.userId.toString() !== userId.toString()) throw new AppError('Unauthorized', 403);
-    
+
     const { isFrozen } = await getFreezeInfo(ts.weekStartDate, organizationId);
     if (ts.status === TIMESHEET_STATUS.FROZEN || isFrozen) {
       if (ts.status !== TIMESHEET_STATUS.FROZEN) {
@@ -139,11 +139,11 @@ const timesheetService = {
     await ts.save();
 
     logAction({
-        userId,
-        action: 'UPDATE_TIMESHEET',
-        entityType: 'Timesheet',
-        entityId: id,
-        details: { weekStartDate: ts.weekStartDate }
+      userId,
+      action: 'UPDATE_TIMESHEET',
+      entityType: 'Timesheet',
+      entityId: id,
+      details: { weekStartDate: ts.weekStartDate }
     });
 
     return ts;
@@ -151,6 +151,34 @@ const timesheetService = {
 
   async getById(id, requestor, organizationId) {
     const timesheet = await Timesheet.findOne({ _id: id, organizationId })
+      .populate('userId', 'name email employeeId department')
+      .populate('rows.projectId', 'name code')
+      .populate('approvedBy', 'name email');
+
+    if (!timesheet) throw new AppError('Timesheet not found', 404);
+
+    if (requestor.role === ROLES.EMPLOYEE && timesheet.userId._id.toString() !== requestor._id.toString()) {
+      throw new AppError('You do not have permission to view this timesheet', 403);
+    }
+
+    return timesheet;
+  },
+
+  async getDetailsByUserAndWeek(userId, weekStartDate, requestor, organizationId, timesheetId) {
+    let query = { organizationId };
+
+    if (timesheetId && mongoose.Types.ObjectId.isValid(timesheetId)) {
+      query._id = timesheetId;
+    } else if (userId && weekStartDate) {
+      const wsd = await getWeekStartDay(organizationId);
+      const weekStart = getWeekStart(new Date(weekStartDate), wsd);
+      query.userId = userId;
+      query.weekStartDate = weekStart;
+    } else {
+      throw new AppError('Missing required parameters', 400);
+    }
+
+    const timesheet = await Timesheet.findOne(query)
       .populate('userId', 'name email employeeId department')
       .populate('rows.projectId', 'name code')
       .populate('approvedBy', 'name email');
@@ -307,11 +335,11 @@ const timesheetService = {
       await timesheet.save();
 
       logAction({
-          userId,
-          action: 'UPDATE_TIMESHEET',
-          entityType: 'Timesheet',
-          entityId: timesheet._id,
-          details: { weekStartDate: timesheet.weekStartDate, bulk: true }
+        userId,
+        action: 'UPDATE_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: timesheet._id,
+        details: { weekStartDate: timesheet.weekStartDate, bulk: true }
       });
 
       results.push(timesheet);
@@ -383,15 +411,15 @@ const timesheetService = {
       const targetUser = await User.findOne({ _id: targetUserId, organizationId }).select('name');
 
       logAction({
-          userId: adminId,
-          action: 'ADMIN_FILLED_TIMESHEET',
-          entityType: 'Timesheet',
-          entityId: timesheet._id,
-          details: { 
-              weekStartDate: timesheet.weekStartDate, 
-              ownerId: targetUserId,
-              ownerName: targetUser?.name || 'Unknown'
-          }
+        userId: adminId,
+        action: 'ADMIN_FILLED_TIMESHEET',
+        entityType: 'Timesheet',
+        entityId: timesheet._id,
+        details: {
+          weekStartDate: timesheet.weekStartDate,
+          ownerId: targetUserId,
+          ownerName: targetUser?.name || 'Unknown'
+        }
       });
 
       results.push(timesheet);
@@ -410,7 +438,7 @@ const timesheetService = {
     if (compliance.allowBackdatedEntries === false) {
       const wsd = settingsDoc?.general?.weekStartDay || 'monday';
       const currentWeekStart = getWeekStart(new Date(), wsd);
-      
+
       if (new Date(timesheet.weekStartDate) < currentWeekStart) {
         // Only enforce for non-admin fills (if filledByAdmin is false)
         if (!timesheet.filledByAdmin) {
@@ -419,7 +447,7 @@ const timesheetService = {
       }
     }
 
-    const entriesByDay = {}; 
+    const entriesByDay = {};
     let totalEntries = 0;
     const permissionDays = new Set();
     const permissionHoursByDay = {};
@@ -431,7 +459,7 @@ const timesheetService = {
           try {
             const d = new Date(e.date);
             const dateStr = d.toISOString().split('T')[0];
-            
+
             // Standard entry limits
             entriesByDay[dateStr] = (entriesByDay[dateStr] || 0) + 1;
             totalEntries++;
@@ -501,7 +529,7 @@ const timesheetService = {
       }).lean();
 
       const monthPermissionDays = new Set([...permissionDays]);
-      
+
       otherTimesheets.forEach(ts => {
         ts.rows.forEach(row => {
           if (row.category?.toLowerCase() === 'permission' || row.category === PERMISSION_MARKER) {
@@ -514,7 +542,7 @@ const timesheetService = {
                   if (d >= monthStart && d <= monthEnd) {
                     monthPermissionDays.add(dateStr);
                   }
-                } catch (err) {}
+                } catch (err) { }
               }
             });
           }
@@ -538,7 +566,7 @@ const timesheetService = {
     // Restriction: Cannot submit current week's timesheet before the submission day
     const today = new Date();
     const currentWeekStart = getWeekStart(today, wsd);
-    
+
     const daysMap = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
     const targetDayName = (submissionDeadline || 'Friday').toLowerCase().split(' ')[0];
     let targetDayIndex = daysMap[targetDayName] ?? 5; // Default Friday
@@ -560,10 +588,10 @@ const timesheetService = {
       // Validate zero hours
       const isSystemRow = !data.projectId || data.projectId === 'LEAVE-SYS' || data.category === 'Leave' || data.category === 'Holiday' || data.category === PERMISSION_MARKER;
       if (!isSystemRow) {
-          const totalHours = data.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
-          if (totalHours === 0) {
-              throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
-          }
+        const totalHours = data.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
+        if (totalHours === 0) {
+          throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
+        }
       }
     }
 
@@ -588,7 +616,7 @@ const timesheetService = {
               if (!isWeekendWorkable && (dayOfWeek === 0 || dayOfWeek === 6)) return;
               const dateStr = d.toISOString().split('T')[0];
               hoursPerDay[dateStr] = (hoursPerDay[dateStr] || 0) + (e.hoursWorked || 0);
-            } catch (err) {}
+            } catch (err) { }
           });
         });
 
@@ -622,7 +650,7 @@ const timesheetService = {
       // Gather Project Managers for this specific week
       const projectIds = [...new Set(ts.rows.map(r => r.projectId?.toString()))].filter(Boolean);
       const projectManagers = await Project.find({ _id: { $in: projectIds }, organizationId }).select('managerId').populate('managerId', '_id email');
-      
+
       const approverMap = new Map();
       // Add system admins
       systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
@@ -673,10 +701,10 @@ const timesheetService = {
       const pId = row.projectId ? row.projectId.toString() : null;
       const isSystemRow = !pId || pId === 'LEAVE-SYS' || row.category === 'Leave' || row.category === 'Holiday' || row.category === PERMISSION_MARKER;
       if (!isSystemRow) {
-          const totalHours = row.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
-          if (totalHours === 0) {
-              throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
-          }
+        const totalHours = row.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
+        if (totalHours === 0) {
+          throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
+        }
       }
     }
 
@@ -688,10 +716,10 @@ const timesheetService = {
     const user = await User.findOne({ _id: ts.userId, organizationId }).select('name employeeId managerId');
     const systemApprovers = await User.find({ role: ROLES.ADMIN, isActive: true, organizationId }).select('_id email');
     const directManager = user.managerId ? await User.findOne({ _id: user.managerId, organizationId }).select('_id email') : null;
-    
+
     const projectIds = [...new Set(ts.rows.map(r => r.projectId?.toString()))].filter(Boolean);
     const projectManagers = await Project.find({ _id: { $in: projectIds }, organizationId }).select('managerId').populate('managerId', '_id email');
-    
+
     const approverMap = new Map();
     systemApprovers.forEach(a => approverMap.set(a._id.toString(), a));
     if (directManager) approverMap.set(directManager._id.toString(), directManager);
@@ -736,15 +764,15 @@ const timesheetService = {
     await timesheet.save();
 
     logAction({
-        userId: approverId,
-        action: 'APPROVE_TIMESHEET',
-        entityType: 'Timesheet',
-        entityId: id,
-        details: { 
-            weekStartDate: timesheet.weekStartDate, 
-            ownerId: timesheet.userId?._id || timesheet.userId,
-            ownerName: timesheet.userId?.name || 'Unknown'
-        }
+      userId: approverId,
+      action: 'APPROVE_TIMESHEET',
+      entityType: 'Timesheet',
+      entityId: id,
+      details: {
+        weekStartDate: timesheet.weekStartDate,
+        ownerId: timesheet.userId?._id || timesheet.userId,
+        ownerName: timesheet.userId?.name || 'Unknown'
+      }
     });
 
     // Check budget for each project in the timesheet
@@ -782,16 +810,16 @@ const timesheetService = {
     await timesheet.save();
 
     logAction({
-        userId: approverId,
-        action: 'REJECT_TIMESHEET',
-        entityType: 'Timesheet',
-        entityId: id,
-        details: { 
-            weekStartDate: timesheet.weekStartDate, 
-            ownerId: timesheet.userId?._id || timesheet.userId,
-            ownerName: timesheet.userId?.name || 'Unknown',
-            reason 
-        }
+      userId: approverId,
+      action: 'REJECT_TIMESHEET',
+      entityType: 'Timesheet',
+      entityId: id,
+      details: {
+        weekStartDate: timesheet.weekStartDate,
+        ownerId: timesheet.userId?._id || timesheet.userId,
+        ownerName: timesheet.userId?.name || 'Unknown',
+        reason
+      }
     });
 
     const approver = await User.findById(approverId).select('name');
@@ -821,15 +849,15 @@ const timesheetService = {
     await timesheet.deleteOne();
 
     logAction({
-        userId: requestor._id || requestor,
-        action: 'DELETE_TIMESHEET',
-        entityType: 'Timesheet',
-        entityId: id,
-        details: { 
-            weekStartDate: timesheet.weekStartDate, 
-            ownerId: timesheet.userId?._id || timesheet.userId,
-            ownerName: timesheet.userId?.name || 'Unknown' 
-        }
+      userId: requestor._id || requestor,
+      action: 'DELETE_TIMESHEET',
+      entityType: 'Timesheet',
+      entityId: id,
+      details: {
+        weekStartDate: timesheet.weekStartDate,
+        ownerId: timesheet.userId?._id || timesheet.userId,
+        ownerName: timesheet.userId?.name || 'Unknown'
+      }
     });
 
     return true;
@@ -863,19 +891,19 @@ const timesheetService = {
       User.countDocuments(userFilter)
     ]);
 
-    const timesheets = await Timesheet.find({ 
-      weekStartDate: weekStart, 
+    const timesheets = await Timesheet.find({
+      weekStartDate: weekStart,
       userId: { $in: employees.map(e => e._id) },
-      organizationId 
+      organizationId
     }).lean();
-    
+
     const tsMap = new Map(timesheets.map(ts => [ts.userId.toString(), ts]));
     const { isFrozen } = await getFreezeInfo(weekStart, organizationId);
 
     const complianceData = employees.map(emp => {
       const ts = tsMap.get(emp._id.toString());
       let status = ts ? ts.status : 'missing';
-      
+
       if (isFrozen && (status === 'missing' || status === TIMESHEET_STATUS.DRAFT)) {
         status = TIMESHEET_STATUS.FROZEN;
       }
@@ -919,7 +947,7 @@ const timesheetService = {
         // 1. In-App Notifications
         if (notifSettings.inAppEnabled !== false) {
           const admins = await User.find({ role: ROLES.ADMIN, isActive: true, organizationId }).select('_id email');
-          
+
           const notificationPromises = admins.map(admin =>
             notificationService.create({
               userId: admin._id,
@@ -1090,7 +1118,7 @@ const timesheetService = {
     // Use a range to find potentially overlapping timesheets if a setting was changed
     const personalFilter = { userId, organizationId };
     if (projectId) personalFilter['rows.projectId'] = new mongoose.Types.ObjectId(projectId);
-    
+
     if (!isAllWeeks) {
       const rangeStart = new Date(weekStart);
       rangeStart.setUTCDate(rangeStart.getUTCDate() - 7);
@@ -1253,18 +1281,18 @@ const timesheetService = {
 
             // Project totals — all non-leave rows with hours
             if (rowProjectId && rowHoursInWeek > 0) {
-                if (!projectTotalsMap.has(rowProjectId)) {
-                    projectTotalsMap.set(rowProjectId, {
-                        projectId: rowProjectId,
-                        projectName: row.projectId?.name || 'Unknown',
-                        projectCode: row.projectId?.code || 'N/A',
-                        totalHours: 0,
-                        timesheetIds: new Set()
-                    });
-                }
-                const pInfo = projectTotalsMap.get(rowProjectId);
-                pInfo.totalHours += rowHoursInWeek;
-                pInfo.timesheetIds.add(ts._id.toString());
+              if (!projectTotalsMap.has(rowProjectId)) {
+                projectTotalsMap.set(rowProjectId, {
+                  projectId: rowProjectId,
+                  projectName: row.projectId?.name || 'Unknown',
+                  projectCode: row.projectId?.code || 'N/A',
+                  totalHours: 0,
+                  timesheetIds: new Set()
+                });
+              }
+              const pInfo = projectTotalsMap.get(rowProjectId);
+              pInfo.totalHours += rowHoursInWeek;
+              pInfo.timesheetIds.add(ts._id.toString());
             }
           });
         }
@@ -1272,26 +1300,26 @@ const timesheetService = {
 
       const projectTotalsTemp = Array.from(projectTotalsMap.values())
         .map(p => ({
-            ...p,
-            timesheetCount: p.timesheetIds.size
+          ...p,
+          timesheetCount: p.timesheetIds.size
         }));
 
       // Find the most relevant timesheet per user for accurate status counts
       const userTimesheetMap = new Map();
       allTimesheetsThisWeek.forEach(ts => {
-          const uId = ts.userId?._id?.toString();
-          if (!uId) return;
-          
-          if (!userTimesheetMap.has(uId)) {
-             userTimesheetMap.set(uId, ts);
-          } else {
-             const existing = userTimesheetMap.get(uId);
-             const existingDiff = Math.abs(new Date(existing.weekStartDate) - weekStart);
-             const currentDiff = Math.abs(new Date(ts.weekStartDate) - weekStart);
-             if (currentDiff < existingDiff) {
-                 userTimesheetMap.set(uId, ts);
-             }
+        const uId = ts.userId?._id?.toString();
+        if (!uId) return;
+
+        if (!userTimesheetMap.has(uId)) {
+          userTimesheetMap.set(uId, ts);
+        } else {
+          const existing = userTimesheetMap.get(uId);
+          const existingDiff = Math.abs(new Date(existing.weekStartDate) - weekStart);
+          const currentDiff = Math.abs(new Date(ts.weekStartDate) - weekStart);
+          if (currentDiff < existingDiff) {
+            userTimesheetMap.set(uId, ts);
           }
+        }
       });
 
       const relevantTimesheets = Array.from(userTimesheetMap.values());
@@ -1308,15 +1336,15 @@ const timesheetService = {
 
       const ProjectModel = mongoose.model('Project');
       const allActiveProjects = await ProjectModel.find({ status: 'active' }).select('name code budgetHours').lean();
-      
+
       const mergedProjectTotals = allActiveProjects.reduce((acc, p) => {
         if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
         const existing = projectTotalsTemp.find(pt => pt.projectCode === p.code || pt.projectName === p.name);
         if (existing) {
-          acc.push({ 
-            ...existing, 
+          acc.push({
+            ...existing,
             projectId: existing.projectId || p._id.toString(),
-            budgetHours: p.budgetHours || 0 
+            budgetHours: p.budgetHours || 0
           });
         } else {
           acc.push({
@@ -1337,7 +1365,7 @@ const timesheetService = {
         hoursThisWeek: totalTeamHoursThisWeek,
         dailyHours: teamDailyHours,
         personalStatus: personalStatus,
-        
+
         submittedCount: submittedThisWeek.length,
         notSubmittedCount: notSubmitted.length,
         submittedEmployees: submittedThisWeek.map(ts => ({
@@ -1361,18 +1389,18 @@ const timesheetService = {
       };
     }
 
-      const settingsDoc = await mongoose.model('Settings').findOne({ organizationId }).select('timesheet.submissionDeadline').lean();
-      return {
-        ...baseStats,
-        pendingTimesheets: personalPending,
-        approvedTimesheets: personalApproved,
-        rejectedTimesheets: personalRejected,
-        totalEmployees: await User.countDocuments({ organizationId, isActive: true, role: ROLES.EMPLOYEE }),
-        totalManagers: await User.countDocuments({ organizationId, isActive: true, role: ROLES.MANAGER }),
-        totalAdmins: await User.countDocuments({ organizationId, isActive: true, role: ROLES.ADMIN }),
-        submissionDeadline: settingsDoc?.timesheet?.submissionDeadline || 'Friday 18:00'
-      };
-    },
+    const settingsDoc = await mongoose.model('Settings').findOne({ organizationId }).select('timesheet.submissionDeadline').lean();
+    return {
+      ...baseStats,
+      pendingTimesheets: personalPending,
+      approvedTimesheets: personalApproved,
+      rejectedTimesheets: personalRejected,
+      totalEmployees: await User.countDocuments({ organizationId, isActive: true, role: ROLES.EMPLOYEE }),
+      totalManagers: await User.countDocuments({ organizationId, isActive: true, role: ROLES.MANAGER }),
+      totalAdmins: await User.countDocuments({ organizationId, isActive: true, role: ROLES.ADMIN }),
+      submissionDeadline: settingsDoc?.timesheet?.submissionDeadline || 'Friday 18:00'
+    };
+  },
 
   async getAdminKpiSummary(kpi, organizationId) {
     if (kpi === 'project-hours') {
@@ -1447,7 +1475,7 @@ const timesheetService = {
 
       const ProjectModel = mongoose.model('Project');
       const allActiveProjects = await ProjectModel.find({ status: 'active' }).select('name code budgetHours').lean();
-      
+
       const mergedData = allActiveProjects.reduce((acc, p) => {
         if (p.name === 'Leave' || p.code === 'LEAVE-SYS') return acc;
         const existing = data.find(d => d.code === p.code || d.label === p.name);
@@ -1740,7 +1768,7 @@ const timesheetService = {
 
   async exportComplianceTimesheets(query, organizationId) {
     const { data } = await this.getCompliance({ ...query, limit: 10000 }, organizationId);
-    
+
     const fields = [
       { label: 'Employee Name', value: 'user.name' },
       { label: 'Employee ID', value: 'user.employeeId' },

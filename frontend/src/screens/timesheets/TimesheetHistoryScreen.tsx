@@ -61,14 +61,14 @@ const STATUSES = ['All Status', 'draft', 'submitted', 'approved', 'rejected'];
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
 
 // Filter Modal Component
-const FilterModal = ({ 
-  visible, 
-  onClose, 
-  filters, 
-  onApply, 
+const FilterModal = ({
+  visible,
+  onClose,
+  filters,
+  onApply,
   onClear,
-  theme 
-}: { 
+  theme
+}: {
   visible: boolean;
   onClose: () => void;
   filters: any;
@@ -129,9 +129,9 @@ const FilterModal = ({
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Status</Text>
               <SafeSelector
-                options={STATUSES.map(status => ({ 
-                  label: status === 'All Status' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1), 
-                  value: status 
+                options={STATUSES.map(status => ({
+                  label: status === 'All Status' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1),
+                  value: status
                 }))}
                 selectedValue={tempFilters.status}
                 onValueChange={(value) => setTempFilters({ ...tempFilters, status: value })}
@@ -158,13 +158,13 @@ const FilterModal = ({
 };
 
 // Timesheet Details Modal
-const TimesheetDetailsModal = ({ 
-  visible, 
-  onClose, 
-  weekStartDate, 
+const TimesheetDetailsModal = ({
+  visible,
+  onClose,
+  weekStartDate,
   userId,
-  theme 
-}: { 
+  theme
+}: {
   visible: boolean;
   onClose: () => void;
   weekStartDate: string;
@@ -226,7 +226,7 @@ const TimesheetDetailsModal = ({
                     </Text>
                     <Text style={styles.detailsProjectHours}>{formatHours(project.totalHours)}</Text>
                   </View>
-                  
+
                   <View style={styles.dailyEntries}>
                     {project.entries?.map((entry: any, idx: number) => (
                       <View key={idx} style={styles.dailyEntry}>
@@ -262,13 +262,13 @@ const TimesheetDetailsModal = ({
 };
 
 // Report Issue Modal
-const ReportIssueModal = ({ 
-  visible, 
-  onClose, 
-  timesheetId, 
+const ReportIssueModal = ({
+  visible,
+  onClose,
+  timesheetId,
   onSubmit,
-  theme 
-}: { 
+  theme
+}: {
   visible: boolean;
   onClose: () => void;
   timesheetId: string;
@@ -472,15 +472,15 @@ const ExportModal = memo(({
 });
 
 // Timesheet Card Component for List View
-const TimesheetCard = ({ 
-  item, 
-  onView, 
-  onEdit, 
-  onDelete, 
+const TimesheetCard = ({
+  item,
+  onView,
+  onEdit,
+  onDelete,
   onReport,
   theme,
-  isPro 
-}: { 
+  isPro
+}: {
   item: TimesheetHistoryItem;
   onView: () => void;
   onEdit: () => void;
@@ -536,7 +536,7 @@ const TimesheetCard = ({
           <TouchableOpacity onPress={onView} style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}>
             <Eye size={16} color="#8b5cf6" />
           </TouchableOpacity>
-          
+
           {isDraft && (
             <>
               <TouchableOpacity onPress={onEdit} style={[styles.actionBtn, { backgroundColor: '#fffbeb' }]}>
@@ -547,9 +547,9 @@ const TimesheetCard = ({
               </TouchableOpacity>
             </>
           )}
-          
-          <TouchableOpacity 
-            onPress={onReport} 
+
+          <TouchableOpacity
+            onPress={onReport}
             style={[styles.actionBtn, { backgroundColor: '#f1f5f9' }, !isPro && styles.actionBtnDisabled]}
             disabled={!isPro}
           >
@@ -730,7 +730,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
   const handleExport = async (formatType: 'csv' | 'excel') => {
     try {
       setIsExporting(true);
-      
+
       // Fetch all historical data without pagination limit for export
       const response = await timesheetService.getHistory({
         limit: 10000,
@@ -748,12 +748,12 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
       }
 
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      const fileName = formatType === 'csv' 
-        ? `timesheet_history_${timestamp}.csv` 
+      const fileName = formatType === 'csv'
+        ? `timesheet_history_${timestamp}.csv`
         : `timesheet_history_${timestamp}.xls`;
 
-      const content = formatType === 'csv' 
-        ? convertToCSV(allData) 
+      const content = formatType === 'csv'
+        ? convertToCSV(allData)
         : generateExcelHTML(allData);
 
       await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
@@ -867,11 +867,11 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <ScrollView 
+      <ScrollView
         style={[styles.container, { backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc' }]}
         showsVerticalScrollIndicator={false}
       >
-       
+
 
         {/* Search and Filter Bar */}
         <View style={styles.searchBar}>
@@ -885,13 +885,13 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
               onChangeText={setSearch}
             />
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.filterButton}
             onPress={() => setFilterModalVisible(true)}
           >
             <Filter size={18} color="#6366f1" />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.exportButton}
             onPress={() => setShowExportModal(true)}
           >
@@ -965,7 +965,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         {/* Pagination */}
         {!loading && timesheets.length > 0 && pagination.totalPages > 1 && (
           <View style={styles.pagination}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.paginationButton, pagination.page === 1 && styles.paginationButtonDisabled]}
               onPress={() => setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: (prev?.page || 1) - 1 }))}
               disabled={pagination.page === 1}
@@ -975,12 +975,12 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
                 Previous
               </Text>
             </TouchableOpacity>
-            
+
             <Text style={[styles.paginationInfo, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}>
               Page {pagination.page} of {pagination.totalPages}
             </Text>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.paginationButton, pagination.page === pagination.totalPages && styles.paginationButtonDisabled]}
               onPress={() => setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: (prev?.page || 1) + 1 }))}
               disabled={pagination.page === pagination.totalPages}

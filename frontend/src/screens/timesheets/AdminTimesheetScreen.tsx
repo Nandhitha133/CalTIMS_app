@@ -40,7 +40,7 @@ import {
   Briefcase,
 } from 'lucide-react-native';
 import { timesheetService } from '../../services/timesheet.service';
-import { projectAPI, userAPI } from '../../services/endpoints';
+import { projectAPI, userAPI, timesheetAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
@@ -149,10 +149,10 @@ const AdminTimesheetCard = ({
   const isPending = item.status?.toLowerCase() === 'submitted';
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       activeOpacity={0.7}
       onPress={onView}
-      style={[styles.card, { 
+      style={[styles.card, {
         backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
         borderColor: theme === 'dark' ? '#334155' : '#e2e8f0'
       }]}
@@ -515,18 +515,47 @@ const TimesheetDetailsModal = ({
   const fetchDetails = async () => {
     setLoading(true);
     try {
-      // Normalize date to YYYY-MM-DD to avoid time-related query mismatches
-      const formattedDate = weekStartDate && weekStartDate.includes('T') 
-        ? weekStartDate.split('T')[0] 
-        : weekStartDate;
-        
-      const data = await timesheetService.getDetails(formattedDate, userId, { 
-        isAdminView: true,
-        organizationId,
-        id: timesheetId,
-        timesheetId: timesheetId
-      });
-      setDetails(data);
+      let rawData: any = null;
+
+      // Primary: use getById when timesheetId is available (reliable production endpoint)
+      if (timesheetId) {
+        try {
+          const response: any = await timesheetAPI.getById(timesheetId);
+          rawData = response?.data || response;
+        } catch (err) {
+          console.warn('getById failed, falling back to getDetails:', err);
+        }
+      }
+
+      // Fallback: use getDetails endpoint
+      if (!rawData) {
+        const formattedDate = weekStartDate && weekStartDate.includes('T')
+          ? weekStartDate.split('T')[0]
+          : weekStartDate;
+
+        rawData = await timesheetService.getDetails(formattedDate, userId, {
+          isAdminView: true,
+          organizationId,
+          id: timesheetId,
+          timesheetId: timesheetId
+        });
+      }
+
+      // Transform rows into projects format if the modal expects it
+      if (rawData && !rawData.projects && rawData.rows) {
+        rawData.projects = rawData.rows.map((row: any) => ({
+          name: row.projectId?.name || row.category || 'Unknown',
+          totalHours: (row.entries || []).reduce(
+            (sum: number, e: any) => sum + (e.hoursWorked || 0), 0
+          ),
+          entries: row.entries || [],
+        }));
+        rawData.totalHours = rawData.projects.reduce(
+          (sum: number, p: any) => sum + (p.totalHours || 0), 0
+        );
+      }
+
+      setDetails(rawData);
     } catch (error) {
       console.error('Error fetching details:', error);
       Alert.alert('Error', 'Failed to load timesheet details');
@@ -701,10 +730,10 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
           projectAPI.getAll(),
           userAPI.getAll()
         ]);
-        
+
         const projects = (projectsRes as any)?.data || projectsRes || [];
         const users = (usersRes as any)?.data || usersRes || [];
-        
+
         const currentYear = new Date().getFullYear();
         setFilterOptions({
           projects: Array.isArray(projects) ? projects : [],

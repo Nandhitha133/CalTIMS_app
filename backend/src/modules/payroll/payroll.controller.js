@@ -167,8 +167,21 @@ exports.hardDeleteStructure = async (req, res, next) => {
 // ─── Employee Profiles ───────────────────────────────────────────────────────
 exports.getAllProfiles = async (req, res, next) => {
   try {
-    const profiles = await PayrollProfile.find({ organizationId: req.organizationId }).populate('user', 'name employeeId department designation');
-    res.status(200).json({ success: true, data: profiles });
+    const profiles = await PayrollProfile.find({ organizationId: req.organizationId })
+      .populate('user', 'name employeeId department designation');
+    
+    const formattedProfiles = profiles.map(p => {
+      const pObj = p.toObject ? p.toObject() : JSON.parse(JSON.stringify(p));
+      if (pObj.user && typeof pObj.user === 'object') {
+        pObj.userId = pObj.user._id ? pObj.user._id.toString() : pObj.user.toString();
+        pObj.employeeId = pObj.user.employeeId || '';
+      } else if (pObj.user) {
+        pObj.userId = pObj.user.toString();
+      }
+      return pObj;
+    });
+
+    res.status(200).json({ success: true, data: formattedProfiles });
   } catch (err) {
     next(err);
   }
@@ -176,8 +189,20 @@ exports.getAllProfiles = async (req, res, next) => {
 
 exports.getProfile = async (req, res, next) => {
   try {
-    const profile = await PayrollProfile.findOne({ user: req.params.userId, organizationId: req.organizationId }).populate('user', 'name employeeId department designation');
-    res.status(200).json({ success: true, data: profile });
+    const profile = await PayrollProfile.findOne({ user: req.params.userId, organizationId: req.organizationId })
+      .populate('user', 'name employeeId department designation');
+    
+    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const pObj = profile.toObject ? profile.toObject() : JSON.parse(JSON.stringify(profile));
+    if (pObj.user && typeof pObj.user === 'object') {
+      pObj.userId = pObj.user._id ? pObj.user._id.toString() : pObj.user.toString();
+      pObj.employeeId = pObj.user.employeeId || '';
+    } else if (pObj.user) {
+      pObj.userId = pObj.user.toString();
+    }
+
+    res.status(200).json({ success: true, data: pObj });
   } catch (err) {
     next(err);
   }
@@ -203,6 +228,20 @@ exports.createOrUpdateProfile = async (req, res, next) => {
       }
     });
 
+    // Inject organizationId into all earnings and deductions components
+    if (updateData.earnings && Array.isArray(updateData.earnings)) {
+      updateData.earnings = updateData.earnings.map(e => ({
+        ...e,
+        organizationId: req.organizationId
+      }));
+    }
+    if (updateData.deductions && Array.isArray(updateData.deductions)) {
+      updateData.deductions = updateData.deductions.map(d => ({
+        ...d,
+        organizationId: req.organizationId
+      }));
+    }
+
     let profile = await PayrollProfile.findOne({ user: targetUserId, organizationId: req.organizationId });
     
     if (profile) {
@@ -218,7 +257,19 @@ exports.createOrUpdateProfile = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({ success: true, data: profile });
+    // Populate user details before returning
+    const populatedProfile = await PayrollProfile.findById(profile._id)
+      .populate('user', 'name employeeId department designation');
+    
+    const pObj = populatedProfile.toObject ? populatedProfile.toObject() : JSON.parse(JSON.stringify(populatedProfile));
+    if (pObj.user && typeof pObj.user === 'object') {
+      pObj.userId = pObj.user._id ? pObj.user._id.toString() : pObj.user.toString();
+      pObj.employeeId = pObj.user.employeeId || '';
+    } else if (pObj.user) {
+      pObj.userId = pObj.user.toString();
+    }
+
+    res.status(200).json({ success: true, data: pObj });
   } catch (err) {
     logger.error('Error in createOrUpdateProfile:', {
         body: req.body,

@@ -30,6 +30,7 @@ router.post('/bulk-submit', timesheetController.bulkSubmit);
 router.post('/admin-fill', checkPermission('manageEmployees'), requireFeature('timesheets'), timesheetController.adminFill);
 router.post('/', timesheetController.create);
 router.get('/', timesheetController.getAll);
+router.get('/details', timesheetController.getDetails);
 router.get('/:id', timesheetController.getById);
 router.put('/:id', timesheetController.update);
 router.delete('/:id', timesheetController.delete);

@@ -122,6 +122,7 @@ interface PayrollProfile {
   status: 'Active' | 'Inactive';
   createdAt: string;
   updatedAt: string;
+  user?: any;
 }
 
 interface Employee {
@@ -390,7 +391,35 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     });
 
     // Load existing profile
-    const existingProfile = profiles.find(p => p.userId === editingEmployee._id || p.employeeId === editingEmployee.employeeId);
+    const existingProfile = profiles.find(p => {
+      let profileUserId = '';
+      if (p.user) {
+        if (typeof p.user === 'object') {
+          profileUserId = p.user._id || p.user.id || '';
+        } else {
+          profileUserId = String(p.user);
+        }
+      }
+      if (!profileUserId && p.userId) {
+        profileUserId = String(p.userId);
+      }
+
+      let profileEmpId = '';
+      if (p.user && typeof p.user === 'object') {
+        profileEmpId = p.user.employeeId || '';
+      }
+      if (!profileEmpId && p.employeeId) {
+        profileEmpId = String(p.employeeId);
+      }
+
+      const empUserId = editingEmployee._id || editingEmployee.id || '';
+      const empEmpId = editingEmployee.employeeId || '';
+
+      const matchById = profileUserId && empUserId && String(profileUserId).toLowerCase() === String(empUserId).toLowerCase();
+      const matchByEmpId = profileEmpId && empEmpId && String(profileEmpId).toLowerCase() === String(empEmpId).toLowerCase();
+
+      return !!(matchById || matchByEmpId);
+    });
     if (existingProfile) {
       setStructure({
         name: 'Payroll Profile',
@@ -436,13 +465,40 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const filterEmployees = () => {
     let filtered = employees.map(emp => {
-      const profile = profiles.find(p => p.userId === emp._id || p.employeeId === emp.employeeId);
+      const profile = profiles.find(p => {
+        let profileUserId = '';
+        if (p.user) {
+          if (typeof p.user === 'object') {
+            profileUserId = p.user._id || p.user.id || '';
+          } else {
+            profileUserId = String(p.user);
+          }
+        }
+        if (!profileUserId && p.userId) {
+          profileUserId = String(p.userId);
+        }
+
+        let profileEmpId = '';
+        if (p.user && typeof p.user === 'object') {
+          profileEmpId = p.user.employeeId || '';
+        }
+        if (!profileEmpId && p.employeeId) {
+          profileEmpId = String(p.employeeId);
+        }
+
+        const empUserId = emp._id || emp.id || '';
+        const empEmpId = emp.employeeId || '';
+
+        const matchById = profileUserId && empUserId && String(profileUserId).toLowerCase() === String(empUserId).toLowerCase();
+        const matchByEmpId = profileEmpId && empEmpId && String(profileEmpId).toLowerCase() === String(empEmpId).toLowerCase();
+
+        return !!(matchById || matchByEmpId);
+      });
       const bankDetailsComplete = !!(emp.bankName && emp.accountNumber && emp.ifscCode && emp.pan);
       let bankStatus = bankDetailsComplete ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing');
       let payrollStatus = 'Not Configured';
-      
       if (profile) {
-        const isProfileComplete = !!(profile.annualCTC && profile.earnings?.length > 0 && bankDetailsComplete);
+        const isProfileComplete = !!((profile.annualCTC || profile.monthlyCTC) && profile.earnings?.length > 0 && bankDetailsComplete);
         payrollStatus = isProfileComplete ? 'Active' : 'Warning';
       }
 
@@ -803,11 +859,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         status: 'Active',
       };
 
-      if (editingEmployee?.profile?._id) {
-        await payrollAPI.updateProfile(editingEmployee.profile._id, payload);
-      } else {
-        await payrollAPI.setupFullProfile(payload);
-      }
+      await payrollAPI.setupFullProfile(payload);
       
       Alert.alert('Success', 'Salary configuration saved successfully!');
       setShowWizard(false);
