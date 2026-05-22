@@ -28,8 +28,19 @@ export const timesheetAPI = {
   // User History
   getHistory: (params: any) => 
     apiService.get('/timesheets/history', params),
-  getDetails: (weekStartDate: string, userId: string, params: any = {}) => 
-    apiService.get('/timesheets/details', { weekStartDate, userId, ...params }),
+  getDetails: (weekStartDate: string, userId: string, params: any = {}) => {
+    // Determine the query parameters string safely
+    const queryParams = new URLSearchParams();
+    if (weekStartDate) queryParams.append('weekStartDate', weekStartDate);
+    if (userId) queryParams.append('userId', userId);
+    
+    for (const key in params) {
+        if (params[key] !== undefined) {
+            queryParams.append(key, params[key]);
+        }
+    }
+    return apiService.get(`/timesheets/details?${queryParams.toString()}`);
+  },
   delete: (id: string) => 
     apiService.delete(`/timesheets/${id}`),
   

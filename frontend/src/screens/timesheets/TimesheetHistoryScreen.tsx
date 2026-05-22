@@ -42,6 +42,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react-native';
 import { timesheetService, TimesheetHistoryItem } from '../../services/timesheet.service';
+import { timesheetAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
@@ -163,28 +164,68 @@ const TimesheetDetailsModal = ({
   onClose,
   weekStartDate,
   userId,
+  timesheetId,
+  organizationId,
   theme
 }: {
   visible: boolean;
   onClose: () => void;
   weekStartDate: string;
   userId: string;
+  timesheetId?: string | null;
+  organizationId?: string;
   theme: 'light' | 'dark';
 }) => {
   const [details, setDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (visible && weekStartDate && userId) {
+    if (visible && (timesheetId || (weekStartDate && userId))) {
       fetchDetails();
     }
-  }, [visible, weekStartDate, userId]);
+  }, [visible, weekStartDate, userId, timesheetId]);
 
   const fetchDetails = async () => {
     setLoading(true);
     try {
-      const data = await timesheetService.getDetails(weekStartDate, userId);
-      setDetails(data);
+      let rawData: any = null;
+
+      // Primary: use getById when timesheetId is available (reliable production endpoint)
+      if (timesheetId) {
+        try {
+          const response: any = await timesheetAPI.getById(timesheetId);
+          rawData = response?.data || response;
+        } catch (err) {
+          console.warn('getById failed, falling back to getDetails:', err);
+        }
+      }
+
+      // Fallback: use getDetails endpoint
+      if (!rawData) {
+        const formattedDate = weekStartDate && weekStartDate.includes('T')
+          ? weekStartDate.split('T')[0]
+          : weekStartDate;
+
+        rawData = await timesheetService.getDetails(formattedDate, userId, {
+          organizationId
+        });
+      }
+
+      // Transform rows into projects format if the modal expects it
+      if (rawData && !rawData.projects && rawData.rows) {
+        rawData.projects = rawData.rows.map((row: any) => ({
+          name: row.projectId?.name || row.category || 'Unknown',
+          totalHours: (row.entries || []).reduce(
+            (sum: number, e: any) => sum + (e.hoursWorked || 0), 0
+          ),
+          entries: row.entries || [],
+        }));
+        rawData.totalHours = rawData.projects.reduce(
+          (sum: number, p: any) => sum + (p.totalHours || 0), 0
+        );
+      }
+
+      setDetails(rawData);
     } catch (error) {
       console.error('Error fetching details:', error);
       Alert.alert('Error', 'Failed to load timesheet details');
@@ -627,12 +668,18 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
   const fetchTimesheets = async () => {
     try {
       setLoading(true);
-      const response = await timesheetService.getHistory({
+      const params: any = {
         page: pagination.page,
         limit: 10,
-        ...filters,
-        search: search.length >= 2 ? search : '',
-      });
+      };
+      
+      if (search.length >= 2) params.search = search;
+      if (filters.year !== 'All Years') params.year = filters.year;
+      if (filters.month !== 'All Months') params.month = filters.month;
+      if (filters.status !== 'All Status') params.status = filters.status;
+      if (user?.id || user?._id) params.userId = user.id || user._id;
+
+      const response = await timesheetService.getHistory(params);
       setTimesheets(response.data || []);
       setPagination(response.pagination || { page: 1, totalPages: 1, total: 0 });
     } catch (error: any) {
@@ -645,8 +692,12 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
 
   useFocusEffect(
     useCallback(() => {
-      fetchTimesheets();
-    }, [pagination?.page, filters, search])
+      // Do not re-fetch unconditionally to avoid endless loops when opening modals
+      // But we can trigger a fetch if user object is loaded
+      if (user) {
+        fetchTimesheets();
+      }
+    }, [pagination?.page, filters, search, user?.id])
   );
 
   const onRefresh = async () => {
@@ -672,9 +723,10 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
     setFilterModalVisible(false);
   };
 
-  const handleViewDetails = (weekStartDate: string, userId: string) => {
+  const handleViewDetails = (weekStartDate: string, userId: string, timesheetId?: string) => {
     setSelectedWeek(weekStartDate);
-    setSelectedUserId(userId);
+    setSelectedUserId(user?.id || user?._id || userId);
+    setSelectedTimesheetId(timesheetId || null);
     setDetailsModalVisible(true);
   };
 
@@ -951,7 +1003,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
               <TimesheetCard
                 key={item.id || item._id}
                 item={item}
-                onView={() => handleViewDetails(item.weekStartDate, (item.userId?.id || item.userId?._id || item.userId || '') as string)}
+                onView={() => handleViewDetails(item.weekStartDate, (item.userId?.id || item.userId?._id || item.userId || '') as string, (item.id || item._id || '') as string)}
                 onEdit={() => handleEditDraft((item.id || item._id || '') as string, item.weekStartDate)}
                 onDelete={() => handleDeleteDraft((item.id || item._id || '') as string)}
                 onReport={() => handleReportIssue((item.id || item._id || '') as string)}
@@ -1005,9 +1057,14 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
 
         <TimesheetDetailsModal
           visible={detailsModalVisible}
-          onClose={() => setDetailsModalVisible(false)}
+          onClose={() => {
+            setDetailsModalVisible(false);
+            setSelectedTimesheetId(null);
+          }}
           weekStartDate={selectedWeek || ''}
           userId={selectedUserId || ''}
+          timesheetId={selectedTimesheetId}
+          organizationId={user?.organizationId || user?.organization?._id}
           theme={theme}
         />
 

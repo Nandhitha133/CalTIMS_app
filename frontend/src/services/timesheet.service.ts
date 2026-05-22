@@ -91,6 +91,11 @@ class TimesheetService {
     return (response as any).data || response;
   }
 
+  async getDetailsById(id: string): Promise<any> {
+    const response = await timesheetAPI.getDetails('', '', { id });
+    return (response as any).data || response;
+  }
+
   async delete(id: string): Promise<any> {
     const response = await timesheetAPI.delete(id);
     return (response as any).data || response;
