@@ -94,17 +94,22 @@ class ApiService {
         throw new Error(message);
       }
 
-      let errorMessage = `Request failed with status ${response.status}`;
+      let errorMessage = 'Something went wrong';
       let errorData = null;
 
       try {
-        errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
+        const text = await response.text();
+        try {
+          errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = text || response.statusText || errorMessage;
+        }
       } catch (e) {
         errorMessage = response.statusText || errorMessage;
       }
 
-      console.warn(`API Error [${response.status}] ${response.url}:`, errorMessage);
+      console.error(`API ERROR [${response.status}] ${response.url}:`, errorMessage);
 
       const error: any = new Error(errorMessage);
       error.status = response.status;

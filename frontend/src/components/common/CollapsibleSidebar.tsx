@@ -114,15 +114,10 @@ const navSections: NavSection[] = [
       { to: 'Reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'] },
       { to: 'AuditLogs', icon: Shield, label: 'Audit Logs', roles: ['admin'] },
       {
-        to: 'OrganizationTab',
+        to: 'Settings',
         icon: Settings2,
         label: 'Settings',
         roles: ['admin'],
-        subItems: [
-          { to: 'OrganizationTab', label: 'General & Organization' },
-          { to: 'SubscriptionTab', label: 'Plan & Subscription' },
-          { to: 'NotificationsTab', label: 'Notifications' },
-        ],
       },
     ],
   },
@@ -226,7 +221,7 @@ export default function CollapsibleSidebar({
   };
 
   const hasPermission = (item: NavItem) => {
-    if (!user) return false;
+    if (!user || !user.role) return false;
     const role = user.role.toLowerCase();
 
     // Admin, Super Admin, and Owner have access to everything

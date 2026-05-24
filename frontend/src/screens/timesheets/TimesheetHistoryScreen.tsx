@@ -187,9 +187,8 @@ const TimesheetDetailsModal = ({
 
   const fetchDetails = async () => {
     setLoading(true);
+    let rawData: any = null;
     try {
-      let rawData: any = null;
-
       // Primary: use getById when timesheetId is available (reliable production endpoint)
       if (timesheetId) {
         try {
@@ -201,14 +200,24 @@ const TimesheetDetailsModal = ({
       }
 
       // Fallback: use getDetails endpoint
-      if (!rawData) {
-        const formattedDate = weekStartDate && weekStartDate.includes('T')
-          ? weekStartDate.split('T')[0]
-          : weekStartDate;
+      if (!rawData && weekStartDate && userId) {
+        try {
+          const formattedDate = weekStartDate.includes('T')
+            ? weekStartDate.split('T')[0]
+            : weekStartDate;
 
-        rawData = await timesheetService.getDetails(formattedDate, userId, {
-          organizationId
-        });
+          const response: any = await timesheetService.getDetails(formattedDate, userId, {
+            organizationId,
+            id: timesheetId
+          });
+          rawData = response?.data || response;
+        } catch (err) {
+          console.warn('getDetails fallback failed:', err);
+        }
+      }
+
+      if (!rawData) {
+        throw new Error('Timesheet details could not be found on the server. Please check your internet connection or try again.');
       }
 
       // Transform rows into projects format if the modal expects it
@@ -226,9 +235,9 @@ const TimesheetDetailsModal = ({
       }
 
       setDetails(rawData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching details:', error);
-      Alert.alert('Error', 'Failed to load timesheet details');
+      Alert.alert('Error', error?.message || 'Failed to load timesheet details');
     } finally {
       setLoading(false);
     }
@@ -329,7 +338,16 @@ const ReportIssueModal = ({
       Alert.alert('Error', 'Please enter a description');
       return;
     }
-    onSubmit({ title, description, priority, relatedTimesheetId: timesheetId });
+    // Map priority to match backend validation (Title Case)
+    const mappedPriority = priority.charAt(0).toUpperCase() + priority.slice(1);
+    
+    onSubmit({ 
+      title, 
+      description, 
+      category: 'timesheet error',
+      priority: mappedPriority, 
+      relatedTimesheet: timesheetId 
+    });
     setTitle('');
     setDescription('');
     setPriority('medium');
@@ -1457,59 +1475,53 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   detailsProjectCard: {
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    marginBottom: 24,
   },
   detailsProjectHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
     marginBottom: 12,
+    paddingVertical: 8,
   },
   detailsProjectDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   detailsProjectName: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
   detailsProjectHours: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: '#6366f1',
   },
   dailyEntries: {
-    gap: 8,
+    paddingLeft: 22,
   },
   dailyEntry: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 6,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#f1f5f9',
   },
   dailyEntryDay: {
-    width: 80,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
     color: '#64748b',
   },
   dailyEntryHours: {
-    width: 50,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#1e293b',
   },
   dailyEntryDesc: {
-    flex: 1,
-    fontSize: 11,
-    color: '#94a3b8',
+    display: 'none', // Hide description as per image
   },
   detailsFooter: {
     flexDirection: 'row',

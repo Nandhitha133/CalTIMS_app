@@ -29,7 +29,25 @@ import {
 } from 'lucide-react-native';
 import { incidentService, supportService } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
-import PageHeader from '../../components/common/PageHeader';
+
+// Helper to extract data from various response formats
+const extractData = (response: any, defaultValue: any = null): any => {
+  if (!response) return defaultValue;
+  // If the response is wrapped in { success: true, data: ... }
+  if (response.data !== undefined && response.data !== null) {
+    return response.data;
+  }
+  return response;
+};
+
+const statusColors: Record<string, { bg: string, text: string }> = {
+  'Open': { bg: '#eff6ff', text: '#2563eb' },
+  'In Progress': { bg: '#fef3c7', text: '#d97706' },
+  'Pending': { bg: '#fffbeb', text: '#f59e0b' },
+  'Resolved': { bg: '#ecfdf5', text: '#10b981' },
+  'Closed': { bg: '#f1f5f9', text: '#64748b' },
+  'Withdrawn': { bg: '#fef2f2', text: '#ef4444' },
+};
 
 interface User {
   id: string;
@@ -60,30 +78,11 @@ interface Ticket {
   updatedAt: string;
 }
 
-const statusColors: Record<string, any> = {
-  Open: { bg: '#eff6ff', text: '#2563eb' },
-  'In Progress': { bg: '#fef3c7', text: '#d97706' },
-  Pending: { bg: '#fffbeb', text: '#f59e0b' },
-  Resolved: { bg: '#ecfdf5', text: '#10b981' },
-  Closed: { bg: '#f1f5f9', text: '#64748b' },
-  Withdrawn: { bg: '#fef2f2', text: '#ef4444' },
-};
-
 const priorityColors: Record<string, any> = {
   Low: { bg: '#ecfdf5', text: '#10b981' },
   Medium: { bg: '#eff6ff', text: '#2563eb' },
   High: { bg: '#fef3c7', text: '#d97706' },
   Urgent: { bg: '#fef2f2', text: '#ef4444' },
-};
-
-const extractData = (response: any, defaultValue: any = null): any => {
-  if (!response) return defaultValue;
-  // If the response is wrapped in { success: true, data: ... }
-  if (response.data !== undefined && response.data !== null) {
-    // If it's paginated or just a single object in .data
-    return response.data;
-  }
-  return response;
 };
 
 export default function IncidentDetailsScreen() {
@@ -293,156 +292,146 @@ export default function IncidentDetailsScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <PageHeader 
-            title={`Ticket ${ticket?.incidentId || (ticket?._id || '').slice(-8)}`}
-            subtitle="Incident Details"
-            icon={AlertCircle}
-            iconColor="#3b82f6"
-            iconBgColor="#eff6ff"
-          />
+            <View style={styles.mainContent}>
+              <View style={styles.leftColumn}>
+                {/* Main Ticket Info */}
+                <View style={styles.ticketCard}>
+                  <View style={styles.ticketHeaderRow}>
+                    <Text style={styles.ticketTitleMain}>{ticket?.title || 'No Title'}</Text>
+                    <View style={[styles.statusBadgeSmall, { backgroundColor: statusColors[ticket?.status || 'Open']?.bg }]}>
+                      <View style={[styles.statusDotSmall, { backgroundColor: statusColors[ticket?.status || 'Open']?.text }]} />
+                      <Text style={[styles.statusTextSmall, { color: statusColors[ticket?.status || 'Open']?.text }]}>{ticket?.status || 'Open'}</Text>
+                    </View>
+                  </View>
 
-          <View style={styles.content}>
-            {/* Ticket Header */}
-            <View style={styles.ticketHeader}>
-              {getStatusBadge(ticket?.status || 'Open')}
-              {getPriorityBadge(ticket?.priority || 'Medium')}
-            </View>
+                  <View style={styles.metaRowMain}>
+                    <View style={styles.metaItemMain}>
+                      <User size={14} color="#64748b" />
+                      <Text style={styles.metaTextMain}>{ticket?.employee?.name || 'Unknown'}</Text>
+                    </View>
+                    <View style={styles.metaItemMain}>
+                      <Calendar size={14} color="#64748b" />
+                      <Text style={styles.metaTextMain}>{formatDate(ticket?.createdAt || '', 'MMM d, yyyy h:mm a')}</Text>
+                    </View>
+                  </View>
 
-            <Text style={styles.ticketTitle}>{ticket?.title || 'No Title'}</Text>
-
-            {/* Ticket Meta */}
-            <View style={styles.metaContainer}>
-              <View style={styles.metaItem}>
-                <User size={14} color="#64748b" />
-                <Text style={styles.metaText}>{ticket?.employee?.name || 'Unknown'}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Calendar size={14} color="#64748b" />
-                <Text style={styles.metaText}>{formatDate(ticket?.createdAt || '', 'MMM d, yyyy h:mm a')}</Text>
-              </View>
-              <View style={styles.metaItem}>
-                <Tag size={14} color="#64748b" />
-                <Text style={styles.metaText}>{ticket?.category || 'General'}</Text>
-              </View>
-            </View>
-
-            {/* Description */}
-            <View style={styles.descriptionCard}>
-              <Text style={styles.descriptionTitle}>Description</Text>
-              <Text style={styles.descriptionText}>{ticket?.description || 'No Description'}</Text>
-            </View>
-
-            {/* Admin Status Controls */}
-            {isAdmin && (
-              <View style={styles.adminCard}>
-                <View style={styles.adminHeader}>
-                  <Text style={styles.adminTitle}>Admin Actions</Text>
-                  <TouchableOpacity 
-                    style={styles.statusMenuButton} 
-                    onPress={() => setShowStatusMenu(!showStatusMenu)}
-                  >
-                    <MoreVertical size={18} color="#64748b" />
-                  </TouchableOpacity>
+                  <View style={styles.descriptionBox}>
+                    <Text style={styles.descriptionTextMain}>{ticket?.description || 'No Description'}</Text>
+                  </View>
                 </View>
-                {showStatusMenu && (
-                  <View style={styles.statusMenu}>
-                    {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'].map(status => (
+
+                {/* Conversation Thread */}
+                <View style={styles.conversationCardMain}>
+                  <View style={styles.conversationHeaderMain}>
+                    <MessageSquare size={18} color="#3b82f6" />
+                    <Text style={styles.conversationTitleMain}>Conversation</Text>
+                  </View>
+
+                  <View style={styles.repliesContainer}>
+                    {ticket?.responses?.length === 0 ? (
+                      <Text style={styles.noRepliesMain}>No replies yet.</Text>
+                    ) : (
+                      ticket?.responses?.map((response, idx) => {
+                        const isMe = response?.user?._id === user?._id || response?.user?.id === user?.id;
+                        return (
+                          <View key={idx} style={[styles.messageRow, isMe && styles.messageRowRight]}>
+                            <View style={[styles.messageBubble, isMe ? styles.messageBubbleRight : styles.messageBubbleLeft]}>
+                              <View style={styles.messageHeader}>
+                                <Text style={styles.messageName}>{response?.user?.name || 'Unknown'}</Text>
+                                <Text style={styles.messageTime}>
+                                  {formatDate(response?.createdAt || '', 'MMM d, h:mm a')}
+                                </Text>
+                              </View>
+                              <Text style={styles.messageText}>{response?.message || ''}</Text>
+                            </View>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+
+                  {/* Reply Form */}
+                  {canReply && (
+                    <View style={styles.replyBoxContainer}>
+                      <TextInput
+                        style={styles.replyInputMain}
+                        placeholder="Type your reply..."
+                        placeholderTextColor="#94a3b8"
+                        multiline
+                        value={replyText}
+                        onChangeText={setReplyText}
+                      />
                       <TouchableOpacity
-                        key={status}
-                        style={[styles.statusMenuItem, ticket?.status === status && styles.statusMenuItemActive]}
-                        onPress={() => handleStatusChange(status)}
+                        style={[styles.sendButtonMain, (!replyText.trim() || isSubmitting) && styles.sendButtonDisabled]}
+                        onPress={handleReply}
+                        disabled={!replyText.trim() || isSubmitting}
                       >
-                        <Text style={[styles.statusMenuItemText, ticket?.status === status && styles.statusMenuItemTextActive]}>
-                          {status}
-                        </Text>
+                        {isSubmitting ? (
+                          <ActivityIndicator size="small" color="#6366f1" />
+                        ) : (
+                          <Send size={18} color="#6366f1" />
+                        )}
                       </TouchableOpacity>
-                    ))}
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Sidebar Info (Ticket Info) */}
+              <View style={styles.sidebarColumn}>
+                <View style={styles.ticketInfoCard}>
+                  <Text style={styles.sidebarTitle}>Ticket Info</Text>
+                  
+                  <View style={styles.infoSection}>
+                    <Text style={styles.infoLabel}>CATEGORY</Text>
+                    <View style={styles.infoItemRow}>
+                      <Tag size={16} color="#64748b" />
+                      <Text style={styles.infoValue}>{ticket?.category || 'General Help'}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.infoSection}>
+                    <Text style={styles.infoLabel}>PRIORITY</Text>
+                    <View style={styles.infoItemRow}>
+                      <AlertCircle size={16} color="#64748b" />
+                      <Text style={styles.infoValue}>{ticket?.priority || 'Medium'}</Text>
+                    </View>
+                  </View>
+
+                  {showWithdraw && (
+                    <TouchableOpacity style={styles.withdrawButtonSidebar} onPress={handleWithdraw}>
+                      <Text style={styles.withdrawButtonTextSidebar}>Withdraw Ticket</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {showReopen && (
+                    <TouchableOpacity style={styles.reopenButtonSidebar} onPress={handleReopen}>
+                      <Text style={styles.reopenButtonTextSidebar}>Reopen Ticket</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Admin Status Controls */}
+                {isAdmin && (
+                  <View style={styles.adminActionCard}>
+                    <Text style={styles.sidebarTitle}>Admin Actions</Text>
+                    <View style={styles.adminStatusOptions}>
+                      {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'].map(status => (
+                        <TouchableOpacity
+                          key={status}
+                          style={[styles.statusOption, ticket?.status === status && styles.statusOptionActive]}
+                          onPress={() => handleStatusChange(status)}
+                        >
+                          <Text style={[styles.statusOptionText, ticket?.status === status && styles.statusOptionTextActive]}>
+                            {status}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
                 )}
               </View>
-            )}
-
-            {/* Employee Action Buttons */}
-            {showWithdraw && (
-              <TouchableOpacity style={styles.withdrawButton} onPress={handleWithdraw}>
-                <XCircle size={16} color="#ef4444" />
-                <Text style={styles.withdrawButtonText}>Withdraw Ticket</Text>
-              </TouchableOpacity>
-            )}
-            {showReopen && (
-              <TouchableOpacity style={styles.reopenButton} onPress={handleReopen}>
-                <CheckCircle size={16} color="#10b981" />
-                <Text style={styles.reopenButtonText}>Reopen Ticket</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Conversation Thread */}
-            <View style={styles.conversationCard}>
-              <View style={styles.conversationHeader}>
-                <MessageSquare size={18} color="#3b82f6" />
-                <Text style={styles.conversationTitle}>Conversation</Text>
-              </View>
-
-              {ticket?.responses?.length === 0 ? (
-                <Text style={styles.noReplies}>No replies yet.</Text>
-              ) : (
-                ticket?.responses?.map((response, idx) => {
-                  const isMe = response?.user?._id === user?._id || response?.user?.id === user?.id;
-                  const isAdminResponse = response?.user?.role === 'admin';
-                  return (
-                    <View key={idx} style={[styles.messageRow, isMe && styles.messageRowRight]}>
-                      <View style={[styles.messageBubble, isMe ? styles.messageBubbleRight : styles.messageBubbleLeft]}>
-                        <View style={styles.messageHeader}>
-                          <Text style={styles.messageName}>{response?.user?.name || 'Unknown'}</Text>
-                          {isAdminResponse && (
-                            <Text style={styles.adminBadge}>Admin</Text>
-                          )}
-                          <Text style={styles.messageTime}>
-                            {formatDate(response?.createdAt || '', 'MMM d, h:mm a')}
-                          </Text>
-                        </View>
-                        <Text style={styles.messageText}>{response?.message || ''}</Text>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-
-              {/* Reply Form */}
-              {canReply && (
-                <View style={styles.replyContainer}>
-                  <TextInput
-                    style={styles.replyInput}
-                    placeholder="Type your reply..."
-                    placeholderTextColor="#94a3b8"
-                    multiline
-                    value={replyText}
-                    onChangeText={setReplyText}
-                  />
-                  <TouchableOpacity
-                    style={[styles.sendButton, (!replyText.trim() || isSubmitting) && styles.sendButtonDisabled]}
-                    onPress={handleReply}
-                    disabled={!replyText.trim() || isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <Send size={16} color="white" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {!canReply && ticket && (
-                <View style={styles.closedMessage}>
-                  <AlertCircle size={16} color="#f59e0b" />
-                  <Text style={styles.closedMessageText}>
-                    This ticket is {(ticket?.status || '').toLowerCase()}. You cannot add new replies.
-                  </Text>
-                </View>
-              )}
             </View>
-          </View>
           </ScrollView>
         </KeyboardAvoidingView>
       )}
@@ -453,66 +442,259 @@ export default function IncidentDetailsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
-  content: { paddingHorizontal: 16, paddingTop: 16 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
   loaderText: { marginTop: 12, fontSize: 14, color: '#64748b', fontWeight: '500' },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc', padding: 20 },
   errorText: { fontSize: 16, color: '#64748b', marginTop: 12, marginBottom: 20 },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#dbeafe' },
   backButtonText: { fontSize: 14, fontWeight: '600', color: '#3b82f6' },
-  
-  ticketHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  priorityBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  priorityText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  
-  ticketTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 16 },
-  
-  metaContainer: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 20 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  metaText: { fontSize: 12, color: '#64748b' },
-  
-  descriptionCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' },
-  descriptionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
-  descriptionText: { fontSize: 14, color: '#475569', lineHeight: 20 },
-  
-  adminCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' },
-  adminHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  adminTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-  statusMenuButton: { padding: 4 },
-  statusMenu: { backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', marginTop: 8 },
-  statusMenuItem: { paddingHorizontal: 16, paddingVertical: 10 },
-  statusMenuItemActive: { backgroundColor: '#eff6ff', borderRadius: 8 },
-  statusMenuItemText: { fontSize: 13, color: '#64748b' },
-  statusMenuItemTextActive: { color: '#3b82f6', fontWeight: '600' },
-  
-  withdrawButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fef2f2', paddingVertical: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#fee2e2' },
-  withdrawButtonText: { fontSize: 13, fontWeight: '600', color: '#ef4444' },
-  reopenButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ecfdf5', paddingVertical: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#d1fae5' },
-  reopenButtonText: { fontSize: 13, fontWeight: '600', color: '#10b981' },
-  
-  conversationCard: { backgroundColor: 'white', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e2e8f0' },
-  conversationHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  conversationTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-  noReplies: { textAlign: 'center', color: '#94a3b8', paddingVertical: 24 },
-  
-  messageRow: { marginBottom: 16 },
-  messageRowRight: { alignItems: 'flex-end' },
+
+  mainContent: {
+    padding: 16,
+    flexDirection: 'column',
+    gap: 20,
+  },
+  leftColumn: {
+    flex: 1,
+    gap: 20,
+  },
+  sidebarColumn: {
+    width: '100%',
+    gap: 20,
+  },
+
+  // Ticket Card
+  ticketCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  ticketHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  ticketTitleMain: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0f172a',
+    flex: 1,
+    marginRight: 12,
+  },
+  statusBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusDotSmall: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusTextSmall: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  metaRowMain: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 20,
+  },
+  metaItemMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaTextMain: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  descriptionBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+  },
+  descriptionTextMain: {
+    fontSize: 15,
+    color: '#334155',
+    lineHeight: 22,
+  },
+
+  // Conversation
+  conversationCardMain: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  conversationHeaderMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  conversationTitleMain: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  repliesContainer: {
+    marginBottom: 20,
+  },
+  noRepliesMain: {
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: 15,
+    paddingVertical: 30,
+  },
+  messageRow: { flexDirection: 'row', marginBottom: 16, width: '100%' },
+  messageRowRight: { justifyContent: 'flex-end' },
   messageBubble: { maxWidth: '85%', padding: 12, borderRadius: 16 },
   messageBubbleLeft: { backgroundColor: '#f1f5f9', borderTopLeftRadius: 4 },
-  messageBubbleRight: { backgroundColor: '#3b82f6', borderTopRightRadius: 4 },
-  messageHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' },
-  messageName: { fontSize: 12, fontWeight: '700', color: '#1e293b' },
-  adminBadge: { fontSize: 9, fontWeight: '700', color: '#3b82f6', backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  messageTime: { fontSize: 9, color: '#94a3b8' },
-  messageText: { fontSize: 13, lineHeight: 18, color: '#1e293b' },
-  
-  replyContainer: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
-  replyInput: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1e293b', borderWidth: 1, borderColor: '#e2e8f0', maxHeight: 100 },
-  sendButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center' },
-  sendButtonDisabled: { opacity: 0.5 },
-  closedMessage: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', padding: 12, borderRadius: 12, marginTop: 16 },
-  closedMessageText: { fontSize: 12, color: '#d97706', flex: 1 },
+  messageBubbleRight: { backgroundColor: '#6366f1', borderTopRightRadius: 4 },
+  messageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, gap: 12 },
+  messageName: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  messageTime: { fontSize: 10, color: '#94a3b8' },
+  messageText: { fontSize: 14, color: '#1e293b', lineHeight: 20 },
+  adminBadge: { fontSize: 10, fontWeight: '700', color: '#6366f1', backgroundColor: '#eef2ff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+
+  // Reply Box
+  replyBoxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#6366f1',
+    paddingRight: 12,
+    minHeight: 50,
+  },
+  replyInputMain: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1e293b',
+    maxHeight: 120,
+  },
+  sendButtonMain: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+
+  // Ticket Info Card
+  ticketInfoCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  sidebarTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 20,
+  },
+  infoSection: {
+    marginBottom: 16,
+  },
+  infoLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94a3b8',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  infoItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  withdrawButtonSidebar: {
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  withdrawButtonTextSidebar: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  reopenButtonSidebar: {
+    backgroundColor: '#eff6ff',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  reopenButtonTextSidebar: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+
+  // Admin Action Card
+  adminActionCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  adminStatusOptions: {
+    gap: 8,
+  },
+  statusOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  statusOptionActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+  },
+  statusOptionText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  statusOptionTextActive: {
+    color: '#3b82f6',
+    fontWeight: '700',
+  },
 });

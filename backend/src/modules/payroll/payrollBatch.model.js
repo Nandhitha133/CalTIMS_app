@@ -76,7 +76,7 @@ const payrollBatchSchema = new mongoose.Schema(
       ref: 'User',
     },
     /** Raw errors array for audit */
-    errors: [
+    executionErrors: [
       {
         userId: mongoose.Schema.Types.ObjectId,
         error: String,

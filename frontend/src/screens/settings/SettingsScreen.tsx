@@ -22,6 +22,18 @@ import {
   ChevronRight,
   X,
   AlertCircle,
+  Palette,
+  ShieldCheck,
+  Zap,
+  Calendar,
+  Rocket,
+  Banknote,
+  FileText,
+  Fingerprint,
+  BarChart,
+  Clock,
+  UserCheck,
+  Bell,
 } from 'lucide-react-native';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
@@ -45,13 +57,34 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     title: 'ORGANIZATION',
     items: [
       { id: 'organization', label: 'General & Organization', icon: Building2, route: 'OrganizationTab' },
+      { id: 'branding', label: 'Branding & Theme', icon: Palette, route: 'BrandingTab' },
       { id: 'subscription', label: 'Plan & Subscription', icon: Crown, route: 'SubscriptionTab' },
+      { id: 'onboarding', label: 'System Onboarding', icon: Rocket, route: 'OnboardingTab' },
     ]
   },
   {
-    title: 'SYSTEM',
+    title: 'POLICIES',
     items: [
-      { id: 'notifications', label: 'Notifications', icon: Users, route: 'NotificationsTab' },
+      { id: 'timesheet_policy', label: 'Timesheet Policy', icon: Clock, route: 'TimesheetPolicyTab' },
+      { id: 'leave_policy', label: 'Leave Policy', icon: Calendar, route: 'LeavePolicyTab' },
+      { id: 'payroll_policy', label: 'Payroll Policy', icon: Banknote, route: 'PayrollPolicyTab' },
+      { id: 'compliance', label: 'Compliance & Locks', icon: ShieldCheck, route: 'ComplianceLocksTab' },
+    ]
+  },
+  {
+    title: 'SYSTEM & ACCESS',
+    items: [
+      { id: 'users_roles', label: 'Users & Roles', icon: UserCheck, route: 'UsersAndRolesTab' },
+      { id: 'notifications', label: 'Notifications', icon: Bell, route: 'NotificationsTab' },
+      { id: 'integrations', label: 'Integrations', icon: Zap, route: 'IntegrationsTab' },
+      { id: 'permission_audit', label: 'Permission Audit', icon: Fingerprint, route: 'PermissionAuditTab' },
+    ]
+  },
+  {
+    title: 'AUTOMATION & TEMPLATES',
+    items: [
+      { id: 'payslip_templates', label: 'Payslip Templates', icon: FileText, route: 'PayslipTemplatesTab' },
+      { id: 'reports_automation', label: 'Reports Automation', icon: BarChart, route: 'ReportsAutomationTab' },
     ]
   },
 ];

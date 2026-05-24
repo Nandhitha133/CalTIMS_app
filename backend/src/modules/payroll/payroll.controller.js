@@ -210,50 +210,97 @@ exports.getProfile = async (req, res, next) => {
 
 exports.createOrUpdateProfile = async (req, res, next) => {
   try {
-    const { user, userId, _id, __v, createdAt, updatedAt, ...updateData } = req.body;
+    const { user, userId, _id, __v, createdAt, updatedAt, ...bodyData } = req.body;
     const targetUserId = user || userId;
+
+    console.log('--- PAYROLL PROFILE SAVE ATTEMPT ---');
+    console.log('Target User ID:', targetUserId);
+    console.log('Organization ID from Request:', req.organizationId);
     
-    if (!targetUserId) {
-      return res.status(400).json({ success: false, message: 'User ID is required' });
+    if (!targetUserId || !mongoose.Types.isValidObjectId(targetUserId)) {
+      return res.status(400).json({ success: false, message: 'Valid User ID is required' });
     }
 
-    // Handle empty string for ObjectId and Number fields
-    if (updateData.salaryStructureId === '') {
-      updateData.salaryStructureId = null;
+    const orgId = req.organizationId;
+    if (!orgId) {
+      return res.status(400).json({ success: false, message: 'Organization context missing' });
     }
 
-    ['weeklyRate', 'hourlyRate', 'dailyRate', 'monthlyCTC'].forEach(field => {
-      if (updateData[field] === '') {
-        updateData[field] = 0;
+    // Ensure organizationId is treated as a string if it's a UUID
+    const organizationId = orgId.toString();
+
+    // BANK-GRADE: Update User model with bank details if provided
+    if (bodyData.bankDetails) {
+      try {
+        console.log('Updating user bank details...');
+        await User.findOneAndUpdate(
+          { _id: targetUserId },
+          {
+            bankName: bodyData.bankDetails.bankName,
+            accountNumber: bodyData.bankDetails.accountNumber,
+            ifscCode: bodyData.bankDetails.ifscCode,
+            pan: bodyData.bankDetails.pan,
+            uan: bodyData.bankDetails.uan
+          }
+        );
+        console.log('User bank details updated.');
+      } catch (userUpdateErr) {
+        console.error('User bank update failed:', userUpdateErr.message);
       }
-    });
-
-    // Inject organizationId into all earnings and deductions components
-    if (updateData.earnings && Array.isArray(updateData.earnings)) {
-      updateData.earnings = updateData.earnings.map(e => ({
-        ...e,
-        organizationId: req.organizationId
-      }));
-    }
-    if (updateData.deductions && Array.isArray(updateData.deductions)) {
-      updateData.deductions = updateData.deductions.map(d => ({
-        ...d,
-        organizationId: req.organizationId
-      }));
     }
 
-    let profile = await PayrollProfile.findOne({ user: targetUserId, organizationId: req.organizationId });
-    
-    if (profile) {
-      // Update existing
-      Object.assign(profile, updateData);
-      await profile.save();
-    } else {
-      // Create new
-      profile = await PayrollProfile.create({ 
-        user: targetUserId, 
-        organizationId: req.organizationId,
-        ...updateData 
+    // Clean up earnings/deductions to match schema
+    const sanitize = (comps) => (Array.isArray(comps) ? comps : []).map(c => ({
+      name: String(c.name || 'Unnamed Component'),
+      value: Number(c.value) || 0,
+      calculationType: ['Fixed', 'Percentage', 'Formula'].includes(c.calculationType) ? c.calculationType : 'Fixed',
+      formula: c.formula || null,
+      config: c.config || {},
+      organizationId: organizationId
+    }));
+
+    const earnings = sanitize(bodyData.earnings);
+    const deductions = sanitize(bodyData.deductions);
+
+    // Prepare clean profile data
+    const updatePayload = {
+      organizationId,
+      user: targetUserId,
+      payrollType: bodyData.payrollType || 'Monthly',
+      employeeType: bodyData.employeeType || 'Permanent',
+      salaryMode: bodyData.salaryMode || 'Employee-Based',
+      earnings,
+      deductions,
+      salaryStructureId: mongoose.Types.isValidObjectId(bodyData.salaryStructureId) ? bodyData.salaryStructureId : null,
+      weeklyRate: Number(bodyData.weeklyRate) || 0,
+      hourlyRate: Number(bodyData.hourlyRate) || 0,
+      dailyRate: Number(bodyData.dailyRate) || 0,
+      monthlyCTC: Number(bodyData.monthlyCTC) || 0,
+      isActive: true
+    };
+
+    let profile;
+    try {
+      console.log('Saving payroll profile for user:', targetUserId);
+      
+      // Attempt manual find and update to bypass any strict Mongoose casting
+      profile = await PayrollProfile.findOne({ user: targetUserId, organizationId });
+      
+      if (profile) {
+        console.log('Updating existing profile:', profile._id);
+        Object.assign(profile, updatePayload);
+        await profile.save();
+      } else {
+        console.log('Creating new profile...');
+        profile = new PayrollProfile(updatePayload);
+        await profile.save();
+      }
+      console.log('Payroll profile saved successfully:', profile._id);
+    } catch (dbErr) {
+      console.error('DATABASE SAVE ERROR:', dbErr.message);
+      return res.status(500).json({ 
+        success: false, 
+        message: `Database Error: ${dbErr.message}` 
       });
     }
 
@@ -261,23 +308,13 @@ exports.createOrUpdateProfile = async (req, res, next) => {
     const populatedProfile = await PayrollProfile.findById(profile._id)
       .populate('user', 'name employeeId department designation');
     
-    const pObj = populatedProfile.toObject ? populatedProfile.toObject() : JSON.parse(JSON.stringify(populatedProfile));
-    if (pObj.user && typeof pObj.user === 'object') {
-      pObj.userId = pObj.user._id ? pObj.user._id.toString() : pObj.user.toString();
-      pObj.employeeId = pObj.user.employeeId || '';
-    } else if (pObj.user) {
-      pObj.userId = pObj.user.toString();
-    }
-
-    res.status(200).json({ success: true, data: pObj });
+    return res.status(200).json({ success: true, data: populatedProfile });
   } catch (err) {
-    logger.error('Error in createOrUpdateProfile:', {
-        body: req.body,
-        error: err.message,
-        stack: err.stack,
-        code: err.code
+    console.error('CRITICAL PAYROLL PROFILE ERROR:', err.message);
+    return res.status(500).json({ 
+      success: false, 
+      message: err.message || 'Internal Server Error' 
     });
-    next(err);
   }
 };
 

@@ -1,3 +1,14 @@
 export { default as OrganizationTab } from './OrganizationTab';
 export { default as SubscriptionTab } from './SubscriptionTab';
 export { default as NotificationsTab } from './NotificationsTab';
+export { default as BrandingTab } from './BrandingTab';
+export { default as ComplianceLocksTab } from './ComplianceLocksTab';
+export { default as IntegrationsTab } from './IntegrationsTab';
+export { default as LeavePolicyTab } from './LeavePolicyTab';
+export { default as OnboardingTab } from './OnboardingTab';
+export { default as PayrollPolicyTab } from './PayrollPolicyTab';
+export { default as PayslipTemplatesTab } from './PayslipTemplatesTab';
+export { default as PermissionAuditTab } from './PermissionAuditTab';
+export { default as ReportsAutomationTab } from './ReportsAutomationTab';
+export { default as TimesheetPolicyTab } from './TimesheetPolicyTab';
+export { default as UsersAndRolesTab } from './UsersAndRolesTab';

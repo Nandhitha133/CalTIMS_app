@@ -13,11 +13,22 @@ const { TIMESHEET_STATUS, LEAVE_STATUS } = require('../../constants');
 const { checkSubscription, requireFeature } = require('../../middleware/subscription.middleware');
 const { getPeriodRange, getWeekStart } = require('../../shared/utils/dateHelpers');
 
-router.get('/filters', asyncHandler(async (req, res) => {
+router.get('/filters', (req, res) => {
   const currentYear = new Date().getFullYear();
-  const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-  ApiResponse.success(res, { data: { years } });
-}));
+  const years = [
+    currentYear - 2, 
+    currentYear - 1, 
+    currentYear, 
+    currentYear + 1, 
+    currentYear + 2, 
+    currentYear + 3,
+    currentYear + 4
+  ];
+  res.status(200).json({
+    success: true,
+    data: { years }
+  });
+});
 
 router.use(authenticate);
 router.use(checkSubscription);

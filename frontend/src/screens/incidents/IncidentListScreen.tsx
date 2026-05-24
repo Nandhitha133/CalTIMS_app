@@ -269,13 +269,61 @@ export default function IncidentListScreen() {
 
     setIsSubmitting(true);
     try {
-      await incidentService.createIncident(form);
+      // Map category and priority to ensure they match backend exactly
+      // Remote backend only accepts: [timesheet error, project missing, incorrect hours, leave conflict, general help]
+      const categoryMap: any = {
+        'General': 'general help',
+        'Technical': 'general help',
+        'Billing': 'general help',
+        'Feature Request': 'general help',
+        'Other': 'general help'
+      };
+      
+      const priorityMap: any = {
+        'Low': 'Low',
+        'Medium': 'Medium',
+        'High': 'High',
+        'Urgent': 'Urgent'
+      };
+
+      const submissionData = {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        category: categoryMap[form.category] || 'general help',
+        priority: priorityMap[form.priority] || 'Medium',
+      };
+      
+      console.log('Submitting incident to backend with exact mapping:', submissionData);
+      
+      const response = await incidentService.createIncident(submissionData);
+      console.log('Backend response:', response);
+      
       Alert.alert('Success', 'Incident reported successfully');
       setShowCreateModal(false);
       resetForm();
       fetchData();
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to create incident');
+      console.error('Incident Creation Error Detail:', {
+        status: error.status,
+        data: error.data,
+        message: error.message
+      });
+      
+      // Extract the most useful error message
+      let errorMessage = 'Validation failed. Please check all fields.';
+      
+      if (error.data) {
+        if (error.data.errors && Array.isArray(error.data.errors) && error.data.errors.length > 0) {
+          // Join all validation error messages
+          errorMessage = error.data.errors.map((e: any) => e.message).join('\n');
+        } else if (error.data.message) {
+          errorMessage = error.data.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -417,10 +465,19 @@ export default function IncidentListScreen() {
     const statusColors = getStatusColor(incident?.status || 'Open');
     const employeeName = incident?.employee?.user?.name || incident?.employee?.name || 'Unknown';
 
+    const handleView = () => {
+      const id = incident?._id || incident?.id;
+      if (id) {
+        navigation.navigate('IncidentDetails', { id });
+      } else {
+        Alert.alert('Error', 'Unable to open incident details');
+      }
+    };
+
     return (
       <TouchableOpacity
         style={styles.ticketCard}
-        onPress={() => incident?._id && navigation.navigate('IncidentDetails', { id: incident._id })}
+        onPress={handleView}
       >
         <View style={styles.ticketContent}>
           <View style={styles.ticketHeader}>
@@ -462,9 +519,9 @@ export default function IncidentListScreen() {
               )}
               <Text style={styles.ticketDate}>{formatDate(incident?.createdAt, 'MMM d, yyyy').toUpperCase()}</Text>
             </View>
-            <TouchableOpacity style={styles.viewAction}>
+            <View style={styles.viewAction}>
               <Eye size={16} color="#94a3b8" />
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -475,11 +532,20 @@ export default function IncidentListScreen() {
     const statusColors = getStatusColor(ticket?.status || 'Open');
     const [showMenu, setShowMenu] = useState(false);
 
+    const handleView = () => {
+      const id = ticket?._id || ticket?.id;
+      if (id) {
+        navigation.navigate('IncidentDetails', { id, type: 'support' });
+      } else {
+        Alert.alert('Error', 'Unable to open support ticket details');
+      }
+    };
+
     return (
       <View style={styles.ticketCard}>
         <TouchableOpacity
           style={styles.ticketContent}
-          onPress={() => ticket?._id && navigation.navigate('IncidentDetails', { id: ticket._id, type: 'support' })}
+          onPress={handleView}
         >
           <View style={styles.ticketHeader}>
             <Text style={styles.ticketId}>{ticket?.ticketId || (ticket?._id || '').slice(-8)}</Text>
@@ -514,9 +580,9 @@ export default function IncidentListScreen() {
             <View style={styles.footerInfo}>
               <Text style={styles.ticketDate}>{formatDate(ticket?.createdAt, 'MMM d, yyyy h:mm a').toUpperCase()}</Text>
             </View>
-            <TouchableOpacity style={styles.viewAction}>
+            <View style={styles.viewAction}>
               <Eye size={16} color="#94a3b8" />
-            </TouchableOpacity>
+            </View>
           </View>
         </TouchableOpacity>
 
@@ -664,7 +730,7 @@ export default function IncidentListScreen() {
               <View style={styles.formField}>
                 <Text style={styles.formLabel}>Category</Text>
                 <View style={styles.categoryRow}>
-                  {['General', 'Technical', 'Billing', 'Feature Request'].map(cat => (
+                  {['General', 'Technical', 'Billing', 'Feature Request', 'Other'].map(cat => (
                     <TouchableOpacity
                       key={cat}
                       style={[styles.categoryButton, form.category === cat && styles.categoryButtonActive]}

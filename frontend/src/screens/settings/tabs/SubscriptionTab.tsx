@@ -395,6 +395,8 @@ export default function SubscriptionPage() {
       setSidebarVisible={setSidebarVisible}
       onRefresh={fetchData}
       refreshing={loading}
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
     >
       <View style={styles.container}>
         <PageHeader 

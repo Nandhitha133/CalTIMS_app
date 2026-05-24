@@ -496,6 +496,8 @@ export default function OrganizationTab() {
       onRefresh={() => queryClient.invalidateQueries({ queryKey: ['settings'] })}
       scrollable={false}
       backgroundColor="#f9fafb"
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
     >
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined} 

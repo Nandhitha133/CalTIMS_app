@@ -402,7 +402,10 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Year</Text>
                 <SafeSelector
-                  options={(filterOptions.years || [2024, 2025, 2026]).map((year: number) => ({
+                  options={(filterOptions.years && filterOptions.years.length > 0 
+                    ? filterOptions.years 
+                    : [2024, 2025, 2026, 2027, 2028]
+                  ).map((year: number) => ({
                     label: String(year),
                     value: year,
                   }))}
@@ -624,9 +627,12 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
     try {
       const response = await reportAPI.getFilterOptions();
       const data = extractData(response, { years: [] });
-      setFilterOptions(data as FilterOptions);
+      if (data && data.years) {
+        setFilterOptions(data as FilterOptions);
+      }
     } catch (error) {
-      console.error('Error fetching filter options:', error);
+      console.log('Using default filter options (Year range)');
+      // If the API fails, we still have the default fallback in the UI
     }
   };
 

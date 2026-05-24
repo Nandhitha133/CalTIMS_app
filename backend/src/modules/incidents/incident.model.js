@@ -23,7 +23,18 @@ const incidentSchema = new mongoose.Schema(
         },
         category: {
             type: String,
-            enum: ['timesheet error', 'project missing', 'incorrect hours', 'leave conflict', 'general help'],
+            enum: [
+                'Timesheet Error',
+                'Project Missing',
+                'Incorrect Hours',
+                'Leave Conflict',
+                'General Help',
+                'General',
+                'Technical',
+                'Billing',
+                'Feature Request',
+                'Other',
+            ],
             required: [true, 'Category is required'],
         },
         priority: {

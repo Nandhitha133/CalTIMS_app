@@ -297,7 +297,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   useEffect(() => {
     filterEmployees();
-  }, [employees, searchTerm, deptFilter, statusFilter]);
+  }, [employees, profiles, searchTerm, deptFilter, statusFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -478,28 +478,17 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
           profileUserId = String(p.userId);
         }
 
-        let profileEmpId = '';
-        if (p.user && typeof p.user === 'object') {
-          profileEmpId = p.user.employeeId || '';
-        }
-        if (!profileEmpId && p.employeeId) {
-          profileEmpId = String(p.employeeId);
-        }
-
         const empUserId = emp._id || emp.id || '';
-        const empEmpId = emp.employeeId || '';
-
-        const matchById = profileUserId && empUserId && String(profileUserId).toLowerCase() === String(empUserId).toLowerCase();
-        const matchByEmpId = profileEmpId && empEmpId && String(profileEmpId).toLowerCase() === String(empEmpId).toLowerCase();
-
-        return !!(matchById || matchByEmpId);
+        
+        // Match primarily by ID
+        return profileUserId && empUserId && String(profileUserId).toLowerCase() === String(empUserId).toLowerCase();
       });
       const bankDetailsComplete = !!(emp.bankName && emp.accountNumber && emp.ifscCode && emp.pan);
       let bankStatus = bankDetailsComplete ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing');
       let payrollStatus = 'Not Configured';
       if (profile) {
-        const isProfileComplete = !!((profile.annualCTC || profile.monthlyCTC) && profile.earnings?.length > 0 && bankDetailsComplete);
-        payrollStatus = isProfileComplete ? 'Active' : 'Warning';
+        // ALWAYS show as Active if a profile exists, as requested by user
+        payrollStatus = 'Active';
       }
 
       return {

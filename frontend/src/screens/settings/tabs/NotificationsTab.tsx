@@ -212,6 +212,8 @@ export default function NotificationsTab() {
       setSidebarVisible={setSidebarVisible}
       onRefresh={fetchSettings}
       refreshing={loading}
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
     >
       <View style={styles.container}>
         <ScrollView

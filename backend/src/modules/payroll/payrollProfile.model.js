@@ -4,8 +4,7 @@ const mongoose = require('mongoose');
 
 const salaryComponentSchema = new mongoose.Schema({
   organizationId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Organization',
+    type: mongoose.Schema.Types.Mixed,
     required: true,
     index: true
   },
@@ -23,8 +22,7 @@ const salaryComponentSchema = new mongoose.Schema({
 const payrollProfileSchema = new mongoose.Schema(
   {
     organizationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Organization',
+      type: mongoose.Schema.Types.Mixed,
       required: true,
       index: true
     },

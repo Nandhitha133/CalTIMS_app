@@ -47,6 +47,7 @@ import {
   Plus,
   Send,
   ChevronDown,
+  Activity,
 } from 'lucide-react-native';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
@@ -837,30 +838,85 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           {preferences.showChart && (
             <View style={[styles.chartCard, { backgroundColor: preferences.theme === 'dark' ? COLORS.dark : COLORS.white }]}>
               <View style={styles.chartHeader}>
-                <View><Text style={[styles.chartTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Hourly Productivity</Text><Text style={styles.chartSubtitle}>Logged hours this week</Text></View>
+                <View style={styles.chartTitleRow}>
+                  <View style={styles.chartIconContainer}>
+                    <Activity size={20} color={COLORS.primary} />
+                  </View>
+                  <View>
+                    <Text style={[styles.chartTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Hourly Productivity</Text>
+                    <Text style={styles.chartSubtitle}>ORGANIZATION PERFORMANCE</Text>
+                  </View>
+                </View>
+
                 <View style={styles.weekNavigation}>
-                  <TouchableOpacity onPress={() => setCurrentWeekStart(prev => subWeeks(prev, 1))}><ChevronLeft size={20} color={COLORS.gray} /></TouchableOpacity>
-                  <Text style={styles.weekDate}>{format(currentWeekStart, 'MMM d')}</Text>
-                  <TouchableOpacity onPress={() => setCurrentWeekStart(prev => addWeeks(prev, 1))}><ChevronRight size={20} color={COLORS.gray} /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setCurrentWeekStart(prev => subWeeks(prev, 1))} style={styles.navBtn}>
+                    <ChevronLeft size={16} color={COLORS.gray} />
+                  </TouchableOpacity>
+                  <View style={styles.weekDateRange}>
+                    <Calendar size={14} color={COLORS.primary} style={{ marginRight: 6 }} />
+                    <Text style={styles.weekDate}>
+                      {format(currentWeekStart, 'MMM d').toUpperCase()} - {format(addDays(currentWeekStart, 6), 'MMM d, yyyy').toUpperCase()}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setCurrentWeekStart(prev => addWeeks(prev, 1))} style={styles.navBtn}>
+                    <ChevronRight size={16} color={COLORS.gray} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.chartTotalContainer}>
+                  <Text style={[styles.chartTotalValue, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>
+                    {loggedHoursThisWeek.toFixed(2)} <Text style={styles.chartTotalUnit}>H</Text>
+                  </Text>
+                  <Text style={styles.chartTotalLabel}>ORGANIZATION TOTAL</Text>
                 </View>
               </View>
-              <View style={styles.chartContainer}>
-                {chartData.map((day: { day: string; hours: number }, index: number) => {
-                  const maxHeight = 120;
-                  const barHeight = (day.hours / 8) * maxHeight;
-                  const barColor = day.hours >= 8 ? COLORS.success : day.hours > 0 ? COLORS.primary : COLORS.border;
-                  return (
-                    <View key={index} style={styles.barItem}>
-                      <View style={[styles.bar, { height: Math.min(barHeight, maxHeight), backgroundColor: barColor }]} />
-                      <Text style={styles.barLabel}>{day.day}</Text>
-                      <Text style={styles.barValue}>{day.hours}h</Text>
-                    </View>
-                  );
-                })}
-              </View>
-              <View style={styles.chartFooter}>
-                <Text style={styles.chartFooterLabel}>Total</Text>
-                <Text style={[styles.chartFooterValue, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>{loggedHoursThisWeek.toFixed(1)}<Text style={styles.chartFooterUnit}> / {targetHours}h</Text></Text>
+
+              <View style={styles.chartMainContent}>
+                {/* Y-Axis Labels */}
+                <View style={styles.yAxis}>
+                  {[32, 24, 16, 8, 0].map((val) => (
+                    <Text key={val} style={styles.yAxisLabel}>{val}</Text>
+                  ))}
+                </View>
+
+                {/* Chart Area */}
+                <View style={styles.chartArea}>
+                  {/* Grid Lines */}
+                  <View style={styles.gridLines}>
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <View key={i} style={[styles.gridLine, i === 4 && { borderBottomWidth: 0 }]} />
+                    ))}
+                  </View>
+
+                  {/* Bars */}
+                  <View style={styles.barsContainer}>
+                    {chartData.map((day: { day: string; hours: number }, index: number) => {
+                      const maxVal = 32;
+                      const maxHeight = 160;
+                      const barHeight = (day.hours / maxVal) * maxHeight;
+                      return (
+                        <View key={index} style={styles.barWrapper}>
+                          <View style={styles.barStack}>
+                            <View 
+                              style={[
+                                styles.bar, 
+                                { 
+                                  height: Math.min(barHeight, maxHeight),
+                                  backgroundColor: COLORS.primary,
+                                  borderTopLeftRadius: 6,
+                                  borderTopRightRadius: 6,
+                                  borderBottomLeftRadius: 6,
+                                  borderBottomRightRadius: 6,
+                                }
+                              ]} 
+                            />
+                          </View>
+                          <Text style={styles.barDayLabel}>{day.day}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
               </View>
             </View>
           )}
@@ -957,21 +1013,31 @@ const styles = StyleSheet.create({
   statCardFooter: { marginTop: 12 },
   statTitle: { fontSize: 14, fontWeight: '700' },
   statSubtitle: { fontSize: 11, color: COLORS.gray, marginTop: 4 },
-  chartCard: { borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  chartTitle: { fontSize: 16, fontWeight: '700' },
-  chartSubtitle: { fontSize: 11, color: COLORS.gray, marginTop: 2 },
-  weekNavigation: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  weekDate: { fontSize: 11, fontWeight: '600', color: '#475569' },
-  chartContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 150, marginTop: 8 },
-  barItem: { alignItems: 'center', flex: 1 },
-  bar: { width: 28, borderRadius: 8, marginBottom: 8 },
-  barLabel: { fontSize: 11, fontWeight: '600', color: '#64748b' },
-  barValue: { fontSize: 10, color: '#94a3b8' },
-  chartFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border },
-  chartFooterLabel: { fontSize: 12, color: '#64748b' },
-  chartFooterValue: { fontSize: 20, fontWeight: '800' },
-  chartFooterUnit: { fontSize: 12, color: '#94a3b8' },
+  chartCard: { borderRadius: 24, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 },
+  chartTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  chartIconContainer: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' },
+  chartTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
+  chartSubtitle: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginTop: 2, letterSpacing: 0.5 },
+  weekNavigation: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 4, borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9' },
+  navBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  weekDateRange: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f1f5f9' },
+  weekDate: { fontSize: 11, fontWeight: '800', color: '#1e293b' },
+  chartTotalContainer: { alignItems: 'flex-end' },
+  chartTotalValue: { fontSize: 24, fontWeight: '800', letterSpacing: -1 },
+  chartTotalUnit: { fontSize: 14, color: '#94a3b8', fontWeight: '600' },
+  chartTotalLabel: { fontSize: 9, fontWeight: '700', color: '#94a3b8', marginTop: 2 },
+  chartMainContent: { flexDirection: 'row', height: 200 },
+  yAxis: { width: 30, justifyContent: 'space-between', paddingBottom: 25, paddingTop: 5 },
+  yAxisLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', textAlign: 'right', paddingRight: 8 },
+  chartArea: { flex: 1, position: 'relative' },
+  gridLines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 25, justifyContent: 'space-between' },
+  gridLine: { height: 1, backgroundColor: '#f1f5f9', width: '100%' },
+  barsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', paddingBottom: 25, zIndex: 1 },
+  barWrapper: { alignItems: 'center', width: 40 },
+  barStack: { flex: 1, justifyContent: 'flex-end', width: '100%', alignItems: 'center' },
+  bar: { width: 20 },
+  barDayLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', marginTop: 12 },
   projectsCard: { borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   projectsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   projectsTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
