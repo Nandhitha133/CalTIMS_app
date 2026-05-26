@@ -239,24 +239,7 @@ export default function IncidentDetailsScreen() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const colors = statusColors[status] || statusColors.Open;
-    return (
-      <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-        <View style={[styles.statusDot, { backgroundColor: colors.text }]} />
-        <Text style={[styles.statusText, { color: colors.text }]}>{status.toUpperCase()}</Text>
-      </View>
-    );
-  };
 
-  const getPriorityBadge = (priority: string) => {
-    const colors = priorityColors[priority] || priorityColors.Medium;
-    return (
-      <View style={[styles.priorityBadge, { backgroundColor: colors.bg }]}>
-        <Text style={[styles.priorityText, { color: colors.text }]}>{priority.toUpperCase()}</Text>
-      </View>
-    );
-  };
 
   const canReply = ticket?.status !== 'Closed' && ticket?.status !== 'Withdrawn';
   const showWithdraw = !isAdmin && isOwner && ticket && ['Open', 'In Progress'].includes(ticket.status);

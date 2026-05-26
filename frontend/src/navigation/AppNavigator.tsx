@@ -78,6 +78,7 @@ export type RootStackParamList = {
   Reports: undefined;
   Profile: undefined;
   AuditLogs: undefined;
+  Settings: undefined;
   Incidents: undefined;
   IncidentDetails: { id: string; type?: 'incident' | 'support' };
   MyPayslips: undefined;

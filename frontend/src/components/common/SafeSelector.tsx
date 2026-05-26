@@ -27,6 +27,7 @@ export interface SafeSelectorProps {
   onOpen: () => void;
   onClose: () => void;
   style?: any;
+  triggerStyle?: any;
 }
 
 export default function SafeSelector({
@@ -39,17 +40,22 @@ export default function SafeSelector({
   onOpen,
   onClose,
   style,
+  triggerStyle,
 }: SafeSelectorProps) {
   const selectedOption = options.find(o => o.value === selectedValue);
 
   return (
     <View style={[styles.container, style]}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <TouchableOpacity style={styles.trigger} onPress={onOpen} activeOpacity={0.7}>
-        <Text style={[styles.triggerText, !selectedOption && styles.placeholder]}>
+      <TouchableOpacity style={[styles.trigger, triggerStyle]} onPress={onOpen} activeOpacity={0.7}>
+        <Text 
+          style={[styles.triggerText, !selectedOption && styles.placeholder]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {selectedOption ? selectedOption.label : placeholder}
         </Text>
-        <ChevronDown size={16} color="#64748b" />
+        <ChevronDown size={14} color="#64748b" />
       </TouchableOpacity>
 
       <Modal

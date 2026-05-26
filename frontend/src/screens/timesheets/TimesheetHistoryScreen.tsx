@@ -542,8 +542,8 @@ const TimesheetCard = ({
 }: {
   item: TimesheetHistoryItem;
   onView: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit: (id: string, date: string) => void;
+  onDelete: (id: string) => void;
   onReport: () => void;
   theme: 'light' | 'dark';
   isPro: boolean;
@@ -592,16 +592,28 @@ const TimesheetCard = ({
       <View style={styles.cardFooter}>
         <View style={styles.footerLeft} />
         <View style={styles.cardActions}>
-          <TouchableOpacity onPress={onView} style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}>
+          <TouchableOpacity 
+            onPress={onView} 
+            style={[styles.actionBtn, { backgroundColor: '#f5f3ff' }]}
+            activeOpacity={0.7}
+          >
             <Eye size={16} color="#8b5cf6" />
           </TouchableOpacity>
 
-          {isDraft && (
+          {status === 'rejected' && (
             <>
-              <TouchableOpacity onPress={onEdit} style={[styles.actionBtn, { backgroundColor: '#fffbeb' }]}>
+              <TouchableOpacity 
+                onPress={() => onEdit(item.id || item._id || '', item.weekStartDate)} 
+                style={[styles.actionBtn, { backgroundColor: '#fffbeb' }]}
+                activeOpacity={0.7}
+              >
                 <Pencil size={16} color="#f59e0b" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={onDelete} style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}>
+              <TouchableOpacity 
+                onPress={() => onDelete(item.id || item._id || '')} 
+                style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
+                activeOpacity={0.7}
+              >
                 <Trash2 size={16} color="#ef4444" />
               </TouchableOpacity>
             </>
@@ -749,6 +761,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
   };
 
   const handleEditDraft = (timesheetId: string, weekStartDate: string) => {
+    // Navigate to TimesheetEntry with the specific timesheet ID and its start date
     navigation.navigate('TimesheetEntry', { id: timesheetId, date: weekStartDate });
   };
 
@@ -1022,7 +1035,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
                 key={item.id || item._id}
                 item={item}
                 onView={() => handleViewDetails(item.weekStartDate, (item.userId?.id || item.userId?._id || item.userId || '') as string, (item.id || item._id || '') as string)}
-                onEdit={() => handleEditDraft((item.id || item._id || '') as string, item.weekStartDate)}
+                onEdit={handleEditDraft}
                 onDelete={() => handleDeleteDraft((item.id || item._id || '') as string)}
                 onReport={() => handleReportIssue((item.id || item._id || '') as string)}
                 theme={theme}

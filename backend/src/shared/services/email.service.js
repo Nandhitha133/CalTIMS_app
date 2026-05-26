@@ -292,7 +292,7 @@ const emailService = {
    */
   async sendPasswordReset(userEmail, userName, resetToken, companyName = 'CALTIMS') {
     const transporter = getTransporter();
-    const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+    const resetLink = `caltims://reset-password?token=${resetToken}`;
 
     const html = buildResetPasswordHTML({
       resetLink,

@@ -40,6 +40,7 @@ import {
 } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { policyAPI } from '../../../services/endpoints';
+import { useSocketEvent } from '../../../services/socket';
 import { useAuthStore } from '../../../store/authStore';
 import Header from '../../../components/common/Header';
 
@@ -430,6 +431,11 @@ export default function PayrollPolicyTab() {
         return null;
       }
     },
+  });
+
+  useSocketEvent('settings_updated', (payload) => {
+    console.log('[Socket] Settings updated event received in PayrollPolicyTab:', payload);
+    refetch();
   });
 
   useEffect(() => {
@@ -1024,25 +1030,29 @@ const styles = {
     color: '#ffffff',
   },
   mainContent: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 20,
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
   },
   leftColumn: {
-    flex: 1,
+    width: '100%',
   },
   rightColumn: {
-    width: 320, // Fixed width for the calculator as per image
+    width: '100%',
+    marginTop: 10,
   },
   tabsContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     backgroundColor: '#f1f5f9',
     borderRadius: 16,
     padding: 4,
     marginBottom: 20,
+    gap: 4,
   },
   tabButton: {
     flex: 1,
+    minWidth: '45%', // Allow 2 tabs per row on very small screens if needed
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1124,11 +1134,14 @@ const styles = {
   },
   componentRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginBottom: 12,
   },
   componentField: {
-    marginBottom: 12,
+    flex: 1,
+    minWidth: 140, // Ensure fields don't get too narrow
+    marginBottom: 8,
   },
   componentLabel: {
     fontSize: 11,

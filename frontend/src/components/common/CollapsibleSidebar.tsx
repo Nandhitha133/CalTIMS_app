@@ -40,6 +40,9 @@ interface User {
   name: string;
   email: string;
   role: string;
+  roleId?: {
+    permissions: any;
+  };
 }
 
 interface CollapsibleSidebarProps {
@@ -55,6 +58,8 @@ interface NavItem {
   icon: React.ComponentType<any>;
   label: string;
   roles?: string[];
+  module?: string;
+  submodule?: string;
   subItems?: SubNavItem[];
 }
 
@@ -62,6 +67,8 @@ interface SubNavItem {
   to: string;
   label: string;
   roles?: string[];
+  module?: string;
+  submodule?: string;
 }
 
 interface NavSection {
@@ -73,51 +80,54 @@ const navSections: NavSection[] = [
   {
     label: 'Timesheets',
     items: [
-      { to: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: 'TimesheetEntry', icon: Clock, label: 'Timesheet Entry' },
-      { to: 'TimesheetHistory', icon: List, label: 'History' },
-      { to: 'ManageTimesheets', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager'] },
-      { to: 'TimesheetCompliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager'] },
+      { to: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard', module: 'Timesheets', submodule: 'Dashboard' },
+      { to: 'TimesheetEntry', icon: Clock, label: 'Timesheet Entry', module: 'Timesheets', submodule: 'Entry' },
+      { to: 'TimesheetHistory', icon: List, label: 'History', module: 'Timesheets', submodule: 'History' },
+      { to: 'ManageTimesheets', icon: CheckSquare, label: 'Manage Timesheets', roles: ['admin', 'manager'], module: 'Timesheets', submodule: 'Management' },
+      { to: 'TimesheetCompliance', icon: AlertCircle, label: 'Compliance & Locks', roles: ['admin', 'manager'], module: 'Timesheets', submodule: 'Management' },
     ],
   },
   {
     label: 'Workspace',
     items: [
-      { to: 'LeaveTracker', icon: ClipboardList, label: 'Leave Tracker' },
-      { to: 'LeaveManagement', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'] },
-      { to: 'MyPayslips', icon: Banknote, label: 'My Payslips' },
-      { to: 'Announcements', icon: Megaphone, label: 'Announcements' },
-      { to: 'Incidents', icon: AlertCircle, label: 'Help & Support' },
+      { to: 'LeaveTracker', icon: ClipboardList, label: 'Leave Tracker', module: 'Leave Management', submodule: 'Leave Tracker' },
+      { to: 'LeaveManagement', icon: ClipboardList, label: 'Leave Management', roles: ['admin', 'manager'], module: 'Leave Management', submodule: 'Leave Requests' },
+      { to: 'MyPayslips', icon: Banknote, label: 'My Payslips', module: 'My Payslip', submodule: 'Payslip View' },
+      { to: 'Announcements', icon: Megaphone, label: 'Announcements', module: 'Announcements', submodule: 'Announcements' },
+      { to: 'Incidents', icon: AlertCircle, label: 'Help & Support', module: 'Support', submodule: 'Help & Support' },
     ],
   },
   {
     label: 'Management',
     items: [
-      { to: 'Projects', icon: FolderOpen, label: 'Projects', roles: ['admin', 'manager'] },
-      { to: 'Tasks', icon: ListTodo, label: 'Tasks', roles: ['admin', 'manager'] },
-      { to: 'Employees', icon: Users, label: 'Employees', roles: ['admin', 'manager'] },
+      { to: 'Projects', icon: FolderOpen, label: 'Projects', roles: ['admin', 'manager'], module: 'Projects', submodule: 'Project List' },
+      { to: 'Tasks', icon: ListTodo, label: 'Tasks', roles: ['admin', 'manager'], module: 'Tasks', submodule: 'Task Management' },
+      { to: 'Employees', icon: Users, label: 'Employees', roles: ['admin', 'manager'], module: 'Employees', submodule: 'Employee List' },
       {
         to: 'PayrollDashboard',
         icon: Banknote,
         label: 'Payroll',
         roles: ['admin', 'manager', 'finance'],
+        module: 'Payroll',
         subItems: [
-          { to: 'PayrollDashboard', label: 'Dashboard' },
-          { to: 'PayrollProfiles', label: 'Payroll Profiles' },
-          { to: 'PayrollRun', label: 'Payroll Engine' },
-          { to: 'PayrollHistory', label: 'Execution Ledger' },
-          { to: 'PayrollPayslip', label: 'Payslip Generation' },
-          { to: 'PayrollReports', label: 'Payroll Reports' },
-          { to: 'BankTransferExport', label: 'Bank Export' },
+          { to: 'PayrollDashboard', label: 'Dashboard', module: 'Payroll', submodule: 'Dashboard' },
+          { to: 'PayrollProfiles', label: 'Payroll Profiles', module: 'Payroll', submodule: 'Payroll Engine' },
+          { to: 'PayrollRun', label: 'Payroll Engine', module: 'Payroll', submodule: 'Payroll Engine' },
+          { to: 'PayrollHistory', label: 'Execution Ledger', module: 'Payroll', submodule: 'Execution Ledger' },
+          { to: 'PayrollPayslip', label: 'Payslip Generation', module: 'Payroll', submodule: 'Payslip Generation' },
+          { to: 'PayrollReports', label: 'Payroll Reports', module: 'Payroll', submodule: 'Payroll Reports' },
+          { to: 'BankTransferExport', label: 'Bank Export', module: 'Payroll', submodule: 'Bank Export' },
         ],
       },
-      { to: 'Reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'] },
-      { to: 'AuditLogs', icon: Shield, label: 'Audit Logs', roles: ['admin'] },
+      { to: 'Reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'manager'], module: 'Reports', submodule: 'Reports Dashboard' },
+      { to: 'AuditLogs', icon: Shield, label: 'Audit Logs', roles: ['admin'], module: 'Settings', submodule: 'Audit Logs' },
       {
         to: 'Settings',
         icon: Settings2,
         label: 'Settings',
         roles: ['admin'],
+        module: 'Settings',
+        submodule: 'General'
       },
     ],
   },
@@ -220,18 +230,33 @@ export default function CollapsibleSidebar({
     return currentRoute === routeName;
   };
 
-  const hasPermission = (item: NavItem) => {
+  const hasPermission = (item: NavItem | SubNavItem) => {
     if (!user || !user.role) return false;
-    const role = user.role.toLowerCase();
+    const roleName = user.role.toLowerCase();
 
     // Admin, Super Admin, and Owner have access to everything
-    if (role === 'admin' || role === 'super_admin' || role === 'owner') return true;
+    if (roleName === 'admin' || roleName === 'super_admin' || roleName === 'owner') return true;
 
-    // If no roles specified, everyone has access
+    // Check granular permissions if available
+    const permissions = user.roleId?.permissions;
+    if (permissions && item.module && item.submodule) {
+      const modulePerms = permissions[item.module];
+      if (modulePerms) {
+        const submodulePerms = modulePerms[item.submodule];
+        // If the submodule exists in permissions and has at least one action (like 'view'), grant access
+        if (submodulePerms && Array.isArray(submodulePerms) && submodulePerms.length > 0) {
+          return true;
+        }
+      }
+      // If we have permissions configured but this module/submodule isn't found, deny access
+      return false;
+    }
+
+    // Fallback to role-based check if granular permissions are not available or not applicable
     if (!item.roles || item.roles.length === 0) return true;
 
     // Check if user role is in the allowed roles list
-    return item.roles.map(r => r.toLowerCase()).includes(role);
+    return item.roles.map(r => r.toLowerCase()).includes(roleName);
   };
 
 
@@ -322,7 +347,7 @@ export default function CollapsibleSidebar({
 
                             {isExpanded && (
                               <View style={styles.subItems}>
-                                {item.subItems?.map((subItem) => (
+                                {item.subItems?.filter(hasPermission).map((subItem) => (
                                   <TouchableOpacity
                                     key={subItem.to}
                                     style={[styles.subNavItem, isActive(subItem.to) && styles.subNavItemActive]}

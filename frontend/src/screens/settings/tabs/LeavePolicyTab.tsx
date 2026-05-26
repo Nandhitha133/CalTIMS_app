@@ -1,135 +1,210 @@
-// src/screens/settings/tabs/LeavePolicyTab.tsx
-import React, { useState, useEffect } from 'react';
+// screens/settings/tabs/LeavePolicyTab.tsx
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
-  Alert,
-  Platform,
-  ActivityIndicator,
+  TextInput,
   Modal,
-  KeyboardAvoidingView,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Briefcase,
-  CalendarOff,
-  Settings2,
-  Save,
-  Plus,
-  X,
+import Toast from 'react-native-toast-message';
+import { 
+  Briefcase, 
+  Stethoscope, 
+  Coffee, 
+  Clock, 
+  Calendar, 
+  ShieldCheck, 
+  ChevronRight, 
+  Plus, 
+  Save, 
+  Trash2, 
   AlertCircle,
-  TrendingUp,
-  CheckCircle2,
-  Clock,
+  X,
+  LineChart
 } from 'lucide-react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import { settingsAPI } from '../../../services/endpoints';
-import { useAuthStore } from '../../../store/authStore';
+import { useSocketEvent } from '../../../services/socket';
 import Header from '../../../components/common/Header';
+import { useAuthStore } from '../../../store/authStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Types
-interface LeavePolicy {
-  annualLeaveDays: number;
-  sickLeaveDays: number;
-  casualLeaveDays: number;
-  maxCarryForward: number;
-  approvalWorkflow: string;
+interface LeaveType {
+  id: string;
+  name: string;
+  category: 'Paid' | 'Medical' | 'General';
+  days: number;
+  description: string;
 }
 
+// Default leave types
+const DEFAULT_LEAVE_TYPES: LeaveType[] = [
+  { id: 'lt-1', name: 'Annual Leave', category: 'Paid', days: 20, description: 'Statutory vacation time' },
+  { id: 'lt-2', name: 'Sick Leave', category: 'Medical', days: 10, description: 'Medical recovery and health' },
+  { id: 'lt-3', name: 'Casual Leave', category: 'General', days: 6, description: 'Personal matters and emergency' },
+];
+
+const CATEGORY_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  Paid: { bg: '#e0e7ff', text: '#4f46e5', border: '#c7d2fe' },
+  Medical: { bg: '#ffe4e6', text: '#e11d48', border: '#fecdd3' },
+  General: { bg: '#fef3c7', text: '#d97706', border: '#fde68a' },
+};
+
+const CATEGORY_ICONS: Record<string, any> = {
+  Paid: Briefcase,
+  Medical: Stethoscope,
+  General: Coffee,
+};
+
 // Section Card Component
-const SectionCard = ({ title, subtitle, icon: Icon, children }: any) => (
-  <View style={styles.card}>
-    <View style={styles.cardHeader}>
-      <View style={styles.cardHeaderLeft}>
-        <View style={styles.cardIconContainer}>
-          <Icon size={20} color="#6366f1" />
-        </View>
-        <View>
-          <Text style={styles.cardTitle}>{title}</Text>
-          <Text style={styles.cardSubtitle}>{subtitle}</Text>
+const SectionCard = ({ 
+  title, 
+  subtitle, 
+  icon: IconComponent, 
+  children 
+}: { 
+  title: string; 
+  subtitle: string; 
+  icon: any; 
+  children: React.ReactNode;
+}) => {
+  return (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleContainer}>
+          <View style={styles.sectionIconContainer}>
+            <IconComponent size={20} color="#6366f1" />
+          </View>
+          <View>
+            <Text style={styles.sectionTitle}>{title}</Text>
+            <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+          </View>
         </View>
       </View>
+      <View style={styles.sectionDivider} />
+      <View style={styles.sectionContent}>
+        {children}
+      </View>
     </View>
-    <View style={styles.cardDivider} />
-    <View style={styles.cardContent}>
-      {children}
-    </View>
-  </View>
-);
+  );
+};
 
 // Leave Type Card Component
-const LeaveTypeCard = ({
-  leaveType,
-  isEligible,
-  onToggleEligibility,
-  onRemove,
-  index
-}: {
-  leaveType: string;
-  isEligible: boolean;
-  onToggleEligibility: () => void;
-  onRemove: () => void;
-  index: number;
+const LeaveTypeCard = ({ 
+  leave, 
+  onUpdate, 
+  onDelete 
+}: { 
+  leave: LeaveType; 
+  onUpdate: (updates: Partial<LeaveType>) => void;
+  onDelete: () => void;
 }) => {
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const IconComponent = CATEGORY_ICONS[leave.category] || Briefcase;
+  const categoryStyle = CATEGORY_STYLES[leave.category];
 
   return (
     <>
-      <View style={[styles.leaveTypeCard, isEligible && styles.leaveTypeCardEligible]}>
+      <View style={styles.leaveTypeCard}>
         <View style={styles.leaveTypeHeader}>
-          <Text style={styles.leaveTypeName} numberOfLines={1}>
-            {leaveType}
-          </Text>
-          <TouchableOpacity
-            onPress={() => setShowRemoveConfirm(true)}
-            style={styles.leaveTypeRemove}
-          >
-            <X size={14} color="#ef4444" />
-          </TouchableOpacity>
+          <View style={[styles.leaveTypeIcon, { backgroundColor: categoryStyle.bg }]}>
+            <IconComponent size={20} color={categoryStyle.text} />
+          </View>
+          
+          <View style={styles.leaveTypeInfo}>
+            <TextInput
+              style={styles.leaveTypeName}
+              value={leave.name}
+              onChangeText={(text) => onUpdate({ name: text })}
+              placeholder="Leave name"
+              placeholderTextColor="#94a3b8"
+            />
+            
+            <View style={styles.leaveTypeMeta}>
+              <TouchableOpacity
+                style={[styles.categoryBadge, { backgroundColor: categoryStyle.bg, borderColor: categoryStyle.border }]}
+                onPress={() => {
+                  const categories: ('Paid' | 'Medical' | 'General')[] = ['Paid', 'Medical', 'General'];
+                  const currentIndex = categories.indexOf(leave.category);
+                  const nextCategory = categories[(currentIndex + 1) % categories.length];
+                  onUpdate({ category: nextCategory });
+                }}
+              >
+                <Text style={[styles.categoryText, { color: categoryStyle.text }]}>
+                  {leave.category}
+                </Text>
+              </TouchableOpacity>
+              
+              <TextInput
+                style={styles.leaveDescription}
+                value={leave.description}
+                onChangeText={(text) => onUpdate({ description: text })}
+                placeholder="Brief purpose of this leave..."
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+          </View>
+          
+          <View style={styles.leaveTypeActions}>
+            <View style={styles.daysContainer}>
+              <Text style={styles.daysLabel}>Days</Text>
+              <TextInput
+                style={styles.daysInput}
+                value={String(leave.days)}
+                onChangeText={(text) => {
+                  const days = parseInt(text, 10) || 0;
+                  if (days >= 0) onUpdate({ days });
+                }}
+                keyboardType="numeric"
+              />
+            </View>
+            
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => setShowDeleteModal(true)}
+            >
+              <Trash2 size={18} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
         </View>
-
-        <TouchableOpacity
-          style={[styles.eligibilityButton, isEligible && styles.eligibilityButtonActive]}
-          onPress={onToggleEligibility}
-        >
-          <View style={[styles.eligibilityDot, isEligible && styles.eligibilityDotActive]} />
-          <Text style={[styles.eligibilityText, isEligible && styles.eligibilityTextActive]}>
-            {isEligible ? 'Deductible' : 'Unpaid/Static'}
-          </Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Remove Confirmation Modal */}
-      <Modal visible={showRemoveConfirm} transparent animationType="fade">
+      {/* Delete Confirmation Modal */}
+      <Modal visible={showDeleteModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModal}>
-            <Text style={styles.confirmTitle}>Remove Leave Type</Text>
+            <Text style={styles.confirmTitle}>Delete Leave Type</Text>
             <Text style={styles.confirmMessage}>
-              Are you sure you want to remove "{leaveType}"?
+              Are you sure you want to delete "{leave.name}"? This action cannot be undone.
             </Text>
             <View style={styles.confirmButtons}>
               <TouchableOpacity
                 style={[styles.confirmButton, styles.confirmButtonCancel]}
-                onPress={() => setShowRemoveConfirm(false)}
+                onPress={() => setShowDeleteModal(false)}
               >
                 <Text style={styles.confirmButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmButton, styles.confirmButtonDelete]}
                 onPress={() => {
-                  onRemove();
-                  setShowRemoveConfirm(false);
+                  onDelete();
+                  setShowDeleteModal(false);
                 }}
               >
                 <Text style={[styles.confirmButtonText, styles.confirmButtonDeleteText]}>
-                  Remove
+                  Delete
                 </Text>
               </TouchableOpacity>
             </View>
@@ -144,20 +219,33 @@ const LeaveTypeCard = ({
 const AddLeaveTypeModal = ({
   visible,
   onClose,
-  onAdd
+  onAdd,
 }: {
   visible: boolean;
   onClose: () => void;
-  onAdd: (value: string) => void;
+  onAdd: (leaveType: Omit<LeaveType, 'id'>) => void;
 }) => {
-  const [newLeaveType, setNewLeaveType] = useState('');
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState<'Paid' | 'Medical' | 'General'>('General');
+  const [days, setDays] = useState('5');
+  const [description, setDescription] = useState('');
 
   const handleAdd = () => {
-    if (newLeaveType.trim()) {
-      onAdd(newLeaveType.trim());
-      setNewLeaveType('');
-      onClose();
+    if (!name.trim()) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Leave name is required' });
+      return;
     }
+    onAdd({
+      name: name.trim(),
+      category,
+      days: parseInt(days, 10) || 0,
+      description: description.trim() || 'Custom leave category',
+    });
+    setName('');
+    setCategory('General');
+    setDays('5');
+    setDescription('');
+    onClose();
   };
 
   return (
@@ -170,26 +258,58 @@ const AddLeaveTypeModal = ({
               <X size={24} color="#6b7280" />
             </TouchableOpacity>
           </View>
+          
           <View style={styles.addModalContent}>
             <TextInput
               style={styles.addModalInput}
-              placeholder="e.g., Bereavement, Comp Off..."
-              placeholderTextColor="#9ca3af"
-              value={newLeaveType}
-              onChangeText={setNewLeaveType}
-              autoFocus
+              placeholder="Leave name (e.g., Bereavement)"
+              placeholderTextColor="#94a3b8"
+              value={name}
+              onChangeText={setName}
             />
-            <TouchableOpacity
-              style={styles.addModalButton}
-              onPress={handleAdd}
-            >
-              <LinearGradient
-                colors={['#6366f1', '#8b5cf6']}
-                style={styles.addModalButtonGradient}
-              >
-                <Plus size={18} color="#ffffff" />
+            
+            <View style={styles.categorySelector}>
+              {(['Paid', 'Medical', 'General'] as const).map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.categoryOption,
+                    category === cat && styles.categoryOptionActive,
+                    { backgroundColor: CATEGORY_STYLES[cat].bg },
+                  ]}
+                  onPress={() => setCategory(cat)}
+                >
+                  <Text style={[styles.categoryOptionText, { color: CATEGORY_STYLES[cat].text }]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            <TextInput
+              style={styles.addModalInput}
+              placeholder="Days per year"
+              placeholderTextColor="#94a3b8"
+              value={days}
+              onChangeText={setDays}
+              keyboardType="numeric"
+            />
+            
+            <TextInput
+              style={[styles.addModalInput, styles.addModalTextArea]}
+              placeholder="Description"
+              placeholderTextColor="#94a3b8"
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={3}
+            />
+            
+            <TouchableOpacity style={styles.addModalButton} onPress={handleAdd}>
+              <View style={styles.addModalButtonGradient}>
+                <Plus size={18} color="#fff" />
                 <Text style={styles.addModalButtonText}>Add Leave Type</Text>
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -204,7 +324,7 @@ const AllowanceSlider = ({
   value,
   max,
   color,
-  onChange
+  onChange,
 }: {
   label: string;
   value: number;
@@ -216,7 +336,7 @@ const AllowanceSlider = ({
   const [tempValue, setTempValue] = useState(String(value));
 
   const handleValueChange = () => {
-    const numValue = parseInt(tempValue) || 0;
+    const numValue = parseInt(tempValue, 10) || 0;
     onChange(Math.min(max, Math.max(0, numValue)));
     setShowValueModal(false);
   };
@@ -236,14 +356,9 @@ const AllowanceSlider = ({
         </TouchableOpacity>
       </View>
 
-      <View style={styles.sliderContainer}>
+      <View style={styles.sliderWrapper}>
         <View style={styles.sliderTrack}>
-          <View
-            style={[
-              styles.sliderFill,
-              { width: `${(value / max) * 100}%`, backgroundColor: color }
-            ]}
-          />
+          <View style={[styles.sliderFill, { width: `${(value / max) * 100}%`, backgroundColor: color }]} />
         </View>
         <View style={styles.sliderMarks}>
           {[0, max / 2, max].map((mark, idx) => (
@@ -287,106 +402,101 @@ const AllowanceSlider = ({
   );
 };
 
+// Main Component
 export default function LeavePolicyTab() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const { isPro } = useAuthStore();
-
-  const [leaveTypes, setLeaveTypes] = useState<string[]>([]);
-  const [eligibleLeaveTypes, setEligibleLeaveTypes] = useState<string[]>([]);
-  const [policy, setPolicy] = useState<LeavePolicy>({
-    annualLeaveDays: 20,
-    sickLeaveDays: 10,
-    casualLeaveDays: 6,
-    maxCarryForward: 5,
-    approvalWorkflow: 'Employee -> Manager'
-  });
+  
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [initialState, setInitialState] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch settings
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
-    queryFn: async () => {
-      const response: any = await settingsAPI.getSettings();
-      return response.data?.data || response.data || response;
-    },
+    queryFn: () => settingsAPI.getSettings().then((r: any) => r.data?.data || r.data || r),
   });
 
+  useSocketEvent('settings_updated', (payload) => {
+    console.log('[Socket] Settings updated event received in LeavePolicyTab:', payload);
+    refetch();
+  });
+
+  const user = useAuthStore((state) => state.user);
+
   useEffect(() => {
-    if (data?.leavePolicy) {
-      setLeaveTypes(data.leavePolicy.leaveTypes || []);
-      setEligibleLeaveTypes(data.leavePolicy.eligibleLeaveTypes || []);
-      setPolicy({
-        annualLeaveDays: data.leavePolicy.annualLeaveDays || 20,
-        sickLeaveDays: data.leavePolicy.sickLeaveDays || 10,
-        casualLeaveDays: data.leavePolicy.casualLeaveDays || 6,
-        maxCarryForward: data.leavePolicy.maxCarryForward || 5,
-        approvalWorkflow: data.leavePolicy.approvalWorkflow || 'Employee -> Manager'
-      });
+    if (data?.leavePolicy?.config) {
+      setLeaveTypes(data.leavePolicy.config);
+      setInitialState(JSON.stringify(data.leavePolicy.config));
+    } else {
+      setLeaveTypes(DEFAULT_LEAVE_TYPES);
+      setInitialState(JSON.stringify(DEFAULT_LEAVE_TYPES));
     }
   }, [data]);
 
-  const updatePolicy = (key: keyof LeavePolicy, value: number) => {
-    setPolicy(prev => ({ ...prev, [key]: value }));
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  const updateLeave = (id: string, updates: Partial<LeaveType>) => {
+    setLeaveTypes(prev => prev.map(leave => 
+      leave.id === id ? { ...leave, ...updates } : leave
+    ));
   };
 
-  const toggleEligibility = (leaveType: string) => {
-    const lowerType = leaveType.toLowerCase();
-    if (eligibleLeaveTypes.includes(lowerType)) {
-      setEligibleLeaveTypes(eligibleLeaveTypes.filter(t => t !== lowerType));
-    } else {
-      setEligibleLeaveTypes([...eligibleLeaveTypes, lowerType]);
-    }
+  const removeLeave = (id: string) => {
+    setLeaveTypes(prev => prev.filter(leave => leave.id !== id));
   };
 
-  const addLeaveType = (newType: string) => {
-    const exists = leaveTypes.some(t => t.toLowerCase() === newType.toLowerCase());
-    if (exists) {
-      Alert.alert('Error', 'Leave type already exists');
-      return;
-    }
-    setLeaveTypes([...leaveTypes, newType]);
+  const addLeave = (newLeave: Omit<LeaveType, 'id'>) => {
+    const id = `lt-${Date.now()}`;
+    setLeaveTypes(prev => [...prev, { id, ...newLeave }]);
   };
 
-  const removeLeaveType = (index: number) => {
-    const typeToRemove = leaveTypes[index];
-    setLeaveTypes(leaveTypes.filter((_, i) => i !== index));
-    // Also remove from eligible if present
-    const lowerType = typeToRemove.toLowerCase();
-    if (eligibleLeaveTypes.includes(lowerType)) {
-      setEligibleLeaveTypes(eligibleLeaveTypes.filter(t => t !== lowerType));
-    }
-  };
+  // Validation
+  const validation = useMemo(() => {
+    const hasZero = leaveTypes.some(t => t.days <= 0);
+    const hasEmptyName = leaveTypes.some(t => !t.name.trim());
+    const names = leaveTypes.map(t => t.name.toLowerCase().trim());
+    const hasDuplicates = new Set(names).size !== names.length;
+    
+    return {
+      isValid: !hasZero && !hasEmptyName && !hasDuplicates,
+      error: hasZero ? 'All leave types must have at least 1 day' :
+             hasEmptyName ? 'Leave names cannot be empty' :
+             hasDuplicates ? 'Leave names must be unique' : null,
+      count: leaveTypes.length,
+    };
+  }, [leaveTypes]);
 
   // Save mutation
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const payload = {
-        leavePolicy: {
-          leaveTypes,
-          eligibleLeaveTypes,
-          ...policy
-        }
-      };
-      const response: any = await settingsAPI.updateSettings(payload);
-      return response;
-    },
+    mutationFn: () => settingsAPI.updateSettings({
+      leavePolicy: {
+        config: leaveTypes,
+        updatedAt: new Date().toISOString(),
+      },
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      Alert.alert('Success', 'Leave Policy updated successfully!');
+      setInitialState(JSON.stringify(leaveTypes));
+      Toast.show({ type: 'success', text1: 'Success', text2: 'Leave Policy saved successfully!' });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to save policy');
+      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Save failed' });
     },
   });
 
   const handleSave = () => {
-    if (!isPro()) {
-      Alert.alert(
-        'Upgrade Required',
-        'Leave policy settings are available on PRO plan only. Please upgrade to continue.',
-        [{ text: 'OK' }]
-      );
+    if (JSON.stringify(leaveTypes) === initialState) {
+      Toast.show({ type: 'info', text1: 'Info', text2: 'There is nothing to change' });
+      return;
+    }
+    if (!validation.isValid) {
+      Toast.show({ type: 'error', text1: 'Validation Error', text2: validation.error || 'Invalid configuration' });
       return;
     }
     saveMutation.mutate();
@@ -414,190 +524,142 @@ export default function LeavePolicyTab() {
       />
 
       <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Leave Policy</Text>
-          <Text style={styles.headerSubtitle}>
-            Configure global rules for employee time-off and entitlements
-          </Text>
-        </View>
-
-        <View style={styles.mainContent}>
-          {/* Left Column */}
-          <View style={styles.leftColumn}>
-            <SectionCard
-              title="Leave Library"
-              subtitle="Define the range of time-off categories available"
-              icon={Briefcase}
-            >
-              <View style={styles.leaveLibraryContent}>
-                {/* Leave Types Grid */}
-                <View>
-                  <Text style={styles.sectionLabel}>Defined Categories & Eligibility</Text>
-                  <View style={styles.leaveTypesGrid}>
-                    {leaveTypes.map((leaveType, index) => (
-                      <LeaveTypeCard
-                        key={index}
-                        leaveType={leaveType}
-                        isEligible={eligibleLeaveTypes.includes(leaveType.toLowerCase())}
-                        onToggleEligibility={() => toggleEligibility(leaveType)}
-                        onRemove={() => removeLeaveType(index)}
-                        index={index}
-                      />
-                    ))}
-                  </View>
-                </View>
-
-                {/* Add New Leave Type Button */}
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => setShowAddModal(true)}
-                >
-                  <Plus size={18} color="#6366f1" />
-                  <Text style={styles.addButtonText}>Add custom type</Text>
-                </TouchableOpacity>
-
-                {/* Pro Tip Box */}
-                <View style={styles.proTipBox}>
-                  <Settings2 size={18} color="#6366f1" />
-                  <Text style={styles.proTipText}>
-                    <Text style={styles.proTipBold}>Pro-tip:</Text> Marking a category as{' '}
-                    <Text style={styles.proTipHighlight}>Deductible</Text> ensures it tracks
-                    against an employee's annual, sick, or casual allowance pool.
-                  </Text>
-                </View>
-              </View>
-            </SectionCard>
+        {/* Sticky Header */}
+        <View style={styles.stickyHeader}>
+          <View>
+            <Text style={styles.title}>Leave & Wellness Standards</Text>
+            <Text style={styles.description}>Configure global entitlements and health-related coverage</Text>
           </View>
-
-          {/* Right Column */}
-          <View style={styles.rightColumn}>
-            {/* Standard Allowances */}
-            <SectionCard
-              title="Standard Allowances"
-              subtitle="Yearly entitlement pools"
-              icon={TrendingUp}
-            >
-              <View style={styles.allowancesContent}>
-                <AllowanceSlider
-                  label="Paid Vacation"
-                  value={policy.annualLeaveDays}
-                  max={40}
-                  color="#6366f1"
-                  onChange={(value) => updatePolicy('annualLeaveDays', value)}
-                />
-                <AllowanceSlider
-                  label="Medical / Sick"
-                  value={policy.sickLeaveDays}
-                  max={30}
-                  color="#ec4899"
-                  onChange={(value) => updatePolicy('sickLeaveDays', value)}
-                />
-                <AllowanceSlider
-                  label="Personal / Casual"
-                  value={policy.casualLeaveDays}
-                  max={15}
-                  color="#f59e0b"
-                  onChange={(value) => updatePolicy('casualLeaveDays', value)}
-                />
+          
+          <View style={styles.headerActions}>
+            <View style={styles.statsContainer}>
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Active Categories</Text>
+                <Text style={styles.statValue}>{validation.count}</Text>
               </View>
-            </SectionCard>
-
-            {/* Carry Forward */}
-            <SectionCard
-              title="Carry Forward"
-              subtitle="Year-end balance rollover"
-              icon={CalendarOff}
-            >
-              <View style={styles.carryForwardContent}>
-                <View>
-                  <Text style={styles.sectionLabel}>Rollover Capacity</Text>
-                  <View style={styles.carryForwardInput}>
-                    <TextInput
-                      style={styles.carryForwardField}
-                      value={String(policy.maxCarryForward)}
-                      onChangeText={(text) => updatePolicy('maxCarryForward', parseInt(text) || 0)}
-                      keyboardType="numeric"
-                    />
-                    <Text style={styles.carryForwardUnit}>Days / Year</Text>
-                  </View>
-                </View>
-
-                <View style={styles.fiscalYearBox}>
-                  <Text style={styles.fiscalYearTitle}>Fiscal Year Rule</Text>
-                  <Text style={styles.fiscalYearText}>
-                    Eligible leave types allow balance transfers up to this limit.
-                    Overages are purged on April 1st.
-                  </Text>
-                </View>
-              </View>
-            </SectionCard>
-
-            {/* Approval Workflow (Optional - add if needed) */}
-            <SectionCard
-              title="Approval Workflow"
-              subtitle="Leave request approval hierarchy"
-              icon={Clock}
-            >
-              <View style={styles.workflowContent}>
-                <View style={styles.workflowBadge}>
-                  <CheckCircle2 size={16} color="#10b981" />
-                  <Text style={styles.workflowText}>{policy.approvalWorkflow}</Text>
-                </View>
-                <Text style={styles.workflowHint}>
-                  This workflow applies to all leave requests by default.
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statLabel}>Global Status</Text>
+                <Text style={[styles.statStatus, validation.isValid && styles.statStatusValid]}>
+                  {validation.isValid ? 'Valid Policy' : 'Incomplete'}
                 </Text>
               </View>
-            </SectionCard>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.saveButton, saveMutation.isPending && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Save size={18} color="#fff" />
+                  <Text style={styles.saveButtonText}>Save</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Save Button */}
-        <View style={styles.saveButtonContainer}>
-          <TouchableOpacity
-            style={[styles.saveButton, saveMutation.isPending && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={saveMutation.isPending}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#6366f1', '#8b5cf6']}
-              style={styles.saveButtonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Save size={20} color="#ffffff" />
-                  <Text style={styles.saveButtonText}>Authorize Changes</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+        {/* Leave Library Section */}
+        <SectionCard title="Leave Library" subtitle="Define your standard time-off categories" icon={Briefcase}>
+          <View style={styles.leaveLibraryContent}>
+            {leaveTypes.map((leave) => (
+              <LeaveTypeCard
+                key={leave.id}
+                leave={leave}
+                onUpdate={(updates) => updateLeave(leave.id, updates)}
+                onDelete={() => removeLeave(leave.id)}
+              />
+            ))}
+            
+            <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
+              <Plus size={18} color="#6366f1" />
+              <Text style={styles.addButtonText}>Add Custom Type</Text>
+            </TouchableOpacity>
+
+            {/* Pro Tip Box */}
+            <View style={styles.proTipBox}>
+              <ShieldCheck size={18} color="#6366f1" />
+              <Text style={styles.proTipText}>
+                <Text style={styles.proTipBold}>Pro-tip:</Text> All adjusted values will apply to the next fiscal year balance calculation. Existing approved leaves will not be retroactively impacted by pool changes.
+              </Text>
+            </View>
+          </View>
+        </SectionCard>
+
+        {/* Allowance Visualizer Section */}
+        <SectionCard title="Allowance Visualizer" subtitle="Manage balance pools and day limits" icon={LineChart}>
+          <View style={styles.allowancesContent}>
+            {leaveTypes.map((leave) => (
+              <View key={leave.id} style={styles.allowanceItem}>
+                <View style={styles.allowanceItemHeader}>
+                  <View>
+                    <Text style={styles.allowanceItemName}>{leave.name}</Text>
+                    <Text style={styles.allowanceItemSubtitle}>Standard Yearly Pool</Text>
+                  </View>
+                  <View style={[styles.allowanceItemBadge, { backgroundColor: CATEGORY_STYLES[leave.category].bg }]}>
+                    <Text style={[styles.allowanceItemBadgeText, { color: CATEGORY_STYLES[leave.category].text }]}>
+                      {leave.days} DAYS
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.sliderWrapper}>
+                  <View style={styles.sliderTrack}>
+                    <View 
+                      style={[
+                        styles.sliderFill, 
+                        { 
+                          width: `${(leave.days / 60) * 100}%`, 
+                          backgroundColor: CATEGORY_STYLES[leave.category].text 
+                        }
+                      ]} 
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {/* Compliance Lock Box */}
+          <View style={styles.complianceBox}>
+            <ShieldCheck size={14} color="#d97706" />
+            <Text style={styles.complianceText}>
+              <Text style={styles.complianceBold}>Compliance Lock:</Text> All adjusted values will apply to the next fiscal year balance calculation. Existing approved leaves will not be retroactively impacted by pool changes.
+            </Text>
+          </View>
+        </SectionCard>
       </ScrollView>
 
       {/* Add Leave Type Modal */}
       <AddLeaveTypeModal
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onAdd={addLeaveType}
+        onAdd={addLeave}
       />
     </KeyboardAvoidingView>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
-  scrollContent: {
+  scrollView: {
+    flex: 1,
+  },
+  content: {
     padding: 16,
     paddingBottom: 32,
   },
@@ -605,164 +667,233 @@ const styles = {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
   },
-  header: {
+  stickyHeader: {
     marginBottom: 20,
+    gap: 16,
   },
-  headerTitle: {
-    fontSize: 24,
+  title: {
+    fontSize: 20,
     fontWeight: '800',
-    color: '#111827',
-    marginBottom: 8,
+    color: '#1e293b',
   },
-  headerSubtitle: {
+  description: {
     fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '500',
+    color: '#64748b',
+    marginTop: 4,
   },
-  mainContent: {
-    flexDirection: 'column',
-    gap: 20,
-  },
-  leftColumn: {
-    flex: 1,
-  },
-  rightColumn: {
-    flex: 1,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    padding: 16,
+  headerActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  cardHeaderLeft: {
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 12,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginTop: 2,
+  },
+  statStatus: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#f59e0b',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  statStatusValid: {
+    color: '#10b981',
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#e2e8f0',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#f8fafc',
+  },
+  sectionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  cardIconContainer: {
+  sectionIconContainer: {
     width: 40,
     height: 40,
-    borderRadius: 10,
-    backgroundColor: '#eef2ff',
+    borderRadius: 12,
+    backgroundColor: '#e0e7ff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTitle: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
-    marginBottom: 2,
+    color: '#1e293b',
   },
-  cardSubtitle: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#f3f4f6',
-  },
-  cardContent: {
-    padding: 16,
-  },
-  sectionLabel: {
+  sectionSubtitle: {
     fontSize: 11,
-    fontWeight: '800',
-    color: '#6b7280',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-    textTransform: 'uppercase',
+    color: '#64748b',
+    marginTop: 2,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+  },
+  sectionContent: {
+    padding: 16,
   },
   leaveLibraryContent: {
     gap: 16,
   },
-  leaveTypesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
   leaveTypeCard: {
-    width: (SCREEN_WIDTH - 64) / 2 - 6,
     backgroundColor: '#fafafa',
-    borderWidth: 2,
-    borderColor: '#f1f5f9',
     borderRadius: 20,
-    padding: 12,
-    gap: 10,
-  },
-  leaveTypeCardEligible: {
-    borderColor: '#6366f1',
-    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    padding: 16,
   },
   leaveTypeHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
+  },
+  leaveTypeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leaveTypeInfo: {
+    flex: 1,
+    gap: 8,
   },
   leaveTypeName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
-    flex: 1,
+    color: '#1e293b',
+    padding: 0,
   },
-  leaveTypeRemove: {
-    padding: 4,
-  },
-  eligibilityButton: {
+  leaveTypeMeta: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 10,
-    alignSelf: 'flex-start',
+    gap: 8,
   },
-  eligibilityButtonActive: {
-    backgroundColor: '#6366f1',
+  categoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
   },
-  eligibilityDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#64748b',
-  },
-  eligibilityDotActive: {
-    backgroundColor: '#ffffff',
-  },
-  eligibilityText: {
+  categoryText: {
     fontSize: 9,
     fontWeight: '700',
-    color: '#64748b',
     textTransform: 'uppercase',
   },
-  eligibilityTextActive: {
-    color: '#ffffff',
+  leaveDescription: {
+    flex: 1,
+    fontSize: 10,
+    color: '#64748b',
+    padding: 0,
+  },
+  leaveTypeActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  daysContainer: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  daysLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+  },
+  daysInput: {
+    width: 50,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: '#1e293b',
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: '#fee2e2',
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
     backgroundColor: '#f1f5f9',
-    borderRadius: 12,
-    alignSelf: 'flex-start',
+    borderRadius: 14,
   },
   addButtonText: {
     fontSize: 12,
@@ -773,58 +904,53 @@ const styles = {
     flexDirection: 'row',
     gap: 12,
     padding: 14,
-    backgroundColor: '#eef2ff',
-    borderRadius: 14,
+    backgroundColor: '#e0e7ff',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#c7d2fe',
   },
   proTipText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 10,
     color: '#374151',
     lineHeight: 16,
   },
   proTipBold: {
     fontWeight: '700',
-    color: '#6366f1',
-  },
-  proTipHighlight: {
-    fontWeight: '700',
-    color: '#6366f1',
+    color: '#4f46e5',
   },
   allowancesContent: {
     gap: 24,
-    paddingVertical: 8,
   },
-  allowanceContainer: {
+  allowanceItem: {
     gap: 12,
   },
-  allowanceHeader: {
+  allowanceItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  allowanceLabel: {
+  allowanceItemName: {
     fontSize: 11,
-    fontWeight: '800',
-    color: '#6b7280',
+    fontWeight: '700',
+    color: '#1e293b',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  allowanceValueBadge: {
+  allowanceItemSubtitle: {
+    fontSize: 9,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  allowanceItemBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  allowanceValueText: {
+  allowanceItemBadgeText: {
     fontSize: 10,
-    fontWeight: '800',
-    color: '#111827',
+    fontWeight: '700',
   },
-  sliderContainer: {
+  sliderWrapper: {
     gap: 8,
   },
   sliderTrack: {
@@ -846,104 +972,53 @@ const styles = {
     fontSize: 9,
     color: '#94a3b8',
   },
-  carryForwardContent: {
-    gap: 16,
-  },
-  carryForwardInput: {
+  complianceBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  carryForwardField: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    flex: 1,
-  },
-  carryForwardUnit: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  fiscalYearBox: {
+    gap: 10,
     padding: 14,
-    backgroundColor: '#fffbeb',
+    backgroundColor: '#fef3c7',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#fde68a',
+    marginTop: 20,
   },
-  fiscalYearTitle: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#d97706',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  fiscalYearText: {
+  complianceText: {
+    flex: 1,
     fontSize: 10,
     color: '#92400e',
-    lineHeight: 14,
+    lineHeight: 16,
   },
-  workflowContent: {
+  complianceBold: {
+    fontWeight: '700',
+  },
+  allowanceContainer: {
     gap: 12,
+    marginBottom: 20,
   },
-  workflowBadge: {
+  allowanceHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
   },
-  workflowText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#166534',
-  },
-  workflowHint: {
-    fontSize: 10,
-    color: '#6b7280',
-  },
-  saveButtonContainer: {
-    marginTop: 8,
-    marginBottom: 32,
-  },
-  saveButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 8,
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#ffffff',
+  allowanceLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  allowanceValueBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  allowanceValueText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1e293b',
   },
   modalOverlay: {
     flex: 1,
@@ -952,21 +1027,20 @@ const styles = {
     alignItems: 'center',
   },
   confirmModal: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 20,
     width: SCREEN_WIDTH - 48,
-    maxWidth: 320,
   },
   confirmTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: '#1e293b',
     marginBottom: 8,
   },
   confirmMessage: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748b',
     marginBottom: 20,
   },
   confirmButtons: {
@@ -975,12 +1049,12 @@ const styles = {
   },
   confirmButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: 'center',
   },
   confirmButtonCancel: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#f1f5f9',
   },
   confirmButtonDelete: {
     backgroundColor: '#fee2e2',
@@ -994,12 +1068,10 @@ const styles = {
     color: '#ef4444',
   },
   addModal: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    width: SCREEN_WIDTH,
-    position: 'absolute',
-    bottom: 0,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    width: SCREEN_WIDTH - 32,
+    maxHeight: '80%',
   },
   addModalHeader: {
     flexDirection: 'row',
@@ -1007,30 +1079,54 @@ const styles = {
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: '#f1f5f9',
   },
   addModalTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: '700',
+    color: '#1e293b',
   },
   addModalContent: {
     padding: 20,
     gap: 16,
   },
   addModalInput: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#e2e8f0',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 14,
+    color: '#1e293b',
+  },
+  addModalTextArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  categorySelector: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  categoryOption: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  categoryOptionActive: {
+    borderColor: '#6366f1',
+  },
+  categoryOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   addModalButton: {
     borderRadius: 12,
     overflow: 'hidden',
+    marginTop: 8,
   },
   addModalButtonGradient: {
     flexDirection: 'row',
@@ -1038,36 +1134,36 @@ const styles = {
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
+    backgroundColor: '#6366f1',
   },
   addModalButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#fff',
   },
   valueModal: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 20,
     padding: 20,
     width: SCREEN_WIDTH - 48,
-    maxWidth: 320,
   },
   valueModalTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#1e293b',
     marginBottom: 16,
     textAlign: 'center',
   },
   valueModalInput: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#e2e8f0',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 20,
     fontWeight: '600',
-    color: '#111827',
+    color: '#1e293b',
     textAlign: 'center',
     marginBottom: 20,
   },
@@ -1078,11 +1174,11 @@ const styles = {
   valueModalButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
   },
   valueModalButtonCancel: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#f1f5f9',
   },
   valueModalButtonConfirm: {
     backgroundColor: '#6366f1',
@@ -1093,6 +1189,6 @@ const styles = {
     color: '#374151',
   },
   valueModalButtonConfirmText: {
-    color: '#ffffff',
+    color: '#fff',
   },
-} as const;
+});

@@ -46,6 +46,7 @@ import CommonHeader from '../../components/common/Header';
 import CommonFooter from '../../components/common/Footer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropdownModal from '../../components/common/DropdownModal';
+import { useAuthStore } from '../../store/authStore';
 
 const COLORS = {
   primary: '#0A0F2C',
@@ -109,6 +110,7 @@ interface DeductionComponent {
 
 interface PayrollProfile {
   _id: string;
+  id?: string;
   userId: string;
   employeeId: string;
   employeeName: string;
@@ -123,6 +125,20 @@ interface PayrollProfile {
   createdAt: string;
   updatedAt: string;
   user?: any;
+  active?: boolean;
+  isActive?: boolean;
+  payrollStatus?: string;
+  ctc?: number;
+  salary?: number;
+  ctcAmount?: number;
+  totalSalary?: number;
+  profile?: any;
+  payrollProfile?: any;
+  payroll?: any;
+  salaryDetails?: any;
+  salaryInfo?: any;
+  payrollData?: any;
+  empId?: string;
 }
 
 interface Employee {
@@ -144,6 +160,13 @@ interface Employee {
   hasProfile?: boolean;
   payrollStatus?: string;
   bankStatus?: string;
+  payrollProfile?: any;
+  payroll?: any;
+  salaryDetails?: any;
+  salaryInfo?: any;
+  payrollData?: any;
+  empId?: string;
+  employeeType?: string;
 }
 
 interface SalaryBreakdown {
@@ -227,6 +250,29 @@ const ROLE_TEMPLATES: Record<string, any> = {
   },
 };
 
+const getSafeId = (id: any): string => {
+  if (!id) return '';
+  let finalId = '';
+  
+  if (typeof id === 'string') {
+    finalId = id;
+  } else if (typeof id === 'object') {
+    if (id.$oid) finalId = String(id.$oid);
+    else if (id._id) return getSafeId(id._id);
+    else if (id.id) return getSafeId(id.id);
+    else finalId = String(id);
+  } else {
+    finalId = String(id);
+  }
+
+  // BANK-GRADE: Strip virtual prefix if present before sending to backend
+  if (finalId.startsWith('v-')) {
+    return finalId.substring(2);
+  }
+  
+  return finalId;
+};
+
 export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const incomingEmployeeId = route?.params?.employeeId;
 
@@ -306,7 +352,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   // Handle incoming employee ID from navigation
   useEffect(() => {
     if (incomingEmployeeId && employees.length > 0) {
-      const targetEmp = employees.find(e => e._id === incomingEmployeeId || e.employeeId === incomingEmployeeId);
+      const targetEmp = employees.find(e => getSafeId(e._id) === incomingEmployeeId || e.employeeId === incomingEmployeeId);
       if (targetEmp) {
         setSearchTerm(targetEmp.employeeId || targetEmp.name);
         // If they have a profile, view it, otherwise edit/setup
@@ -348,10 +394,96 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         setGlobalPolicy({ statutory: {} });
       }
 
-      // Load employees from API
-      const employeesRes = (await employeeAPI.getAll()) as any;
-      const employeesList = employeesRes?.data?.data || employeesRes?.data || employeesRes || [];
+      // Load employees and profiles in parallel for better performance
+      const [employeesRes, profilesRes] = await Promise.all([
+        employeeAPI.getAll().catch(err => {
+          console.error('Employee API failed:', err);
+          return [];
+        }),
+        payrollAPI.getProfiles({ limit: 1000 }).catch(err => {
+          console.warn('Profiles API failed:', err);
+          return [];
+        })
+      ]);
+
+      // Normalize employee list extraction
+      let rawEmployees = [];
+      const eRes: any = employeesRes;
+      if (Array.isArray(eRes)) {
+        rawEmployees = eRes;
+      } else if (eRes?.data && Array.isArray(eRes.data)) {
+        rawEmployees = eRes.data;
+      } else if (eRes?.data?.data && Array.isArray(eRes.data.data)) {
+        rawEmployees = eRes.data.data;
+      } else if (eRes?.employees && Array.isArray(eRes.employees)) {
+        rawEmployees = eRes.employees;
+      }
+
+      const employeesList = rawEmployees.map((emp: any) => {
+        // Deep discovery of name and ID
+        const name = emp.name || emp.fullName || (emp.user && (emp.user.name || emp.user.fullName)) || 'Staff';
+        const employeeId = emp.employeeId || emp.empId || (emp.user && (emp.user.employeeId || emp.user.empId)) || '';
+        const email = emp.email || (emp.user && emp.user.email) || '';
+        
+        return {
+          ...emp,
+          name,
+          employeeId,
+          email,
+          _id: getSafeId(emp._id || emp.id || (emp.user && (emp.user._id || emp.user.id)))
+        };
+      });
       setEmployees(employeesList);
+
+      // Normalize profile list extraction
+      let profilesList: any[] = [];
+      const pRes: any = profilesRes;
+      if (Array.isArray(pRes)) {
+        profilesList = pRes;
+      } else if (pRes?.data && Array.isArray(pRes.data)) {
+        profilesList = pRes.data;
+      } else if (pRes?.data?.data && Array.isArray(pRes.data.data)) {
+        profilesList = pRes.data.data;
+      } else if (pRes?.profiles && Array.isArray(pRes.profiles)) {
+        profilesList = pRes.profiles;
+      } else if (pRes?.data && typeof pRes.data === 'object') {
+        // Handle case where profiles might be an object with IDs as keys
+        profilesList = Object.values(pRes.data).filter(v => v && typeof v === 'object');
+      }
+
+      // Secondary profile discovery: aggressively merge profiles from employee response if available
+      const secondaryProfiles = eRes?.profiles || eRes?.data?.profiles || eRes?.data?.data?.profiles || [];
+      if (Array.isArray(secondaryProfiles) && secondaryProfiles.length > 0) {
+        // Merge without duplicates based on _id
+        const existingIds = new Set(profilesList.map(p => getSafeId(p._id || p.id)));
+        secondaryProfiles.forEach(p => {
+          const id = getSafeId(p._id || p.id);
+          if (id && id !== 'undefined' && !existingIds.has(id)) {
+            profilesList.push(p);
+            existingIds.add(id);
+          }
+        });
+      }
+
+      // Tertiary discovery: Check if any employee objects themselves contain profile data
+      employeesList.forEach((emp: any) => {
+        const potentialProfile = emp.profile || emp.payrollProfile || emp.payroll || emp.salaryDetails || emp.payrollData || emp.salaryInfo;
+        if (potentialProfile && typeof potentialProfile === 'object') {
+          const id = getSafeId(potentialProfile._id || potentialProfile.id || '');
+          const existingIds = new Set(profilesList.map(p => getSafeId(p._id || p.id)));
+          if (id && id !== 'undefined' && !existingIds.has(id)) {
+            profilesList.push(potentialProfile);
+          } else if (!id) {
+            // If no ID but has CTC data, it's a virtual profile we should keep
+            const hasData = potentialProfile.annualCTC || potentialProfile.monthlyCTC || potentialProfile.ctc || potentialProfile.salary || potentialProfile.ctcAmount;
+            if (hasData) {
+              profilesList.push({ ...potentialProfile, _id: `v-${emp._id}`, userId: emp._id, employeeId: emp.employeeId });
+            }
+          }
+        }
+      });
+      
+      setProfiles(profilesList);
 
       // Extract unique departments
       const deptSet = new Set(['All']);
@@ -360,18 +492,17 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       });
       setDepartments(Array.from(deptSet));
 
-      // Load payroll profiles
-      try {
-        const profilesRes = (await payrollAPI.getProfiles({ limit: 1000 })) as any;
-        setProfiles(profilesRes?.data?.data || profilesRes?.data || profilesRes || []);
-      } catch (err: any) {
-        console.warn('Profiles API failed:', err.message);
-        setProfiles([]);
-        // Optional: notify user that some data could not be loaded
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      const isAuthError = errorMsg.toLowerCase().includes('token') || errorMsg.toLowerCase().includes('expired') || errorMsg.toLowerCase().includes('unauthorized');
+      
+      if (!isAuthError) {
+        console.error('Error loading data:', error);
+        Alert.alert('Error', 'Failed to load data. Please check your connection.');
+      } else {
+        // Auth errors are handled globally by apiService interceptor
+        console.warn('Session expired or invalid token in Payroll Profiles');
       }
-    } catch (error) {
-      console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load data. Please check your connection.');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -392,33 +523,18 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
     // Load existing profile
     const existingProfile = profiles.find(p => {
-      let profileUserId = '';
-      if (p.user) {
-        if (typeof p.user === 'object') {
-          profileUserId = p.user._id || p.user.id || '';
-        } else {
-          profileUserId = String(p.user);
-        }
-      }
-      if (!profileUserId && p.userId) {
-        profileUserId = String(p.userId);
-      }
+      const pId = getSafeId(p._id || p.id).toLowerCase();
+      const pUserId = getSafeId(p.userId || (typeof p.user === 'object' ? p.user?._id || p.user?.id : p.user)).toLowerCase();
+      const pEmpId = String(p.employeeId || (typeof p.user === 'object' ? p.user?.employeeId : '') || '').toLowerCase();
 
-      let profileEmpId = '';
-      if (p.user && typeof p.user === 'object') {
-        profileEmpId = p.user.employeeId || '';
-      }
-      if (!profileEmpId && p.employeeId) {
-        profileEmpId = String(p.employeeId);
-      }
+      const eId = getSafeId(editingEmployee._id || editingEmployee.id).toLowerCase();
+      const eEmpId = String(editingEmployee.employeeId || '').toLowerCase();
 
-      const empUserId = editingEmployee._id || editingEmployee.id || '';
-      const empEmpId = editingEmployee.employeeId || '';
-
-      const matchById = profileUserId && empUserId && String(profileUserId).toLowerCase() === String(empUserId).toLowerCase();
-      const matchByEmpId = profileEmpId && empEmpId && String(profileEmpId).toLowerCase() === String(empEmpId).toLowerCase();
-
-      return !!(matchById || matchByEmpId);
+      return (
+        (eId && pUserId && eId === pUserId) ||
+        (eEmpId && pEmpId && eEmpId === pEmpId) ||
+        (eId && pId && eId === pId)
+      );
     });
     if (existingProfile) {
       setStructure({
@@ -465,36 +581,113 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const filterEmployees = () => {
     let filtered = employees.map(emp => {
-      const profile = profiles.find(p => {
-        let profileUserId = '';
-        if (p.user) {
-          if (typeof p.user === 'object') {
-            profileUserId = p.user._id || p.user.id || '';
-          } else {
-            profileUserId = String(p.user);
+      const eId = getSafeId(emp._id).toLowerCase();
+      const eEmpId = String(emp.employeeId || '').toLowerCase();
+      const eEmail = String(emp.email || '').toLowerCase();
+      const eName = String(emp.name || '').toLowerCase();
+
+      // Normalize ID (extract numbers) for fuzzy matching
+      const normalizeId = (id: string) => id.replace(/[^0-9]/g, '');
+      const eNormId = normalizeId(eEmpId);
+
+      // Exhaustive search for a matching profile in the profiles list
+      let profile = profiles.find(p => {
+        // Discovery: check if the profile is nested within the list item
+        const pObj = (p.annualCTC || p.monthlyCTC || p.earnings || p.ctc || p.salary || p.ctcAmount) ? p : 
+                     (p.profile || p.payrollProfile || p.payroll || p.salaryDetails || p.salaryInfo || p);
+        
+        const pId = getSafeId(pObj._id || pObj.id).toLowerCase();
+        const pUserId = getSafeId(pObj.userId || (typeof pObj.user === 'object' ? pObj.user?._id || pObj.user?.id : pObj.user)).toLowerCase();
+        const pEmpId = String(pObj.employeeId || pObj.empId || (typeof pObj.user === 'object' ? pObj.user?.employeeId || pObj.user?.empId : '') || '').toLowerCase();
+        const pEmail = String(pObj.email || (typeof pObj.user === 'object' ? pObj.user?.email : '') || '').toLowerCase();
+        const pName = String(pObj.employeeName || pObj.fullName || (typeof pObj.user === 'object' ? pObj.user?.name || pObj.user?.fullName : '') || '').toLowerCase();
+
+        return (
+          (eId && pUserId && eId === pUserId) ||
+          (eEmpId && pEmpId && eEmpId === pEmpId) ||
+          (eId && pId && eId === pId) ||
+          (eEmail && pEmail && eEmail === pEmail) ||
+          (eName && pName && eName === pName) ||
+          (eNormId && pEmpId && normalizeId(pEmpId) === eNormId)
+        );
+      });
+
+      // If not found in standalone list, check if it's already attached to the employee object
+      if (!profile) {
+        profile = emp.profile || (emp as any).payrollProfile || (emp as any).payroll || (emp as any).salaryDetails || (emp as any).salaryInfo;
+      }
+
+      // Check all properties of emp for an object that looks like a profile
+      if (!profile) {
+        for (const key in emp) {
+          const val = (emp as any)[key];
+          if (val && typeof val === 'object' && (val.annualCTC || val.monthlyCTC || val.earnings || val.ctc || val.salary || val.ctcAmount)) {
+            profile = val;
+            break;
           }
         }
-        if (!profileUserId && p.userId) {
-          profileUserId = String(p.userId);
-        }
+      }
 
-        const empUserId = emp._id || emp.id || '';
+      // Normalize the profile object if it's still nested
+      let finalProfile = profile ? (profile.annualCTC || profile.monthlyCTC || profile.ctc || profile.salary || profile.ctcAmount ? profile : 
+                         (profile.profile || profile.payrollProfile || profile.payroll || profile.salaryDetails || profile.salaryInfo || profile)) : null;
+
+      // Final fallback: check for flat CTC fields on the employee record itself
+      if (!finalProfile || (!finalProfile.annualCTC && !finalProfile.monthlyCTC && !finalProfile.ctc && !finalProfile.salary)) {
+        const ctc = Number((emp as any).annualCTC || (emp as any).ctc || (emp as any).salary || (emp as any).ctcAmount || 
+                    ((emp as any).monthlyCTC ? (emp as any).monthlyCTC * 12 : 
+                    (finalProfile && (finalProfile.ctc || finalProfile.salary || finalProfile.ctcAmount)) ? 
+                    (finalProfile.ctc || finalProfile.salary || finalProfile.ctcAmount) : 0));
         
-        // Match primarily by ID
-        return profileUserId && empUserId && String(profileUserId).toLowerCase() === String(empUserId).toLowerCase();
-      });
+        if (ctc > 0) {
+          finalProfile = {
+            ...(finalProfile || {}),
+            _id: (finalProfile && getSafeId(finalProfile._id)) || emp._id,
+            userId: (finalProfile && getSafeId(finalProfile.userId)) || emp._id,
+            employeeId: (finalProfile && finalProfile.employeeId) || emp.employeeId,
+            employeeName: (finalProfile && finalProfile.employeeName) || emp.name,
+            annualCTC: ctc,
+            monthlyCTC: Number((emp as any).monthlyCTC || ctc / 12),
+            payrollType: (emp as any).payrollType || (finalProfile && finalProfile.payrollType) || 'Monthly',
+            status: (emp as any).status || (finalProfile && finalProfile.status) || 'Active',
+            earnings: (finalProfile && finalProfile.earnings) || (emp as any).earnings || [],
+            deductions: (finalProfile && finalProfile.deductions) || (emp as any).deductions || [],
+          } as any;
+        }
+      }
+
+      // If it's a virtual profile from our tertiary discovery, ensure it's matched
+      if (!finalProfile && profiles.length > 0) {
+        const virtualProfile = profiles.find(p => getSafeId(p._id) === `v-${eId}`);
+        if (virtualProfile) finalProfile = virtualProfile;
+      }
+
       const bankDetailsComplete = !!(emp.bankName && emp.accountNumber && emp.ifscCode && emp.pan);
       let bankStatus = bankDetailsComplete ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing');
+      
       let payrollStatus = 'Not Configured';
-      if (profile) {
-        // ALWAYS show as Active if a profile exists, as requested by user
-        payrollStatus = 'Active';
+      if (finalProfile) {
+        const rawStatus = String(
+          finalProfile.status || 
+          finalProfile.payrollStatus || 
+          (finalProfile.isActive === true || finalProfile.active === true ? 'Active' : '') || 
+          (finalProfile.monthlyCTC > 0 || finalProfile.annualCTC > 0 ? 'Active' : '') ||
+          'Active'
+        ).toUpperCase();
+        
+        if (rawStatus === 'ACTIVE' || rawStatus === 'CONFIGURED' || rawStatus === 'SET' || rawStatus === 'TRUE' || rawStatus === 'COMPLETED') {
+          payrollStatus = 'Active';
+        } else if (rawStatus === 'INACTIVE' || rawStatus === 'DISABLED' || rawStatus === 'FALSE') {
+          payrollStatus = 'Inactive';
+        } else {
+          payrollStatus = finalProfile.status || finalProfile.payrollStatus || 'Active';
+        }
       }
 
       return {
         ...emp,
-        profile,
-        hasProfile: !!profile,
+        profile: finalProfile,
+        hasProfile: !!finalProfile,
         payrollStatus,
         bankStatus,
       };
@@ -503,8 +696,8 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     if (searchTerm) {
       const lowerTerm = searchTerm.toLowerCase();
       filtered = filtered.filter(emp =>
-        emp.name.toLowerCase().includes(lowerTerm) ||
-        emp.employeeId.toLowerCase().includes(lowerTerm)
+        (emp.name && emp.name.toLowerCase().includes(lowerTerm)) ||
+        (emp.employeeId && emp.employeeId.toLowerCase().includes(lowerTerm))
       );
     }
 
@@ -525,16 +718,17 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   }, []);
 
   const formatCurrency = (amount: any): string => {
-    const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+    if (amount === null || amount === undefined) return `${currencySymbol}0.00`;
+    const num = typeof amount === 'number' ? amount : parseFloat(String(amount).replace(/[^0-9.-]/g, '')) || 0;
     return `${currencySymbol}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const calculateSalaryBreakdown = (profile: PayrollProfile): SalaryBreakdown => {
-    const monthlyCTC = profile.monthlyCTC;
+    const monthlyCTC = profile.monthlyCTC || (profile.annualCTC ? profile.annualCTC / 12 : 0);
     let grossPay = 0;
     const context: Record<string, number> = {};
 
-    const earningsWithValues: EarningComponent[] = profile.earnings.map(e => {
+    const earningsWithValues: EarningComponent[] = (profile.earnings || []).map(e => {
       let calculatedValue = 0;
       if (e.calculationType === 'Percentage') {
         let base = monthlyCTC;
@@ -553,7 +747,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     });
 
     let totalDeductions = 0;
-    const deductionsWithValues: DeductionComponent[] = profile.deductions.map(d => {
+    const deductionsWithValues: DeductionComponent[] = (profile.deductions || []).map(d => {
       let calculatedValue = 0;
       if (d.calculationType === 'Percentage') {
         let base = monthlyCTC;
@@ -816,7 +1010,25 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const handleFinalSubmit = async () => {
     setIsSaving(true);
     setWizardError(null);
-    const annualCTC = ctcType === 'annual' ? parseFloat(ctcValue) : parseFloat(ctcValue) * 12;
+    
+    // 1. Get Organization Context
+    const currentAuth = useAuthStore.getState();
+    const orgId = currentAuth.user?.organizationId;
+    
+    // 2. Parse CTC
+    const cleanValue = ctcValue.replace(/[^0-9.]/g, '');
+    const annualCTC = ctcType === 'annual' ? parseFloat(cleanValue) : parseFloat(cleanValue) * 12;
+    const monthlyCTC = annualCTC / 12;
+
+    // 3. Sanitizer for salary components
+    const mapComponent = (comp: any) => ({
+      name: String(comp.name || 'Unnamed Component'),
+      value: Number(comp.value) || 0,
+      calculationType: ['Fixed', 'Percentage', 'Formula'].includes(comp.calculationType) ? comp.calculationType : 'Fixed',
+      basedOn: comp.basedOn || 'CTC',
+      formula: comp.formula || null,
+      organizationId: orgId // Include orgId in each component for backend validation
+    });
 
     const cleanedDeductions = structure.deductions.filter(d => {
       const name = (d.name || '').toLowerCase();
@@ -829,33 +1041,59 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       return !isStatutoryCandidate;
     });
 
-    const finalDeductions = [...cleanedDeductions];
-
-
     try {
+      // 4. Resolve Target User ID
+      const rawId = editingEmployee?._id || editingEmployee?.id || (editingEmployee as any).user?._id || (editingEmployee as any).user?.id;
+      let targetUserId = getSafeId(rawId);
+      
+      // Validation: Ensure it's a valid 24-character hex string (standard MongoDB ID)
+      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(targetUserId);
+      if (!isValidObjectId) {
+        throw new Error(`The Employee ID (${targetUserId}) is not a valid format. Please contact support or try re-syncing the employee list.`);
+      }
+
+      // 5. Construct Payload (Strict Enterprise Schema)
       const payload: any = {
-        userId: editingEmployee?._id || editingEmployee?.id,
+        user: targetUserId,
+        userId: targetUserId,
+        organizationId: orgId,
         employeeId: editingEmployee?.employeeId,
         employeeName: editingEmployee?.name,
-        annualCTC,
-        monthlyCTC: annualCTC / 12,
         payrollType: 'Monthly',
-        earnings: structure.earnings,
-        deductions: finalDeductions,
-        bankDetails,
-        statutoryConfig,
-        attendanceConfig,
+        employeeType: (editingEmployee as any).employeeType || 'Permanent',
+        salaryMode: 'Employee-Based',
+        annualCTC: Number(annualCTC.toFixed(2)),
+        monthlyCTC: Number(monthlyCTC.toFixed(2)),
+        earnings: (structure.earnings || []).map(mapComponent),
+        deductions: (cleanedDeductions || []).map(mapComponent),
+        bankDetails: {
+          bankName: String(bankDetails.bankName || '').trim(),
+          accountNumber: String(bankDetails.accountNumber || '').trim(),
+          ifscCode: String(bankDetails.ifscCode || '').trim().toUpperCase(),
+          pan: String(bankDetails.pan || '').trim().toUpperCase(),
+          uan: String(bankDetails.uan || '').trim()
+        },
         status: 'Active',
+        isActive: true,
+        lastUpdatedAt: new Date().toISOString()
       };
 
-      await payrollAPI.setupFullProfile(payload);
+      console.log('--- ENTERPRISE PAYROLL SAVE ---');
+      console.log('Target User:', targetUserId);
+      console.log('Payload:', JSON.stringify(payload));
+
+      // Use the setup endpoint which handles both creation and updates on the backend
+      await payrollAPI.setupFullProfile(payload, { timeout: 45000 } as any);
       
-      Alert.alert('Success', 'Salary configuration saved successfully!');
+      Alert.alert('Success', 'Payroll profile saved successfully!');
       setShowWizard(false);
       setEditingEmployee(null);
       loadInitialData();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save configuration');
+      console.error('CRITICAL SAVE ERROR:', err);
+      // Detailed diagnostics for the user
+      const serverMsg = err.message || 'An unexpected error occurred (500). Please ensure all mandatory fields are filled and try again.';
+      Alert.alert('Save Failed', serverMsg);
     } finally {
       setIsSaving(false);
     }
@@ -863,14 +1101,30 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const getKPIs = () => {
     const totalEmployees = employees.length;
-    const configuredProfiles = profiles.length;
+    // Calculate based on the full list of employees if possible
+    const sourceList = filteredEmployees.length > 0 ? filteredEmployees : employees;
+    const configuredProfiles = sourceList.filter(e => {
+      // If we haven't run filterEmployees yet, we check if they have a profile attached or in the standalone list
+      if ((e as any).hasProfile) return true;
+      if ((e as any).profile) return true;
+      
+      // Standalone list check
+      const eId = getSafeId(e._id).toLowerCase();
+      const eEmpId = String((e as any).employeeId || '').toLowerCase();
+      return profiles.some(p => {
+        const pUserId = getSafeId(p.userId || (p.user && (getSafeId(p.user._id || p.user.id)))).toLowerCase();
+        const pEmpId = String(p.employeeId || p.empId || (p.user && p.user.employeeId) || '').toLowerCase();
+        return (eId && pUserId && eId === pUserId) || (eEmpId && pEmpId && eEmpId === pEmpId);
+      });
+    }).length;
+
     const pendingSetup = totalEmployees - configuredProfiles;
-    const criticalErrors = filteredEmployees.filter(e => e.payrollStatus === 'Warning' || e.bankStatus === 'Missing').length;
+    const criticalErrors = sourceList.filter(e => (e as any).payrollStatus === 'Warning' || (e as any).bankStatus === 'Missing').length;
 
     return [
       { label: 'Total Employees', value: totalEmployees, icon: Users, color: COLORS.blue, bg: COLORS.blueLight },
       { label: 'Configured Profiles', value: configuredProfiles, icon: CheckCircle, color: COLORS.emerald, bg: COLORS.greenLight },
-      { label: 'Pending Setup', value: pendingSetup, icon: AlertCircle, color: COLORS.amber, bg: COLORS.yellowLight },
+      { label: 'Pending Setup', value: Math.max(0, pendingSetup), icon: AlertCircle, color: COLORS.amber, bg: COLORS.yellowLight },
       { label: 'Critical Errors', value: criticalErrors, icon: AlertTriangle, color: COLORS.rose, bg: COLORS.redLight },
     ];
   };
@@ -1010,9 +1264,17 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
                   <View style={[styles.tableCell, styles.cellCTC]}>
                     <Text style={styles.ctcText}>
-                      {emp.profile ? formatCurrency(emp.profile.monthlyCTC) : '—'}
+                      {emp.profile 
+                        ? formatCurrency(emp.profile.monthlyCTC || (emp.profile.annualCTC ? emp.profile.annualCTC / 12 : 0) || (emp.profile.ctc ? emp.profile.ctc / 12 : 0) || (emp.profile.salary ? emp.profile.salary / 12 : 0) || (emp.profile.ctcAmount ? emp.profile.ctcAmount / 12 : 0) || (emp.profile.totalSalary ? emp.profile.totalSalary / 12 : 0)) 
+                        : '—'}
                     </Text>
-                    {emp.profile && <Text style={styles.payrollType}>{emp.profile.payrollType}</Text>}
+                    {emp.profile && (
+                      <Text style={styles.payrollType}>
+                        {emp.profile.annualCTC || emp.profile.ctc || emp.profile.salary || emp.profile.ctcAmount || emp.profile.totalSalary
+                          ? `${formatCurrency(emp.profile.annualCTC || emp.profile.ctc || emp.profile.salary || emp.profile.ctcAmount || emp.profile.totalSalary)} /yr` 
+                          : emp.profile.payrollType || 'Monthly'}
+                      </Text>
+                    )}
                   </View>
 
                   <View style={[styles.tableCell, styles.cellStatus, styles.centerContent]}>
@@ -1916,124 +2178,79 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     marginBottom: 12,
-    height: 42,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    height: 40,
+    fontSize: 14,
     color: COLORS.textPrimary,
-    padding: 0,
   },
   filterButtons: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   pickerContainer: {
     flex: 1,
-    height: 40,
-    backgroundColor: COLORS.filterBg,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
   },
   dropdownTrigger: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.filterBg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 40,
   },
   dropdownValue: {
     fontSize: 12,
     color: COLORS.textPrimary,
     fontWeight: '500',
-    flex: 1,
   },
   resultsCount: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    paddingHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  loadingContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 32,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
+    marginHorizontal: 16,
     marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: 8,
+    marginBottom: 8,
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: COLORS.filterBg,
+    backgroundColor: COLORS.alternateRow,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    minWidth: 600,
   },
   tableRow: {
     flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    minWidth: 600,
+    alignItems: 'center',
   },
   rowEven: {
     backgroundColor: COLORS.alternateRow,
   },
   tableCell: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  cellEmployee: { width: 160 },
-  cellRole: { width: 140 },
-  cellCTC: { width: 100 },
-  cellStatus: { width: 100 },
-  cellActions: { width: 100 },
-  headerText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-  },
-  textRight: {
-    textAlign: 'right',
-  },
-  textCenter: {
-    textAlign: 'center',
-  },
-  centerContent: {
-    alignItems: 'center',
+    paddingHorizontal: 12,
     justifyContent: 'center',
   },
-  rowActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 6,
+  cellEmployee: { width: 200, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cellRole: { width: 180 },
+  cellCTC: { width: 140 },
+  cellStatus: { width: 150 },
+  cellActions: { width: 120 },
+  headerText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.slate,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   employeeAvatar: {
     width: 36,
@@ -2042,69 +2259,108 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.indigoLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    borderWidth: 1,
+    borderColor: COLORS.indigo,
   },
   avatarText: {
-    fontSize: 14,
-    fontWeight: '600',
     color: COLORS.indigo,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   employeeName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   employeeId: {
-    fontSize: 9,
+    fontSize: 11,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
   roleText: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   deptText: {
-    fontSize: 9,
+    fontSize: 11,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
   ctcText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '800',
     color: COLORS.textPrimary,
     textAlign: 'right',
   },
   payrollType: {
-    fontSize: 9,
+    fontSize: 10,
     color: COLORS.textSecondary,
     textAlign: 'right',
     marginTop: 2,
+    fontStyle: 'italic',
+  },
+  centerContent: {
+    alignItems: 'center',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 12,
-    gap: 4,
-    alignSelf: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
   statusText: {
-    fontSize: 9,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  rowActions: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    padding: 8,
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: COLORS.textSecondary,
+  },
+  emptyContainer: {
+    padding: 60,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
   },
   paginationContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 16,
-    gap: 16,
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 20,
   },
   pageButton: {
     padding: 8,
-    borderRadius: 8,
     backgroundColor: COLORS.white,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -2112,59 +2368,43 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   pageText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 14,
     color: COLORS.textPrimary,
+    fontWeight: '600',
   },
+  textRight: { textAlign: 'right' },
+  textCenter: { textAlign: 'center' },
+
+  // Profile View Modal Styles
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    width: '90%',
-    maxHeight: '85%',
-    overflow: 'hidden',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    justifyContent: 'space-between',
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
-  },
-  modalFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  closeModalButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  closeModalText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '600',
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
     gap: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   profileAvatar: {
     width: 60,
@@ -2175,9 +2415,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileAvatarText: {
+    color: COLORS.white,
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.white,
   },
   profileName: {
     fontSize: 18,
@@ -2187,69 +2427,67 @@ const styles = StyleSheet.create({
   profileBadges: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     marginTop: 4,
-    gap: 6,
+    gap: 8,
   },
   profileDesignation: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.indigo,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   profileDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: COLORS.gray,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.lightGray,
   },
   profileDepartment: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.textSecondary,
   },
   profileId: {
-    fontSize: 10,
-    color: COLORS.gray,
+    fontSize: 12,
+    color: COLORS.textSecondary,
   },
   ctcCard: {
-    margin: 16,
-    padding: 16,
-    backgroundColor: COLORS.filterBg,
-    borderRadius: 12,
-    alignItems: 'flex-end',
+    backgroundColor: COLORS.primary,
+    margin: 20,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
   },
   ctcCardLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
     textTransform: 'uppercase',
+    fontWeight: '600',
   },
   ctcCardValue: {
-    fontSize: 20,
+    color: COLORS.white,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    marginTop: 4,
+    marginTop: 8,
   },
   section: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
+    textTransform: 'uppercase',
   },
   sectionCard: {
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
     borderRadius: 12,
-    padding: 12,
+    padding: 16,
   },
   sectionRow: {
     flexDirection: 'row',
@@ -2257,171 +2495,135 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   sectionRowLabel: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.textSecondary,
   },
   sectionRowValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
   sectionDivider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginVertical: 8,
+    marginVertical: 12,
   },
   sectionTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 8,
   },
   sectionTotalLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   sectionTotalValue: {
     fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.emerald,
+    fontWeight: 'bold',
+    color: COLORS.indigo,
   },
   complianceCard: {
-    backgroundColor: COLORS.filterBg,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginBottom: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
   complianceDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
     backgroundColor: COLORS.indigo,
-    marginBottom: 8,
   },
   complianceTitle: {
     fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
+    fontWeight: 'bold',
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+    textTransform: 'uppercase',
   },
   complianceRow: {
     flexDirection: 'row',
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   complianceLabel: {
-    width: 100,
-    fontSize: 11,
+    fontSize: 13,
     color: COLORS.textSecondary,
   },
   complianceValue: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   netSalaryCard: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 8,
+    backgroundColor: COLORS.greenLight,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.success,
   },
   netSalaryLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.gray,
+    fontSize: 12,
+    color: COLORS.success,
+    fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   netSalaryValue: {
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: COLORS.white,
-    marginTop: 4,
-  },
-  netSalarySub: {
-    fontSize: 9,
-    color: COLORS.gray,
+    color: COLORS.textPrimary,
     marginTop: 8,
   },
-  confirmModalContent: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 24,
-    width: '80%',
-    alignItems: 'center',
-  },
-  confirmIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.redLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  confirmTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  confirmMessage: {
-    fontSize: 13,
+  netSalarySub: {
+    fontSize: 11,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 18,
+    marginTop: 4,
   },
-  confirmButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
-  cancelConfirmButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  closeModalButton: {
+    backgroundColor: COLORS.indigo,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  cancelConfirmText: {
-    fontSize: 14,
-    color: COLORS.textPrimary,
-  },
-  deleteConfirmButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: COLORS.rose,
-    alignItems: 'center',
-  },
-  deleteConfirmText: {
-    fontSize: 14,
+  closeModalText: {
     color: COLORS.white,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
+
   // Wizard Styles
   wizardContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   wizardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.white,
   },
   wizardBackButton: {
     padding: 8,
   },
   wizardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   wizardSteps: {
@@ -2429,164 +2631,123 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 20,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
   },
   wizardStep: {
     alignItems: 'center',
+    gap: 4,
   },
-  wizardStepActive: {},
+  wizardStepActive: {
+    opacity: 1,
+  },
   wizardStepCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.filterBg,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.lightGray,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.border,
   },
   wizardStepCircleActive: {
     backgroundColor: COLORS.indigo,
-    borderColor: COLORS.indigo,
   },
   wizardStepNumber: {
     fontSize: 12,
-    fontWeight: '600',
     color: COLORS.textSecondary,
+    fontWeight: 'bold',
   },
   wizardStepNumberActive: {
     color: COLORS.white,
   },
   wizardStepLabel: {
     fontSize: 10,
-    fontWeight: '500',
     color: COLORS.textSecondary,
-    marginTop: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   wizardStepLabelActive: {
     color: COLORS.indigo,
-    fontWeight: '600',
   },
   wizardStepLine: {
     width: 40,
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 8,
+    height: 2,
+    backgroundColor: COLORS.lightGray,
+    marginHorizontal: 12,
+    marginTop: -14,
   },
   wizardContent: {
     flex: 1,
     padding: 20,
   },
-  wizardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.white,
-  },
-  wizardPrevButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 8,
-  },
-  wizardPrevButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  wizardNextButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.indigo,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginLeft: 12,
-    gap: 8,
-  },
-  wizardNextButtonDisabled: {
-    opacity: 0.6,
-  },
-  wizardNextButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.white,
-  },
   wizardSectionTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
-    marginTop: 16,
+    marginTop: 20,
     marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   wizardEmployeeSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.white,
+    padding: 16,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
   },
   wizardEmployeeSelectorText: {
+    color: COLORS.textSecondary,
     fontSize: 14,
-    color: COLORS.textPrimary,
   },
   wizardSelectedEmployee: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
     backgroundColor: COLORS.indigoLight,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
     gap: 12,
   },
   wizardEmployeeAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.indigo,
+    backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
   wizardEmployeeName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORS.indigo,
   },
   wizardEmployeeId: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.textSecondary,
   },
   wizardRoleButtons: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
+    gap: 10,
   },
   wizardRoleButton: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: COLORS.filterBg,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
   wizardRoleButtonActive: {
     backgroundColor: COLORS.indigo,
+    borderColor: COLORS.indigo,
   },
   wizardRoleText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: COLORS.textSecondary,
-    textTransform: 'uppercase',
   },
   wizardRoleTextActive: {
     color: COLORS.white,
@@ -2599,27 +2760,32 @@ const styles = StyleSheet.create({
   },
   wizardCtcLabel: {
     fontSize: 12,
-    fontWeight: '600',
     color: COLORS.textSecondary,
+    fontWeight: '600',
   },
   wizardCtcTypeButtons: {
     flexDirection: 'row',
-    backgroundColor: COLORS.filterBg,
-    borderRadius: 20,
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
     padding: 2,
   },
   wizardCtcTypeButton: {
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 18,
+    borderRadius: 6,
   },
   wizardCtcTypeButtonActive: {
     backgroundColor: COLORS.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   wizardCtcTypeText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
     color: COLORS.textSecondary,
+    fontWeight: 'bold',
   },
   wizardCtcTypeTextActive: {
     color: COLORS.indigo,
@@ -2627,127 +2793,129 @@ const styles = StyleSheet.create({
   wizardCurrencyInput: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 16,
   },
   wizardCurrencySymbol: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.gray,
-    marginRight: 8,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+    marginRight: 12,
   },
   wizardCtcInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
-    paddingVertical: 12,
   },
   wizardComponentsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   wizardComponentsTitle: {
     fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: COLORS.textSecondary,
+    fontWeight: 'bold',
   },
   wizardAddButton: {
-    padding: 6,
-    backgroundColor: COLORS.indigoLight,
-    borderRadius: 8,
+    padding: 4,
   },
   wizardComponentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 8,
-    flexWrap: 'wrap',
+    backgroundColor: COLORS.background,
+    padding: 8,
+    borderRadius: 10,
   },
   wizardComponentNameInput: {
-    flex: 1,
-    minWidth: 100,
-    padding: 8,
-    backgroundColor: COLORS.filterBg,
-    borderRadius: 8,
+    flex: 2,
     fontSize: 12,
     color: COLORS.textPrimary,
+    fontWeight: '600',
   },
   wizardComponentTypeButtons: {
     flexDirection: 'row',
-    backgroundColor: COLORS.filterBg,
-    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    borderRadius: 6,
     padding: 2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   wizardCompTypeButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   wizardCompTypeButtonActive: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.indigo,
   },
   wizardCompTypeText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 9,
+    fontWeight: 'bold',
     color: COLORS.textSecondary,
   },
   wizardCompTypeTextActive: {
-    color: COLORS.indigo,
+    color: COLORS.white,
   },
   wizardComponentValueContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.filterBg,
-    borderRadius: 8,
-    paddingHorizontal: 8,
+    backgroundColor: COLORS.white,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   wizardComponentValueInput: {
-    width: 50,
-    padding: 8,
-    fontSize: 12,
-    textAlign: 'right',
+    flex: 1,
+    fontSize: 11,
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
+    textAlign: 'right',
+    paddingVertical: 4,
   },
   wizardComponentValueSymbol: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.gray,
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    marginLeft: 2,
   },
   wizardComponentCalculated: {
-    width: 70,
+    flex: 1.5,
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    color: COLORS.indigo,
     textAlign: 'right',
-    color: COLORS.emerald,
   },
   wizardRemoveButton: {
-    padding: 6,
+    padding: 4,
   },
   wizardTotalCard: {
-    backgroundColor: COLORS.greenLight,
-    borderRadius: 12,
-    padding: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: COLORS.indigoLight,
+    padding: 16,
+    borderRadius: 12,
     marginTop: 12,
-    marginBottom: 20,
   },
   wizardTotalLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
   },
   wizardTotalValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.emerald,
+    color: COLORS.indigo,
   },
   wizardInputGroup: {
     marginBottom: 16,
@@ -2759,34 +2927,32 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   wizardTextInput: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
     fontSize: 14,
     color: COLORS.textPrimary,
   },
   wizardInputError: {
-    borderColor: COLORS.rose,
+    borderColor: COLORS.error,
   },
   wizardRowInputs: {
     flexDirection: 'row',
     gap: 12,
   },
   wizardComplianceCard: {
-    backgroundColor: COLORS.indigoLight,
+    backgroundColor: COLORS.background,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
+    gap: 16,
   },
   wizardComplianceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    flexWrap: 'wrap',
-    gap: 8,
   },
   wizardComplianceInfo: {
     flexDirection: 'row',
@@ -2794,91 +2960,89 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   wizardComplianceLabel: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   wizardComplianceModeButtons: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,
-    borderRadius: 20,
+    borderRadius: 8,
     padding: 2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   wizardModeButton: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   wizardModeButtonActive: {
     backgroundColor: COLORS.indigo,
   },
   wizardModeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: COLORS.textSecondary,
   },
   wizardModeTextActive: {
     color: COLORS.white,
   },
   wizardAttendanceCard: {
-    backgroundColor: COLORS.yellowLight,
+    backgroundColor: COLORS.background,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
   },
   wizardWorkingDaysInput: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 40,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 12,
+    width: 100,
   },
   wizardWorkingDaysField: {
     flex: 1,
-    paddingVertical: 10,
     fontSize: 14,
-    color: COLORS.textPrimary,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   wizardWorkingDaysLabel: {
     fontSize: 12,
-    color: COLORS.gray,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
   },
   wizardReviewHeader: {
-    alignItems: 'center',
     marginBottom: 20,
   },
   wizardReviewTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   wizardReviewSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: COLORS.textSecondary,
     marginTop: 4,
   },
   wizardReviewCard: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
   wizardReviewSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    gap: 12,
+    marginBottom: 16,
   },
   wizardReviewSectionTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   wizardReviewRow: {
@@ -2886,80 +3050,186 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-    wizardReviewLabel: {
-    fontSize: 12,
+  wizardReviewLabel: {
+    fontSize: 13,
     color: COLORS.textSecondary,
   },
   wizardReviewValue: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   wizardSalarySummaryCard: {
     backgroundColor: COLORS.primary,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 20,
   },
   wizardSalarySummaryTitle: {
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
-    color: COLORS.gray,
+    fontWeight: '600',
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   wizardSalarySummaryValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
     color: COLORS.white,
-    marginTop: 4,
+    fontSize: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 24,
   },
   wizardSalarySummarySection: {
-    marginTop: 20,
+    gap: 10,
   },
   wizardSalarySectionTitle: {
+    color: 'rgba(255,255,255,0.5)',
     fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.gray,
+    fontWeight: 'bold',
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   wizardSalaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
   },
   wizardSalaryLabel: {
-    fontSize: 11,
-    color: COLORS.white + 'CC',
+    color: COLORS.white,
+    fontSize: 13,
   },
   wizardSalaryAmount: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.emerald,
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   wizardSalaryDivider: {
     height: 1,
-    backgroundColor: COLORS.white + '20',
-    marginVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: 16,
   },
   wizardSalaryTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+  },
+  wizardSalaryTotalLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  wizardSalaryTotalValue: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 4,
   },
   wizardSalaryTotalRight: {
     alignItems: 'flex-end',
   },
-  wizardSalaryTotalLabel: {
-    fontSize: 10,
-    color: COLORS.gray,
-    textTransform: 'uppercase',
+  wizardFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: 12,
   },
-  wizardSalaryTotalValue: {
+  wizardPrevButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
+  },
+  wizardPrevButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.textSecondary,
+  },
+  wizardNextButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: COLORS.indigo,
+    gap: 8,
+  },
+  wizardNextButtonDisabled: {
+    opacity: 0.7,
+  },
+  wizardNextButtonText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: COLORS.white,
-    marginTop: 4,
+  },
+
+  // Confirm Modal Styles
+  confirmModalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 'auto',
+    marginBottom: 'auto',
+  },
+  confirmIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.redLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  cancelConfirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  cancelConfirmText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.textSecondary,
+  },
+  deleteConfirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.rose,
+    alignItems: 'center',
+  },
+  deleteConfirmText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.white,
   },
 });
-
-export default EmployeePayrollProfiles;

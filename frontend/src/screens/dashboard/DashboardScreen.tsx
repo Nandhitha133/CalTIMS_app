@@ -838,36 +838,40 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           {preferences.showChart && (
             <View style={[styles.chartCard, { backgroundColor: preferences.theme === 'dark' ? COLORS.dark : COLORS.white }]}>
               <View style={styles.chartHeader}>
-                <View style={styles.chartTitleRow}>
-                  <View style={styles.chartIconContainer}>
-                    <Activity size={20} color={COLORS.primary} />
+                <View style={styles.chartHeaderTop}>
+                  <View style={styles.chartTitleRow}>
+                    <View style={styles.chartIconContainer}>
+                      <Activity size={20} color={COLORS.primary} />
+                    </View>
+                    <View>
+                      <Text style={[styles.chartTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Hourly Productivity</Text>
+                      <Text style={styles.chartSubtitle}>ORGANIZATION PERFORMANCE</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={[styles.chartTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Hourly Productivity</Text>
-                    <Text style={styles.chartSubtitle}>ORGANIZATION PERFORMANCE</Text>
-                  </View>
-                </View>
 
-                <View style={styles.weekNavigation}>
-                  <TouchableOpacity onPress={() => setCurrentWeekStart(prev => subWeeks(prev, 1))} style={styles.navBtn}>
-                    <ChevronLeft size={16} color={COLORS.gray} />
-                  </TouchableOpacity>
-                  <View style={styles.weekDateRange}>
-                    <Calendar size={14} color={COLORS.primary} style={{ marginRight: 6 }} />
-                    <Text style={styles.weekDate}>
-                      {format(currentWeekStart, 'MMM d').toUpperCase()} - {format(addDays(currentWeekStart, 6), 'MMM d, yyyy').toUpperCase()}
+                  <View style={styles.chartTotalContainer}>
+                    <Text style={[styles.chartTotalValue, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>
+                      {loggedHoursThisWeek.toFixed(2)} <Text style={styles.chartTotalUnit}>H</Text>
                     </Text>
+                    <Text style={styles.chartTotalLabel}>ORGANIZATION TOTAL</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setCurrentWeekStart(prev => addWeeks(prev, 1))} style={styles.navBtn}>
-                    <ChevronRight size={16} color={COLORS.gray} />
-                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.chartTotalContainer}>
-                  <Text style={[styles.chartTotalValue, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>
-                    {loggedHoursThisWeek.toFixed(2)} <Text style={styles.chartTotalUnit}>H</Text>
-                  </Text>
-                  <Text style={styles.chartTotalLabel}>ORGANIZATION TOTAL</Text>
+                <View style={styles.weekNavigationWrapper}>
+                  <View style={styles.weekNavigation}>
+                    <TouchableOpacity onPress={() => setCurrentWeekStart(prev => subWeeks(prev, 1))} style={styles.navBtn}>
+                      <ChevronLeft size={16} color={COLORS.gray} />
+                    </TouchableOpacity>
+                    <View style={styles.weekDateRange}>
+                      <Calendar size={14} color={COLORS.primary} style={{ marginRight: 6 }} />
+                      <Text style={styles.weekDate}>
+                        {format(currentWeekStart, 'MMM d').toUpperCase()} - {format(addDays(currentWeekStart, 6), 'MMM d, yyyy').toUpperCase()}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setCurrentWeekStart(prev => addWeeks(prev, 1))} style={styles.navBtn}>
+                      <ChevronRight size={16} color={COLORS.gray} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
 
@@ -1014,11 +1018,13 @@ const styles = StyleSheet.create({
   statTitle: { fontSize: 14, fontWeight: '700' },
   statSubtitle: { fontSize: 11, color: COLORS.gray, marginTop: 4 },
   chartCard: { borderRadius: 24, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
-  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 },
+  chartHeader: { marginBottom: 20 },
+  chartHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
   chartTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   chartIconContainer: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' },
   chartTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   chartSubtitle: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginTop: 2, letterSpacing: 0.5 },
+  weekNavigationWrapper: { flexDirection: 'row', justifyContent: 'flex-start' },
   weekNavigation: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 4, borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9' },
   navBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   weekDateRange: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f1f5f9' },

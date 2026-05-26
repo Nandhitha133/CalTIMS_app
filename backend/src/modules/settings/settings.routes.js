@@ -8,12 +8,14 @@ const Settings = require('./settings.model');
 const User = require('../users/user.model');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { authorize, checkPermission } = require('../../middleware/rbac.middleware');
+const { checkSubscription } = require('../../middleware/subscription.middleware');
 const emailService = require('../../shared/services/email.service');
 const { logAction } = require('../audit/audit.routes');
 const upload = require('../../middleware/upload.middleware');
 const net = require('net');
 const PermissionAuditLog = require('./permissionAuditLog.model');
 const policyService = require('../policyEngine/policy.service');
+const socketService = require('../../shared/services/socket.service');
 
 router.use(authenticate);
 
@@ -276,6 +278,12 @@ router.put('/', checkPermission('Settings', 'Users & Roles', 'edit'), asyncHandl
     ipAddress: req.ip || req.connection.remoteAddress
   });
 
+  // Emit WebSocket event to synchronize all connected clients
+  socketService.emit('settings_updated', {
+    section: 'all',
+    updatedSections: Object.keys(updateDoc)
+  });
+
   ApiResponse.success(res, { message: 'Settings successfully updated', data: newSettings });
 }));
 
@@ -393,6 +401,11 @@ router.post('/report', authorize('admin', 'manager'), asyncHandler(async (req, r
     { upsert: true, new: true }
   ).lean();
 
+  // Emit WebSocket event to synchronize all connected clients
+  socketService.emit('settings_updated', {
+    section: 'report'
+  });
+
   ApiResponse.success(res, { message: 'Report settings saved', data: settings.report });
 }));
 
@@ -495,6 +508,11 @@ router.post('/timesheet', authorize('admin', 'manager'), asyncHandler(async (req
     { upsert: true, new: true }
   ).lean();
 
+  // Emit WebSocket event to synchronize all connected clients
+  socketService.emit('settings_updated', {
+    section: 'timesheet'
+  });
+
   ApiResponse.success(res, { 
     message: 'Timesheet settings saved', 
     data: { 
@@ -534,6 +552,11 @@ router.post('/general', authorize('admin', 'manager'), asyncHandler(async (req, 
     },
     { upsert: true, new: true }
   ).lean();
+
+  // Emit WebSocket event to synchronize all connected clients
+  socketService.emit('settings_updated', {
+    section: 'general'
+  });
 
   ApiResponse.success(res, { message: 'General settings saved', data: settings.general });
 }));
@@ -577,6 +600,11 @@ router.post('/payroll', authorize('admin', 'manager'), asyncHandler(async (req, 
     { upsert: true, new: true }
   ).lean();
 
+  // Emit WebSocket event to synchronize all connected clients
+  socketService.emit('settings_updated', {
+    section: 'payroll'
+  });
+
   ApiResponse.success(res, { message: 'Payroll settings saved', data: settings.payroll });
 }));
 
@@ -613,8 +641,8 @@ router.get('/employees', authorize('admin', 'manager'), asyncHandler(async (req,
 
 // ─── Permission Audit Logs API ──────────────────────────────────────────────
 
-// GET /api/v1/settings/permission-audit-logs
-router.get('/permission-audit-logs', checkPermission('Settings', 'Audit Logs', 'view'), asyncHandler(async (req, res) => {
+// GET /api/v1/settings/permissions/audit (Updated path to match frontend)
+router.get('/permissions/audit', checkPermission('Settings', 'Audit Logs', 'view'), asyncHandler(async (req, res) => {
   const { roleName, changedByName, action, startDate, endDate, search } = req.query;
   
   const query = {};
@@ -643,6 +671,11 @@ router.get('/permission-audit-logs', checkPermission('Settings', 'Audit Logs', '
     .limit(100); // Pagination could be added but 100 for now
     
   ApiResponse.success(res, { data: logs });
+}));
+
+// Legacy path support
+router.get('/permission-audit-logs', checkPermission('Settings', 'Audit Logs', 'view'), asyncHandler(async (req, res) => {
+  res.redirect(301, '/api/v1/settings/permissions/audit');
 }));
 
 module.exports = router;

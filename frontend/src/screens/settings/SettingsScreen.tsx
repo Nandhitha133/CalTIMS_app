@@ -26,7 +26,6 @@ import {
   ShieldCheck,
   Zap,
   Calendar,
-  Rocket,
   Banknote,
   FileText,
   Fingerprint,
@@ -57,9 +56,9 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     title: 'ORGANIZATION',
     items: [
       { id: 'organization', label: 'General & Organization', icon: Building2, route: 'OrganizationTab' },
-      { id: 'branding', label: 'Branding & Theme', icon: Palette, route: 'BrandingTab' },
+    
       { id: 'subscription', label: 'Plan & Subscription', icon: Crown, route: 'SubscriptionTab' },
-      { id: 'onboarding', label: 'System Onboarding', icon: Rocket, route: 'OnboardingTab' },
+      
     ]
   },
   {
@@ -76,49 +75,11 @@ const NAVIGATION_SECTIONS: NavSection[] = [
     items: [
       { id: 'users_roles', label: 'Users & Roles', icon: UserCheck, route: 'UsersAndRolesTab' },
       { id: 'notifications', label: 'Notifications', icon: Bell, route: 'NotificationsTab' },
-      { id: 'integrations', label: 'Integrations', icon: Zap, route: 'IntegrationsTab' },
-      { id: 'permission_audit', label: 'Permission Audit', icon: Fingerprint, route: 'PermissionAuditTab' },
+      
     ]
   },
-  {
-    title: 'AUTOMATION & TEMPLATES',
-    items: [
-      { id: 'payslip_templates', label: 'Payslip Templates', icon: FileText, route: 'PayslipTemplatesTab' },
-      { id: 'reports_automation', label: 'Reports Automation', icon: BarChart, route: 'ReportsAutomationTab' },
-    ]
-  },
+  
 ];
-
-// Free Trial Banner Component
-const FreeTrialBanner = memo(() => {
-  const navigation = useNavigation();
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
-
-  return (
-    <View style={bannerStyles.container}>
-      <View style={bannerStyles.content}>
-        <View style={bannerStyles.iconContainer}>
-          <AlertCircle size={20} color="#dc2626" />
-        </View>
-        
-        <TouchableOpacity 
-          style={bannerStyles.button}
-          onPress={() => navigation.navigate('SubscriptionTab' as never)}
-        >
-          <Text style={bannerStyles.buttonText}>UPGRADE NOW</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => setDismissed(true)} 
-          style={bannerStyles.closeButton}
-        >
-          <X size={16} color="#9ca3af" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-});
 
 // Sidebar Navigation Component
 const SettingsSidebar = memo(({ 
@@ -285,17 +246,11 @@ export default function SettingsScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <PageHeader 
-        title="Settings"
-        subtitle="Manage your organization and system preferences"
-        icon={Briefcase}
-        iconColor="#6366f1"
-        iconBgColor="#eef2ff"
-      />
+ 
+      
+     
+      
       <View style={styles.container}>
-        {/* Free Trial Banner */}
-        <FreeTrialBanner />
-
         {/* Settings Layout */}
         <View style={[styles.layout, isDesktop && styles.layoutDesktop]}>
           {/* Sidebar - Desktop */}
@@ -556,57 +511,6 @@ const sidebarStyles = StyleSheet.create({
   footerText: {
     fontSize: 10,
     color: '#9ca3af',
-  },
-});
-
-const bannerStyles = StyleSheet.create({
-  container: {
-    backgroundColor: '#fef2f2',
-    borderBottomWidth: 1,
-    borderBottomColor: '#fee2e2',
-  },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fee2e2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textContainer: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 12,
-    color: '#991b1b',
-    fontWeight: '500',
-  },
-  days: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#dc2626',
-  },
-  button: {
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  buttonText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'white',
-    letterSpacing: 0.5,
-  },
-  closeButton: {
-    padding: 4,
   },
 });
 

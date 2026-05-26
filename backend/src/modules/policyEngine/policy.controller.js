@@ -3,6 +3,7 @@
 const policyService = require('./policy.service');
 const logger = require('../../shared/utils/logger');
 const mongoose = require('mongoose');
+const socketService = require('../../shared/services/socket.service');
 
 const payrollService = require('../payroll/payroll.service');
 const User = require('../users/user.model');
@@ -24,6 +25,10 @@ const updatePayrollPolicy = async (req, res) => {
   try {
     const organizationId = req.organizationId || null;
     const updatedPolicy = await policyService.updatePolicy(req.body, organizationId);
+    
+    // Emit WebSocket event to synchronize all connected clients
+    socketService.emit('settings_updated', { section: 'payrollPolicy' });
+    
     res.status(200).json(updatedPolicy);
   } catch (error) {
     logger.error('Error updating payroll policy: ' + error.message);
@@ -35,6 +40,10 @@ const createNewPolicyVersion = async (req, res) => {
   try {
     const organizationId = req.organizationId || null;
     const newPolicy = await policyService.createPolicyVersion(req.body, organizationId);
+    
+    // Emit WebSocket event to synchronize all connected clients
+    socketService.emit('settings_updated', { section: 'payrollPolicy' });
+    
     res.status(201).json(newPolicy);
   } catch (error) {
     logger.error('Error creating policy version: ' + error.message);

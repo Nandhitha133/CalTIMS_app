@@ -64,11 +64,16 @@ export default function OAuthSuccessScreen() {
       
       Alert.alert('Success', 'Successfully logged in with Google!');
       
-      // Navigate based on onboarding status
+      // Navigate based on role and onboarding status
       if (!user.isOnboardingComplete) {
         navigation.reset({
           index: 0,
           routes: [{ name: 'Onboarding' as never }],
+        });
+      } else if (user.role === 'super_admin' || user.role === 'admin') {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'AdminDashboard' as never }],
         });
       } else {
         navigation.reset({

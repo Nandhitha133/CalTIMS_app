@@ -46,6 +46,7 @@ interface User {
 
 interface Incident {
   _id: string;
+  id?: string;
   incidentId: string;
   title: string;
   description: string;
@@ -58,6 +59,7 @@ interface Incident {
 
 interface SupportTicket {
   _id: string;
+  id?: string;
   ticketId: string;
   name: string;
   email: string;

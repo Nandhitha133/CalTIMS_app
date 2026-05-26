@@ -14,6 +14,18 @@ const getBaseUrl = () => {
 export const BASE_URL = getBaseUrl();
 
 class ApiService {
+  private isRefreshing = false;
+  private refreshSubscribers: ((token: string) => void)[] = [];
+
+  private subscribeTokenRefresh(cb: (token: string) => void) {
+    this.refreshSubscribers.push(cb);
+  }
+
+  private onTokenRefreshed(token: string) {
+    this.refreshSubscribers.map(cb => cb(token));
+    this.refreshSubscribers = [];
+  }
+
   private async getHeaders(customHeaders?: Record<string, string>): Promise<any> {
     const token = await AsyncStorage.getItem('accessToken');
     const defaultHeaders: Record<string, string> = {
@@ -79,22 +91,7 @@ class ApiService {
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      if (response.status === 401) {
-        // Handle unauthorized globally
-        const message = await response.json().then(j => j.message).catch(() => 'Session expired. Please log in again.');
-
-        // Log out the user
-        const logout = useAuthStore.getState().logout;
-        if (logout) {
-          logout();
-          try {
-            Alert.alert('Session Expired', message);
-          } catch (e) { }
-        }
-        throw new Error(message);
-      }
-
-      let errorMessage = 'Something went wrong';
+      let errorMessage = `Server Error [${response.status}]`;
       let errorData = null;
 
       try {
@@ -103,7 +100,8 @@ class ApiService {
           errorData = JSON.parse(text);
           errorMessage = errorData.message || errorData.error || errorMessage;
         } catch (e) {
-          errorMessage = text || response.statusText || errorMessage;
+          // Not JSON - provide a snippet of the response text
+          errorMessage = text.substring(0, 100) || response.statusText || errorMessage;
         }
       } catch (e) {
         errorMessage = response.statusText || errorMessage;
@@ -141,7 +139,7 @@ class ApiService {
     return { success: true } as T;
   }
 
-  async get<T>(endpoint: string, params?: Record<string, any>, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
+  private async performRequest<T>(method: string, endpoint: string, data?: any, params?: Record<string, any>, config?: { skipToast?: boolean; headers?: Record<string, string>; timeout?: number }): Promise<T> {
     const url = new URL(`${BASE_URL}${endpoint}`);
     if (params) {
       Object.keys(params).forEach(key => {
@@ -151,83 +149,118 @@ class ApiService {
       });
     }
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: await this.getHeaders(config?.headers),
-      credentials: 'include',
-    });
+    const headers = await this.getHeaders(config?.headers);
+    const body = data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined);
 
-    return this.handleResponse<T>(response);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), config?.timeout || 30000); // 30s default timeout
+
+    try {
+      const response = await fetch(url.toString(), {
+        method,
+        headers,
+        body,
+        credentials: 'include',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+        return await this.handleTokenExpiry<T>(method, endpoint, data, params, config);
+      }
+
+      return await this.handleResponse<T>(response);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out. The server might be under heavy load.');
+      }
+      if (error.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+        return await this.handleTokenExpiry<T>(method, endpoint, data, params, config);
+      }
+      throw error;
+    }
+  }
+
+  private async handleTokenExpiry<T>(method: string, endpoint: string, data?: any, params?: Record<string, any>, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
+    const refreshToken = await AsyncStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      this.logoutAndRedirect();
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    if (!this.isRefreshing) {
+      this.isRefreshing = true;
+      try {
+        const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (!refreshRes.ok) throw new Error('Refresh failed');
+
+        const result = await refreshRes.json();
+        const newAccessToken = result.data?.accessToken || result.accessToken;
+        const newRefreshToken = result.data?.refreshToken || result.refreshToken;
+
+        if (!newAccessToken) throw new Error('New token missing');
+
+        await AsyncStorage.setItem('accessToken', newAccessToken);
+        if (newRefreshToken) await AsyncStorage.setItem('refreshToken', newRefreshToken);
+
+        this.isRefreshing = false;
+        this.onTokenRefreshed(newAccessToken);
+      } catch (e) {
+        this.isRefreshing = false;
+        this.logoutAndRedirect();
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+
+    return new Promise((resolve) => {
+      this.subscribeTokenRefresh(async (token: string) => {
+        resolve(this.performRequest<T>(method, endpoint, data, params, config));
+      });
+    });
+  }
+
+  private logoutAndRedirect() {
+    const logout = useAuthStore.getState().logout;
+    if (logout) {
+      logout();
+      try {
+        Alert.alert('Session Expired', 'Your session has expired. Please log in again.');
+      } catch (e) { }
+    }
+  }
+
+  async get<T>(endpoint: string, params?: Record<string, any>, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
+    return this.performRequest<T>('GET', endpoint, undefined, params, config);
   }
 
   async post<T>(endpoint: string, data?: any, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
-    const url = `${BASE_URL}${endpoint}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: await this.getHeaders(config?.headers),
-      body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
-      credentials: 'include',
-    });
-
-    const result = await this.handleResponse<T>(response);
-
-    // Auto-audit successful mutations
+    const result = await this.performRequest<T>('POST', endpoint, data, undefined, config);
     this.logAuditAction('POST', endpoint, data);
-
     return result;
   }
 
   async put<T>(endpoint: string, data?: any, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
-    const url = `${BASE_URL}${endpoint}`;
-
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: await this.getHeaders(config?.headers),
-      body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
-      credentials: 'include',
-    });
-
-    const result = await this.handleResponse<T>(response);
-
-    // Auto-audit successful mutations
+    const result = await this.performRequest<T>('PUT', endpoint, data, undefined, config);
     this.logAuditAction('PUT', endpoint, data);
-
     return result;
   }
 
   async patch<T>(endpoint: string, data?: any, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
-    const url = `${BASE_URL}${endpoint}`;
-
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: await this.getHeaders(config?.headers),
-      body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined),
-      credentials: 'include',
-    });
-
-    const result = await this.handleResponse<T>(response);
-
-    // Auto-audit successful mutations
+    const result = await this.performRequest<T>('PATCH', endpoint, data, undefined, config);
     this.logAuditAction('PATCH', endpoint, data);
-
     return result;
   }
 
   async delete<T>(endpoint: string, config?: { skipToast?: boolean; headers?: Record<string, string> }): Promise<T> {
-    const url = `${BASE_URL}${endpoint}`;
-
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: await this.getHeaders(config?.headers),
-      credentials: 'include',
-    });
-
-    const result = await this.handleResponse<T>(response);
-
-    // Auto-audit successful mutations
+    const result = await this.performRequest<T>('DELETE', endpoint, undefined, undefined, config);
     this.logAuditAction('DELETE', endpoint);
-
     return result;
   }
 }

@@ -480,11 +480,11 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
           {/* Filters */}
           <View style={styles.filtersContainer}>
             <View style={styles.filterGroup}>
-              <View style={styles.filterChip}>
-                <Building2 size={14} color={COLORS.gray} />
+              <View style={[styles.filterChip, { flex: 0.8 }]}>
+                <Calendar size={14} color={COLORS.gray} style={styles.filterIcon} />
                 <SafeSelector
                   options={[...Array(12)].map((_, i) => ({
-                    label: new Date(2024, i).toLocaleString('default', { month: 'long' }),
+                    label: new Date(2024, i).toLocaleString('default', { month: 'short' }),
                     value: i + 1,
                   }))}
                   selectedValue={month}
@@ -493,10 +493,11 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
                   onOpen={() => setActiveSelector('month')}
                   onClose={() => setActiveSelector(null)}
                   style={styles.safeSelector}
+                  triggerStyle={styles.safeSelectorTrigger}
                 />
               </View>
-              <View style={styles.filterChip}>
-                <Building2 size={14} color={COLORS.gray} />
+              <View style={[styles.filterChip, { flex: 0.8 }]}>
+                <Calendar size={14} color={COLORS.gray} style={styles.filterIcon} />
                 <SafeSelector
                   options={[2024, 2025, 2026].map((y) => ({
                     label: String(y),
@@ -508,24 +509,25 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
                   onOpen={() => setActiveSelector('year')}
                   onClose={() => setActiveSelector(null)}
                   style={styles.safeSelector}
+                  triggerStyle={styles.safeSelectorTrigger}
                 />
               </View>
-            </View>
-
-            <View style={styles.filterChip}>
-              <Landmark size={14} color={COLORS.gray} />
-              <SafeSelector
-                options={[
-                  { label: 'All Banks', value: '' },
-                  ...uniqueBanks.map((bank: any) => ({ label: bank, value: bank })),
-                ]}
-                selectedValue={bankFilter}
-                onValueChange={(v) => setBankFilter(v)}
-                visible={activeSelector === 'bank'}
-                onOpen={() => setActiveSelector('bank')}
-                onClose={() => setActiveSelector(null)}
-                style={styles.safeSelector}
-              />
+              <View style={[styles.filterChip, { flex: 1.4 }]}>
+                <Landmark size={14} color={COLORS.gray} style={styles.filterIcon} />
+                <SafeSelector
+                  options={[
+                    { label: 'All Banks', value: '' },
+                    ...uniqueBanks.map((bank: any) => ({ label: bank, value: bank })),
+                  ]}
+                  selectedValue={bankFilter}
+                  onValueChange={(v) => setBankFilter(v)}
+                  visible={activeSelector === 'bank'}
+                  onOpen={() => setActiveSelector('bank')}
+                  onClose={() => setActiveSelector(null)}
+                  style={styles.safeSelector}
+                  triggerStyle={styles.safeSelectorTrigger}
+                />
+              </View>
             </View>
           </View>
 
@@ -626,10 +628,29 @@ const styles = StyleSheet.create({
   kpiValue: { fontSize: 16, fontWeight: 'bold', marginTop: 2 },
   kpiSubtitle: { fontSize: 9, color: COLORS.gray, marginTop: 2 },
 
-  filtersContainer: { gap: 12, marginBottom: 20 },
-  filterGroup: { flexDirection: 'row', gap: 12 },
-  filterChip: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 12, height: 50, gap: 8 },
-  safeSelector: { flex: 1, height: 44, backgroundColor: 'transparent' },
+  filtersContainer: { marginBottom: 20 },
+  filterGroup: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  filterChip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: COLORS.white, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: COLORS.border, 
+    paddingHorizontal: 8, 
+    height: 44,
+  },
+  filterIcon: { marginRight: 4 },
+  safeSelector: { flex: 1 },
+  safeSelectorTrigger: { 
+    borderWidth: 0, 
+    backgroundColor: 'transparent', 
+    minHeight: 0, 
+    paddingHorizontal: 0, 
+    paddingVertical: 0, 
+    height: '100%',
+    flex: 1,
+  },
   pickerItem: { fontSize: 14, color: COLORS.dark },
 
   tableCard: { backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 20 },

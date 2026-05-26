@@ -227,6 +227,9 @@ export const settingsAPI = {
     apiService.post('/settings/branding/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateSettings: (data: any) => 
     apiService.put('/settings', data),
+  getPermissionAuditLogs: (params: { roleName: string }) => 
+    apiService.get('/settings/permissions/audit', params),
+
 };
 
 // ==================== PAYROLL API ====================
@@ -245,8 +248,8 @@ export const payrollAPI = {
     apiService.patch(`/payroll/profiles/${id}`, data),
   deleteProfile: (id: string) => 
     apiService.delete(`/payroll/profiles/${id}`),
-  setupFullProfile: (data: any) => 
-    apiService.post('/payroll/profiles', data),
+  setupFullProfile: (data: any, config?: any) => 
+    apiService.post('/payroll/profiles', data, config),
   getDashboard: (params?: any) => 
     apiService.get('/payroll/dashboard', params),
   getBatches: (params?: any) => 

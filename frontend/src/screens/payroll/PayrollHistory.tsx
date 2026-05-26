@@ -32,11 +32,14 @@ import {
   Send,
   MoreVertical,
   Plus,
+  BarChart3,
 } from 'lucide-react-native';
+import { LineChart } from 'react-native-chart-kit';
+import { Dimensions } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
-import Header from '../../components/common/Header';
-import Footer from '../../components/common/Footer';
-import CollapsibleSidebar from '../../components/common/CollapsibleSidebar';
+import Layout from '../../components/common/Layout';
 import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
 import { exportFile } from '../../utils/exportHelper';
@@ -92,14 +95,19 @@ interface PayrollDetail {
 }
 
 // Stat Card Component
-const StatCard = ({ title, value, icon: Icon, color, subtitle }: any) => (
+const StatCard = ({ title, value, icon: Icon, color, subtitle, badge }: any) => (
   <View style={styles.statCard}>
-    <View style={[styles.statIcon, { backgroundColor: color + '20' }]}>
+    {badge && (
+      <View style={styles.statBadge}>
+        <Text style={styles.statBadgeText}>{badge}</Text>
+      </View>
+    )}
+    <View style={[styles.statIcon, { backgroundColor: color + '15' }]}>
       <Icon size={20} color={color} />
     </View>
     <View style={styles.statContent}>
-      <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statTitle}>{title}</Text>
+      <Text style={[styles.statValue, { color: COLORS.dark }]}>{value}</Text>
       {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
     </View>
   </View>
@@ -111,45 +119,35 @@ const RunCard = ({ run, onPress, currencySymbol }: { run: PayrollRun; onPress: (
 
   return (
     <TouchableOpacity style={styles.runCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.runCardHeader}>
-        <View style={styles.runDateBadge}>
-          <Text style={styles.runYear}>{run.year}</Text>
-          <Text style={styles.runMonth}>{monthName.slice(0, 3)}</Text>
-        </View>
-        <View style={styles.runInfo}>
-          <Text style={styles.runPeriod}>{monthName} {run.year}</Text>
-          <View style={styles.runStats}>
-            <Users size={12} color={COLORS.gray} />
-            <Text style={styles.runStatText}>{run.totalEmployees} employees</Text>
-          </View>
-        </View>
-        <View style={styles.runStatusContainer}>
-          <View style={[styles.statusBadge, run.isPaid ? styles.statusPaid : styles.statusUnpaid]}>
-            <View style={[styles.statusDot, run.isPaid ? styles.dotPaid : styles.dotUnpaid]} />
-            <Text style={[styles.statusText, run.isPaid ? styles.statusPaidText : styles.statusUnpaidText]}>
-              {run.isPaid ? 'Paid' : 'Unpaid'}
-            </Text>
-          </View>
-          {run.failedCount > 0 && (
-            <View style={styles.failedBadge}>
-              <AlertCircle size={10} color={COLORS.error} />
-              <Text style={styles.failedText}>{run.failedCount} failed</Text>
+      <View style={styles.runCardMain}>
+        <View style={styles.runPeriodInfo}>
+          <Text style={styles.runPeriodCode}>{run.year}-{String(run.month).padStart(2, '0')}</Text>
+          <View style={styles.runMonthYear}>
+            <View style={styles.monthBadge}>
+              <Text style={styles.monthBadgeText}>{monthName.slice(0, 3)}</Text>
             </View>
-          )}
+            <View>
+              <Text style={styles.runMonthName}>{monthName}</Text>
+              <Text style={styles.runYearText}>{run.year}</Text>
+            </View>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.runCardFooter}>
-        <View style={styles.amountColumn}>
-          <Text style={styles.amountLabel}>Gross Amount</Text>
-          <Text style={styles.grossAmount}>{currencySymbol}{formatCurrency(run.totalGross || 0)}</Text>
+        <View style={styles.runEmployeeCount}>
+          <Users size={14} color={COLORS.gray} />
+          <Text style={styles.runEmployeeText}>{run.totalEmployees}</Text>
         </View>
-        <View style={styles.amountDivider} />
-        <View style={styles.amountColumn}>
-          <Text style={styles.amountLabel}>Net Disbursed</Text>
-          <Text style={styles.netAmount}>{currencySymbol}{formatCurrency(run.totalNet || 0)}</Text>
+
+        <View style={styles.runAmounts}>
+          <Text style={styles.runGrossAmount}>{currencySymbol}{formatCurrency(run.totalGross || 0)}</Text>
+          <Text style={styles.runNetAmount}>{currencySymbol}{formatCurrency(run.totalNet || 0)}</Text>
         </View>
-        <ChevronRight size={18} color={COLORS.gray} />
+
+        <View style={[styles.runStatusBadge, run.isPaid ? styles.statusPaid : styles.statusUnpaid]}>
+          <Text style={[styles.runStatusText, run.isPaid ? styles.statusPaidText : styles.statusUnpaidText]}>
+            {run.isPaid ? 'PAID' : 'UNPAID'}
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -216,7 +214,9 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
   const fetchBatches = async () => {
     try {
       const response: any = await payrollAPI.getBatches();
-      return response.data?.data || response.data || [];
+      // Handle all possible response structures from live backend
+      const rawData = response?.data?.data || response?.data || response?.batches || response || [];
+      return Array.isArray(rawData) ? rawData : (rawData.data && Array.isArray(rawData.data) ? rawData.data : []);
     } catch (error) {
       console.error('Error fetching batches:', error);
       return [];
@@ -227,7 +227,9 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
     setDetailLoading(true);
     try {
       const response: any = await payrollAPI.getHistory({ month, year });
-      const data = response.data?.data || response.data || [];
+      // Handle all possible response structures
+      const rawData = response?.data?.data || response?.data || response?.history || response || [];
+      const data = Array.isArray(rawData) ? rawData : (rawData.data && Array.isArray(rawData.data) ? rawData.data : []);
       setDetailRecords(data);
     } catch (error) {
       console.error('Error fetching details:', error);
@@ -406,12 +408,16 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
   }
 
   return (
-    <View style={styles.container}>
-      <Header title="Payroll History" showSidebarButton onMenuPress={() => setSidebarVisible(true)} />
-
+    <Layout
+      title="Payroll History"
+      user={user}
+      sidebarVisible={sidebarVisible}
+      setSidebarVisible={setSidebarVisible}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+    >
       <ScrollView
         style={styles.scrollView}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
@@ -428,14 +434,84 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
 
           {/* Stats Row */}
           <View style={styles.statsRow}>
-            <StatCard title="Total Runs" value={stats.totalRuns} icon={Archive} color={COLORS.primary} />
-            <StatCard title="Total Disbursed" value={`${currencySymbol}${formatCurrency(stats.totalDisbursed)}`} icon={DollarSign} color={COLORS.success} />
-            <StatCard title="Avg Cost/Cycle" value={`${currencySymbol}${formatCurrency(Math.round(stats.avgCost))}`} icon={TrendingUp} color={COLORS.info} />
-            <StatCard title="Error Rate" value={`${stats.errorRate.toFixed(1)}%`} icon={AlertCircle} color={stats.errorRate > 0 ? COLORS.error : COLORS.gray} />
+            <StatCard 
+              title="Total Payroll Runs" 
+              value={stats.totalRuns} 
+              icon={Archive} 
+              color={COLORS.primary} 
+              badge="LAST 12MO"
+            />
+            <StatCard 
+              title="Total Disbursed" 
+              value={`${currencySymbol}${formatCurrency(stats.totalDisbursed)}`} 
+              icon={DollarSign} 
+              color={COLORS.success} 
+              badge="LIFETIME"
+            />
+            <StatCard 
+              title="Average Payroll Cost" 
+              value={`${currencySymbol}${formatCurrency(Math.round(stats.avgCost))}`} 
+              icon={TrendingUp} 
+              color={COLORS.info} 
+              badge="PER CYCLE"
+            />
+            <StatCard 
+              title="Runs with Errors" 
+              value={`${stats.errorRate.toFixed(1)}%`} 
+              icon={AlertCircle} 
+              color={stats.errorRate > 0 ? COLORS.error : COLORS.gray} 
+              badge="PROCESS INTEGRITY"
+            />
+          </View>
+
+          {/* Trend Analysis Section */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <TrendingUp size={18} color={COLORS.primary} />
+                <Text style={styles.sectionTitle}>TREND ANALYSIS</Text>
+              </View>
+              <View style={styles.trendSelector}>
+                <Text style={styles.trendSelectorText}>NET PAYOUT</Text>
+                <ChevronRight size={14} color={COLORS.gray} style={{ transform: [{ rotate: '90deg' }] }} />
+              </View>
+            </View>
+            
+            <View style={styles.chartContainer}>
+              <LineChart
+                data={{
+                  labels: runs.slice(0, 6).reverse().map(r => new Date(r.year, r.month - 1).toLocaleString('default', { month: 'short' })),
+                  datasets: [{
+                    data: runs.slice(0, 6).reverse().map(r => (r.totalNet || 0) / 1000)
+                  }]
+                }}
+                width={SCREEN_WIDTH - 64}
+                height={180}
+                chartConfig={{
+                  backgroundColor: COLORS.white,
+                  backgroundGradientFrom: COLORS.white,
+                  backgroundGradientTo: COLORS.white,
+                  decimalPlaces: 1,
+                  color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+                  style: { borderRadius: 16 },
+                  propsForDots: {
+                    r: "4",
+                    strokeWidth: "2",
+                    stroke: COLORS.primary
+                  }
+                }}
+                bezier
+                style={styles.chart}
+              />
+            </View>
           </View>
 
           {/* Search and Filter */}
           <View style={styles.searchSection}>
+            <View style={styles.ledgerHeader}>
+              <Text style={styles.ledgerTitle}>HISTORICAL RUN LEDGER</Text>
+            </View>
             <View style={styles.searchBox}>
               <Search size={16} color={COLORS.gray} />
               <TextInput
@@ -467,7 +543,7 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
 
               <TouchableOpacity style={styles.exportButton} onPress={() => setShowExportMenu(true)}>
                 <Download size={16} color={COLORS.white} />
-                <Text style={styles.exportButtonText}>Export</Text>
+                <Text style={styles.exportButtonText}>Export </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -491,9 +567,6 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
           )}
         </View>
       </ScrollView>
-
-      <Footer showCopyright />
-      <CollapsibleSidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} user={user} />
 
       {/* Export Menu Modal */}
       <Modal visible={showExportMenu} transparent animationType="fade">
@@ -590,7 +663,7 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
           </View>
         </View>
       </Modal>
-    </View>
+    </Layout>
   );
 };
 
@@ -621,7 +694,7 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -635,12 +708,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '800', 
     color: COLORS.dark,
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
     marginTop: 2,
   },
@@ -654,17 +728,31 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: '45%',
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  statBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: COLORS.light,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statBadgeText: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: COLORS.gray,
+    textTransform: 'uppercase', 
   },
   statIcon: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -685,27 +773,84 @@ const styles = StyleSheet.create({
   statSubtitle: {
     fontSize: 9,
     color: COLORS.gray,
-    marginTop: 2,
+    marginTop: 4,
+  },
+  sectionCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.dark,
+    letterSpacing: 0.5,
+  },
+  trendSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.light,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  trendSelectorText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: COLORS.gray,
+  },
+  chartContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
   },
   searchSection: {
     marginBottom: 20,
+  },
+  ledgerHeader: {
+    marginBottom: 16,
+  },
+  ledgerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.dark,
+    letterSpacing: 0.5,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    height: 44,
-    gap: 8,
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    gap: 12,
+    marginBottom: 16,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: COLORS.dark,
+    fontWeight: '500',
   },
   filterRow: {
     flexDirection: 'row',
@@ -716,11 +861,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    height: 44,
+    paddingHorizontal: 16,
+    height: 52,
     gap: 8,
   },
   filterSafeSelector: {
@@ -735,107 +880,100 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    height: 44,
+    borderRadius: 16,
+    height: 52,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   exportButtonText: {
     color: COLORS.white,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   runCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  runCardHeader: {
+  runCardMain: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
   },
-  runDateBadge: {
-    width: 50,
-    height: 50,
-    backgroundColor: COLORS.primary + '15',
-    borderRadius: 12,
+  runPeriodInfo: {
+    flex: 1.5,
+  },
+  runPeriodCode: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  runMonthYear: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  monthBadge: {
+    width: 36,
+    height: 36,
+    backgroundColor: COLORS.light,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  runYear: {
+  monthBadgeText: {
     fontSize: 10,
     fontWeight: 'bold',
     color: COLORS.gray,
+    textTransform: 'uppercase',
   },
-  runMonth: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  runInfo: {
-    flex: 1,
-  },
-  runPeriod: {
+  runMonthName: {
     fontSize: 14,
     fontWeight: 'bold',
     color: COLORS.dark,
   },
-  runStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  runStatText: {
+  runYearText: {
     fontSize: 11,
     color: COLORS.gray,
   },
-  runStatusContainer: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  runCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  amountColumn: {
-    flex: 1,
-  },
-  amountLabel: {
-    fontSize: 10,
-    color: COLORS.gray,
-    marginBottom: 2,
-  },
-  grossAmount: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  netAmount: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.success,
-  },
-  amountDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 12,
-  },
-  statusBadge: {
+  runEmployeeCount: {
+    flex: 0.6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+  },
+  runEmployeeText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: COLORS.dark,
+  },
+  runAmounts: {
+    flex: 1.2,
+    alignItems: 'flex-end',
+  },
+  runGrossAmount: {
+    fontSize: 11,
+    color: COLORS.gray,
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
+  runNetAmount: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.success,
+  },
+  runStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 8,
   },
   statusPaid: {
     backgroundColor: COLORS.success + '15',
@@ -843,20 +981,10 @@ const styles = StyleSheet.create({
   statusUnpaid: {
     backgroundColor: COLORS.warning + '15',
   },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  dotPaid: {
-    backgroundColor: COLORS.success,
-  },
-  dotUnpaid: {
-    backgroundColor: COLORS.warning,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+  runStatusText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   statusPaidText: {
     color: COLORS.success,
@@ -864,33 +992,23 @@ const styles = StyleSheet.create({
   statusUnpaidText: {
     color: COLORS.warning,
   },
-  failedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  failedText: {
-    fontSize: 9,
-    color: COLORS.error,
-  },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 64,
     backgroundColor: COLORS.white,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.dark,
     marginTop: 16,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 14,
     color: COLORS.gray,
     marginTop: 8,
   },
@@ -899,23 +1017,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   exportMenu: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    width: '80%',
+    borderRadius: 24,
+    width: '100%',
     overflow: 'hidden',
+    padding: 8,
   },
   exportMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderRadius: 16,
   },
   exportMenuItemText: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '600',
     color: COLORS.dark,
   },
   drawerOverlay: {
@@ -925,33 +1045,36 @@ const styles = StyleSheet.create({
   },
   drawerContainer: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     maxHeight: '90%',
   },
   drawerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   drawerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '800',
     color: COLORS.dark,
+    letterSpacing: -0.5,
   },
   drawerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
     marginTop: 2,
   },
   drawerClose: {
     padding: 8,
+    backgroundColor: COLORS.light,
+    borderRadius: 12,
   },
   drawerContent: {
-    padding: 20,
+    padding: 24,
   },
   drawerStats: {
     flexDirection: 'row',
@@ -961,41 +1084,43 @@ const styles = StyleSheet.create({
   drawerStat: {
     flex: 1,
     backgroundColor: COLORS.light,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 16,
+    padding: 16,
     alignItems: 'center',
   },
   drawerStatLabel: {
     fontSize: 10,
+    fontWeight: 'bold',
     color: COLORS.gray,
     marginBottom: 4,
+    textTransform: 'uppercase',
   },
   drawerStatValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.dark,
   },
   drawerSectionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.dark,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   loaderContainer: {
     alignItems: 'center',
-    padding: 20,
+    padding: 40,
   },
   loaderText: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
-    marginTop: 8,
+    marginTop: 12,
   },
   emptyDetailContainer: {
     alignItems: 'center',
-    padding: 20,
+    padding: 40,
   },
   emptyDetailText: {
-    fontSize: 12,
+    fontSize: 14,
     color: COLORS.gray,
   },
   employeeRow: {
@@ -1006,9 +1131,9 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   employeeAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: COLORS.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1037,13 +1162,13 @@ const styles = StyleSheet.create({
   },
   employeeAmount: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: COLORS.dark,
   },
   employeeStatusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     marginTop: 4,
   },
   employeeStatusText: {
@@ -1053,7 +1178,7 @@ const styles = StyleSheet.create({
   drawerFooter: {
     flexDirection: 'row',
     gap: 12,
-    padding: 20,
+    padding: 24,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
@@ -1064,8 +1189,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 16,
+    height: 52,
   },
   drawerButtonSecondary: {
     backgroundColor: COLORS.white,
@@ -1073,8 +1198,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   drawerButtonText: {
-    color: COLORS.white,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
+    color: COLORS.white,
   },
 });

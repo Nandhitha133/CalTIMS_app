@@ -35,6 +35,7 @@ import {
   Search,
 } from 'lucide-react-native';
 import { settingsAPI } from '../../../services/endpoints';
+import { useSocketEvent } from '../../../services/socket';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useAuthStore } from '../../../store/authStore';
 import * as ImagePicker from 'react-native-image-picker';
@@ -357,9 +358,14 @@ export default function OrganizationTab() {
   });
 
   // Fetch settings
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
     queryFn: () => settingsAPI.getSettings().then((r: any) => r.data.data),
+  });
+
+  useSocketEvent('settings_updated', (payload) => {
+    console.log('[Socket] Settings updated event received in OrganizationTab:', payload);
+    refetch();
   });
 
   useEffect(() => {

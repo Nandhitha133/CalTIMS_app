@@ -23,6 +23,7 @@ import {
   LifeBuoy,
 } from 'lucide-react-native';
 import { settingsAPI } from '../../../services/endpoints';
+import { useSocketEvent } from '../../../services/socket';
 import { useAuthStore } from '../../../store/authStore';
 import PageHeader from '../../../components/common/PageHeader';
 import Layout from '../../../components/common/Layout';
@@ -177,6 +178,11 @@ export default function NotificationsTab() {
       fetchSettings();
     }, [fetchSettings])
   );
+
+  useSocketEvent('settings_updated', (payload) => {
+    console.log('[Socket] Settings updated event received in NotificationsTab:', payload);
+    fetchSettings();
+  });
 
   const handleSave = async () => {
     setSaving(true);

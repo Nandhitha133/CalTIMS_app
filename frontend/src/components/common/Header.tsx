@@ -446,8 +446,7 @@ export default function Header({
                   navigation.navigate('Profile');
                 }}
               >
-                <User size={18} color="#64748b" />
-                <Text style={styles.profileActionText}>My Profile</Text>
+               
               </TouchableOpacity>
 
               <TouchableOpacity 
