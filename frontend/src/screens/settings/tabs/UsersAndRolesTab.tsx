@@ -16,29 +16,32 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { 
-  ChevronDown, 
-  ChevronRight, 
-  Check, 
-  Database, 
-  Users, 
-  Clock, 
-  CalendarCheck, 
-  FileText, 
-  Briefcase, 
-  CheckSquare, 
-  LineChart, 
-  Megaphone, 
-  HelpCircle, 
-  Settings as SettingsIcon, 
-  Shield, 
-  Search, 
-  Trash2, 
-  AlertCircle, 
-  ListChecks, 
-  Plus, 
+  ChevronDown,
+  ChevronRight,
+  Check,
+  Database,
+  Users,
+  Clock,
+  CalendarCheck,
+  Menu,
+  FileText,
+  Briefcase,
+  CheckSquare,
+  LineChart,
+  Megaphone,
+  HelpCircle,
+  Settings as SettingsIcon,
+  Shield,
+  Search,
+  Trash2,
+  AlertCircle,
+  ListChecks,
+  Plus,
   Save,
-  Square
+  Square,
+  ListChecks as ListChecksDup
 } from 'lucide-react-native';
+import CollapsibleSidebar from '../../../components/common/CollapsibleSidebar';
 import { settingsAPI } from '../../../services/endpoints';
 import { useSocketEvent } from '../../../services/socket';
 import Header from '../../../components/common/Header';
@@ -361,10 +364,18 @@ const getIconForModule = (module: string) => {
 };
 
 // Role Timeline Component
-const RoleTimeline = ({ roleName }: { roleName: string }) => {
+  const RoleTimeline = ({ roleName }: { roleName: string }) => {
   const { data, isLoading } = useQuery({
     queryKey: ['permission-audit-logs', roleName],
-    queryFn: () => settingsAPI.getPermissionAuditLogs({ roleName }).then((r: any) => r.data?.data || r.data || []),
+    queryFn: async () => {
+      try {
+        const res: any = await settingsAPI.getPermissionAuditLogs({ roleName });
+        return res?.data?.data || res?.data || res || [];
+      } catch (err: any) {
+        console.warn('Permission audit logs fetch failed:', err?.message || err);
+        return [];
+      }
+    },
     enabled: !!roleName,
   });
   const logs = data || [];
@@ -435,6 +446,7 @@ export default function UsersAndRolesTab() {
   const [addRoleModalVisible, setAddRoleModalVisible] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [previewSidebarVisible, setPreviewSidebarVisible] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
@@ -788,12 +800,21 @@ export default function UsersAndRolesTab() {
                   </View>
                   
                   {!currentRole.isSystem && !isBulkMode && (
-                    <TouchableOpacity
+                    <>
+                      <TouchableOpacity
+                        style={styles.previewButton}
+                        onPress={() => setPreviewSidebarVisible(true)}
+                      >
+                        <Menu size={18} color="#64748b" />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
                         style={styles.deleteRoleButton}
                         onPress={() => handleDeleteRole(activeRoleIdx)}
                       >
-                      <Trash2 size={18} color="#ef4444" />
-                    </TouchableOpacity>
+                        <Trash2 size={18} color="#ef4444" />
+                      </TouchableOpacity>
+                    </>
                   )}
                 </View>
 
@@ -932,6 +953,21 @@ export default function UsersAndRolesTab() {
           </View>
         </View>
       </Modal>
+
+      {/* Sidebar Preview for selected role */}
+      {currentRole && (
+        <CollapsibleSidebar
+          visible={previewSidebarVisible}
+          onClose={() => setPreviewSidebarVisible(false)}
+          user={{
+            id: `preview-${currentRole.name}`,
+            name: `Preview - ${currentRole.name}`,
+            email: `preview+${currentRole.name.toLowerCase().replace(/\s+/g, '_')}@example.local`,
+            role: currentRole.name,
+            roleId: { permissions: currentRole.permissions }
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -1169,6 +1205,12 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 12,
     backgroundColor: '#fee2e2',
+  },
+  previewButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    marginRight: 8,
   },
   unsavedBanner: {
     flexDirection: 'row',

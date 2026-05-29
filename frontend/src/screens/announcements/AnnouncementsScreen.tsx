@@ -18,6 +18,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   Megaphone,
   Plus,
@@ -31,6 +32,7 @@ import {
   Calendar,
   CheckCircle,
   ChevronRight,
+  Eye,
 } from 'lucide-react-native';
 import { announcementAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
@@ -40,6 +42,7 @@ interface User {
   name: string;
   email: string;
   role: string;
+  isOwner?: boolean;
 }
 
 interface Announcement {
@@ -105,12 +108,14 @@ const ROLE_LABELS: Record<string, string> = {
 
 const AnnouncementCard = ({
   announcement,
+  onView,
   onEdit,
   onDelete,
   isExpired,
   canManage
 }: {
   announcement: Announcement;
+  onView: (a: Announcement) => void;
   onEdit: (a: Announcement) => void;
   onDelete: (a: Announcement) => void;
   isExpired: (date?: string) => boolean;
@@ -131,15 +136,14 @@ const AnnouncementCard = ({
       ]}
     >
       <TouchableOpacity
-        activeOpacity={canManage ? 0.7 : 1}
-        onPress={() => canManage && onEdit(announcement)}
+        activeOpacity={0.8}
+        onPress={() => onView(announcement)}
         style={styles.cardHeader}
-        disabled={!canManage}
       >
         <View style={[styles.iconContainer, { backgroundColor: cfg.badgeBg }]}>
           <TypeIcon size={18} color={cfg.badgeText} />
         </View>
-        <View style={styles.cardContent}>
+        <View style={styles.cardHeaderContent}>
           <View style={styles.cardTitleRow}>
             <Text style={styles.cardTitle} numberOfLines={1}>{announcement.title}</Text>
             <View style={[styles.typeBadge, { backgroundColor: cfg.badgeBg }]}>
@@ -149,13 +153,13 @@ const AnnouncementCard = ({
 
           <View style={styles.badgeRow}>
             {!announcement.isActive && (
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusBadgeText}>Draft</Text>
+              <View style={[styles.statusPill, styles.statusPillDraft]}>
+                <Text style={[styles.statusPillText, styles.statusPillTextDraft]}>Draft</Text>
               </View>
             )}
             {expired && (
-              <View style={styles.expiredBadge}>
-                <Text style={styles.expiredBadgeText}>Expired</Text>
+              <View style={[styles.statusPill, styles.statusPillExpired]}>
+                <Text style={[styles.statusPillText, styles.statusPillTextExpired]}>Expired</Text>
               </View>
             )}
           </View>
@@ -167,7 +171,7 @@ const AnnouncementCard = ({
       <View style={styles.cardDivider} />
 
       <View style={styles.cardFooter}>
-        <View style={styles.metaInfo}>
+        <View style={styles.authorRow}>
           <View style={styles.authorAvatar}>
             <Text style={styles.authorInitial}>
               {announcement.publishedBy?.name?.charAt(0) || 'S'}
@@ -179,16 +183,21 @@ const AnnouncementCard = ({
           </View>
         </View>
 
-        {canManage && (
-          <View style={styles.cardActions}>
-            <TouchableOpacity onPress={() => onEdit(announcement)} style={styles.actionBtn}>
-              <Pencil size={14} color="#64748b" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => onDelete(announcement)} style={styles.actionBtn}>
-              <Trash2 size={14} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.actionGroup}>
+          <TouchableOpacity onPress={() => onView(announcement)} style={[styles.actionBtn, styles.viewAction]}>
+            <Eye size={16} color="#4f46e5" />
+          </TouchableOpacity>
+          {canManage && (
+            <>
+              <TouchableOpacity onPress={() => onEdit(announcement)} style={[styles.actionBtn, styles.editAction]}>
+                <Pencil size={16} color="#d97706" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onDelete(announcement)} style={[styles.actionBtn, styles.deleteAction]}>
+                <Trash2 size={16} color="#dc2626" />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
 
       <View style={styles.targetAudience}>
@@ -220,6 +229,7 @@ const AnnouncementModal = ({
   onSubmit,
   isSubmitting,
   toggleRole,
+  onOpenDatePicker,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -229,6 +239,7 @@ const AnnouncementModal = ({
   onSubmit: () => void;
   isSubmitting: boolean;
   toggleRole: (role: string) => void;
+  onOpenDatePicker: () => void;
 }) => {
   const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.info;
 
@@ -325,13 +336,15 @@ const AnnouncementModal = ({
 
               <View style={modalStyles.field}>
                 <Text style={modalStyles.label}>Expires On (Optional)</Text>
-                <TextInput
-                  style={modalStyles.input}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94a3b8"
-                  value={form.expiresAt}
-                  onChangeText={(text) => setForm({ ...form, expiresAt: text })}
-                />
+                <TouchableOpacity
+                  style={modalStyles.datePickerButton}
+                  onPress={onOpenDatePicker}
+                  activeOpacity={0.8}
+                >
+                  <Text style={modalStyles.datePickerText}>
+                    {form.expiresAt ? format(new Date(form.expiresAt), 'MMM d, yyyy') : 'Select expiration date'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={modalStyles.switchRow}>
@@ -367,6 +380,112 @@ const AnnouncementModal = ({
                     </>
                   )}
                 </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const AnnouncementViewModal = ({
+  visible,
+  onClose,
+  announcement,
+  canManage,
+  onEdit,
+  onDelete,
+  isExpired,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  announcement: Announcement | null;
+  canManage: boolean;
+  onEdit: (a: Announcement) => void;
+  onDelete: (a: Announcement) => void;
+  isExpired: (date?: string) => boolean;
+}) => {
+  if (!announcement) return null;
+  const cfg = TYPE_CONFIG[announcement.type] || TYPE_CONFIG.info;
+  const expired = isExpired(announcement.expiresAt);
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+      <View style={modalStyles.overlay}>
+        <View style={modalStyles.container}>
+          <View style={[modalStyles.header, { borderTopColor: cfg.dot }]}> 
+            <View style={modalStyles.headerLeft}>
+              <View style={[modalStyles.headerIcon, { backgroundColor: cfg.badgeBg }]}> 
+                <Megaphone size={16} color={cfg.badgeText} />
+              </View>
+              <Text style={modalStyles.title}>{announcement.title}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={modalStyles.form}>
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Type</Text>
+                <View style={[modalStyles.typeBadge, { backgroundColor: cfg.badgeBg }]}> 
+                  <Text style={[modalStyles.typeBadgeText, { color: cfg.badgeText }]}>{cfg.label}</Text>
+                </View>
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Status</Text>
+                <Text style={modalStyles.infoValue}>{announcement.isActive ? 'Active' : 'Draft'}</Text>
+                {expired && <Text style={[modalStyles.infoValue, { color: '#ef4444' }]}>Expired</Text>}
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Audience</Text>
+                <Text style={modalStyles.infoValue}>
+                  {announcement.targetRoles?.length > 0 ? announcement.targetRoles.map(r => ROLE_LABELS[r]).join(', ') : 'Everyone'}
+                </Text>
+              </View>
+
+              {announcement.expiresAt ? (
+                <View style={modalStyles.field}>
+                  <Text style={modalStyles.label}>Expires On</Text>
+                  <Text style={modalStyles.infoValue}>{format(new Date(announcement.expiresAt), 'MMM d, yyyy')}</Text>
+                </View>
+              ) : null}
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Published By</Text>
+                <Text style={modalStyles.infoValue}>{announcement.publishedBy?.name || 'System'}</Text>
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Created At</Text>
+                <Text style={modalStyles.infoValue}>{format(new Date(announcement.createdAt), 'MMM d, yyyy')}</Text>
+              </View>
+
+              <View style={modalStyles.field}>
+                <Text style={modalStyles.label}>Content</Text>
+                <Text style={modalStyles.cardDescription}>{announcement.content}</Text>
+              </View>
+
+              <View style={modalStyles.buttonRow}>
+                <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+                  <Text style={modalStyles.cancelButtonText}>Close</Text>
+                </TouchableOpacity>
+                {canManage && (
+                  <TouchableOpacity style={modalStyles.submitButton} onPress={() => { onClose(); onEdit(announcement); }}>
+                    <Pencil size={16} color="white" />
+                    <Text style={modalStyles.submitButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+                {canManage && (
+                  <TouchableOpacity style={[modalStyles.cancelButton, { backgroundColor: '#fee2e2' }]} onPress={() => { onClose(); onDelete(announcement); }}>
+                    <Trash2 size={16} color="#ef4444" />
+                    <Text style={[modalStyles.cancelButtonText, { color: '#ef4444' }]}>Delete</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </ScrollView>
@@ -419,13 +538,16 @@ export default function AnnouncementsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [viewTarget, setViewTarget] = useState<Announcement | null>(null);
   const [editTarget, setEditTarget] = useState<Announcement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [limit] = useState(10);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Form state
   const [form, setForm] = useState({
@@ -439,8 +561,14 @@ export default function AnnouncementsScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      loadUserData();
-      fetchAnnouncements();
+      let active = true;
+      const init = async () => {
+        const u = await loadUserData();
+        if (!active) return;
+        await fetchAnnouncements(u);
+      };
+      init();
+      return () => { active = false; };
     }, [page])
   );
 
@@ -448,19 +576,39 @@ export default function AnnouncementsScreen() {
     try {
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
-        setUser(JSON.parse(userData));
+          const parsed = JSON.parse(userData);
+          setUser(parsed);
+          return parsed;
       }
+        return null;
     } catch (error) {
       console.error('Error loading user data:', error);
     }
   };
 
-  const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin';
+  const isAdmin = user?.isOwner || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin' || user?.role?.toLowerCase() === 'owner';
+  const canManage = isAdmin;
 
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = async (currentUser?: User | null) => {
     try {
       setLoading(true);
-      const response = await (isAdmin ? announcementAPI.getAllAdmin({ page, limit }) : announcementAPI.getAll({ limit: 10 }));
+      const u = currentUser || user;
+      const isAdminLocal = u?.isOwner || u?.role?.toLowerCase() === 'admin' || u?.role?.toLowerCase() === 'super_admin' || u?.role?.toLowerCase() === 'owner';
+      let response: any;
+      if (isAdminLocal) {
+        try {
+          response = await announcementAPI.getAllAdmin({ page, limit });
+        } catch (err: any) {
+          if (err?.status === 403) {
+            console.warn('Admin announcements fetch forbidden; falling back to public announcements.', err?.message);
+            response = await announcementAPI.getAll({ limit: 10 });
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        response = await announcementAPI.getAll({ limit: 10 });
+      }
       const resData = (response as any);
 
       // Robust extraction of list and pagination
@@ -498,6 +646,11 @@ export default function AnnouncementsScreen() {
     setEditTarget(null);
     resetForm();
     setShowModal(true);
+  };
+
+  const handleView = (announcement: Announcement) => {
+    setViewTarget(announcement);
+    setShowViewModal(true);
   };
 
   const handleEdit = (announcement: Announcement) => {
@@ -580,6 +733,16 @@ export default function AnnouncementsScreen() {
         ? prev.targetRoles.filter(r => r !== role)
         : [...prev.targetRoles, role],
     }));
+  };
+
+  const handleExpiresDateChange = (_event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setForm(prev => ({
+        ...prev,
+        expiresAt: format(selectedDate, 'yyyy-MM-dd'),
+      }));
+    }
   };
 
   const isExpired = (expiresAt?: string) => {
@@ -666,10 +829,11 @@ export default function AnnouncementsScreen() {
               <AnnouncementCard
                 key={ann._id || (ann as any).id}
                 announcement={ann}
+                onView={handleView}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isExpired={isExpired}
-                canManage={isAdmin}
+                canManage={canManage}
               />
             ))}
 
@@ -706,7 +870,26 @@ export default function AnnouncementsScreen() {
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
         toggleRole={toggleRole}
+        onOpenDatePicker={() => setShowDatePicker(true)}
       />
+      <AnnouncementViewModal
+        visible={showViewModal}
+        onClose={() => setShowViewModal(false)}
+        announcement={viewTarget}
+        canManage={canManage}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        isExpired={isExpired}
+      />
+      {showDatePicker && (
+        <DateTimePicker
+          value={form.expiresAt ? new Date(form.expiresAt) : new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={new Date()}
+          onChange={handleExpiresDateChange}
+        />
+      )}
       <DeleteModal
         visible={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -773,145 +956,193 @@ const styles = StyleSheet.create({
   },
   announcementCard: {
     backgroundColor: 'white',
-    borderRadius: 20,
-    marginBottom: 16,
-    padding: 16,
+    borderRadius: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
-    borderLeftWidth: 5,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   inactiveCard: {
-    opacity: 0.7,
+    opacity: 0.85,
     backgroundColor: '#f8fafc',
   },
   cardHeader: {
     flexDirection: 'row',
-    gap: 16,
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardContent: {
+  cardHeaderContent: {
     flex: 1,
   },
   cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
     marginBottom: 4,
   },
-  cardTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 10,
-  },
   typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   typeBadgeText: {
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  statusPillActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#34d399',
   },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#64748b',
+  statusPillDraft: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#cbd5e1',
   },
-  expiredBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: '#fff1f2',
-    borderWidth: 1,
-    borderColor: '#ffe4e6',
+  statusPillExpired: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecdd3',
   },
-  expiredBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#e11d48',
+  statusPillTextActive: {
+    color: '#047857',
+  },
+  statusPillTextDraft: {
+    color: '#475569',
+  },
+  statusPillTextExpired: {
+    color: '#b91c1c',
+  },
+  cardBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  detailText: {
+    fontSize: 13,
+    color: '#475569',
   },
   cardDescription: {
     fontSize: 14,
     color: '#475569',
     lineHeight: 20,
-    marginBottom: 16,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#f1f5f9',
-    marginBottom: 12,
+    marginTop: 4,
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 4,
   },
-  metaInfo: {
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   authorAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eef2ff',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#dbeafe',
   },
   authorInitial: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#64748b',
+    color: '#4338ca',
   },
   authorName: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
+    fontWeight: '700',
+    color: '#0f172a',
   },
   metaText: {
     fontSize: 11,
     color: '#94a3b8',
   },
-  cardActions: {
+  actionGroup: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 10,
   },
   actionBtn: {
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: '#f8fafc',
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  viewAction: {
+    backgroundColor: '#eef2ff',
+  },
+  editAction: {
+    backgroundColor: '#fffbeb',
+  },
+  deleteAction: {
+    backgroundColor: '#fee2e2',
   },
   targetAudience: {
     flexDirection: 'row',
@@ -1120,6 +1351,18 @@ const modalStyles = StyleSheet.create({
     height: 100,
     textAlignVertical: 'top',
   },
+  datePickerButton: {
+    borderWidth: 1.5,
+    borderColor: '#f1f5f9',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#f8fafc',
+  },
+  datePickerText: {
+    fontSize: 15,
+    color: '#0f172a',
+  },
   charCount: {
     fontSize: 10,
     color: '#94a3b8',
@@ -1146,6 +1389,28 @@ const modalStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
+  },
+  typeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  typeBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#334155',
+    marginTop: 4,
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
   },
   rolesRow: {
     flexDirection: 'row',

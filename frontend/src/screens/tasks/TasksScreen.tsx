@@ -1179,7 +1179,10 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                   <TaskCard
                     key={task._id || task.id}
                     task={task}
-                    onView={setSelectedTask}
+                    onView={(t: Task) => {
+                      setSelectedTask(t);
+                      setShowViewModal(true);
+                    }}
                     onEdit={openEditModal}
                     onDelete={(t: Task) => {
                       setSelectedTask(t);
@@ -1389,7 +1392,9 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                   <View style={detailModalStyles.infoCard}>
                     <Text style={detailModalStyles.infoLabel}>Project</Text>
                     <Text style={detailModalStyles.infoValue}>
-                      {typeof selectedTask?.projectId === 'object' ? (selectedTask?.projectId as Project).name : '—'}
+                      {getProjectDisplayValue(typeof selectedTask?.projectId === 'object'
+                        ? (selectedTask?.projectId as Project)._id || (selectedTask?.projectId as Project).id
+                        : (selectedTask?.projectId as string || '')) || '—'}
                     </Text>
                   </View>
 

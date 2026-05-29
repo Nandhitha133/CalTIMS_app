@@ -1,4 +1,5 @@
 import React from 'react';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import {
   View,
   Text,
@@ -117,10 +118,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   label: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
     color: '#1e293b',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   trigger: {
     flexDirection: 'row',
@@ -129,13 +130,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 48,
+    borderRadius: scale(12),
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(12),
+    minHeight: verticalScale(48),
   },
   triggerText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: '#1e293b',
     fontWeight: '500',
   },
@@ -147,11 +148,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: scale(20),
   },
   modalContent: {
     backgroundColor: '#ffffff',
-    borderRadius: 24,
+    borderRadius: scale(24),
     width: '100%',
     maxHeight: SCREEN_HEIGHT * 0.7,
     overflow: 'hidden',
@@ -160,30 +161,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: scale(20),
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
     color: '#1e293b',
   },
   listContent: {
-    paddingVertical: 8,
+    paddingVertical: verticalScale(8),
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(16),
   },
   selectedOption: {
     backgroundColor: '#f5f7ff',
   },
   optionText: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     color: '#475569',
   },
   selectedOptionText: {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { LucideIcon, Menu } from 'lucide-react-native';
 
 interface PageHeaderProps {
@@ -61,7 +62,7 @@ export default function PageHeader({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 16,
+    paddingVertical: verticalScale(16),
     backgroundColor: '#f8fafc',
   },
   headerRow: {
@@ -75,8 +76,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuButton: {
-    marginRight: 12,
-    padding: 4,
+    marginRight: scale(12),
+    padding: scale(4),
   },
   titleContainer: {
     flex: 1,
@@ -84,17 +85,17 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: scale(8),
   },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: scale(32),
+    height: verticalScale(32),
+    borderRadius: scale(8),
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '800',
     color: '#1e293b',
     letterSpacing: -0.5,
@@ -102,17 +103,17 @@ const styles = StyleSheet.create({
   subtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: '#64748b',
     fontWeight: '500',
   },
   subtitleIcon: {
-    marginRight: 4,
+    marginRight: scale(4),
   },
   rightSection: {
-    marginLeft: 12,
+    marginLeft: scale(12),
   },
 });

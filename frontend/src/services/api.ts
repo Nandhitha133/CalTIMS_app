@@ -91,6 +91,17 @@ class ApiService {
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
+      // Graceful fallback for permission-audit endpoints to avoid crashing the app
+      // when some backend environments don't expose the newer audit route.
+      try {
+        const urlLower = (response.url || '').toLowerCase();
+        if (response.status === 404 && (urlLower.includes('/settings/permissions/audit') || urlLower.includes('/settings/permission-audit-logs'))) {
+          console.warn(`[API] 404 for audit endpoint ${response.url} — returning empty list instead of throwing`);
+          return [] as unknown as T;
+        }
+      } catch (e) {
+        // ignore and continue to normal error path
+      }
       let errorMessage = `Server Error [${response.status}]`;
       let errorData = null;
 

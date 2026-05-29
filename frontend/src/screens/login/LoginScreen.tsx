@@ -22,7 +22,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { Mail, Lock, Eye, EyeOff, ChevronRight, Square, CheckSquare } from 'lucide-react-native';
 import api, { BASE_URL } from '../../services/api';
-
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -369,19 +369,19 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   titleSection: {
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   title: {
-    fontSize: 48,
+    fontSize: moderateScale(48),
     fontWeight: '800',
     color: '#1e293b',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   titleUnderline: {
-    width: 64,
-    height: 4,
+    width: scale(64),
+    height: verticalScale(4),
     backgroundColor: '#2196f3',
-    borderRadius: 2,
+    borderRadius: scale(2),
   },
   googleButton: {
     marginBottom: 32,
@@ -392,12 +392,12 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   googleGradient: {
-    height: 64,
-    borderRadius: 16,
+    height: verticalScale(64),
+    borderRadius: scale(16),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: scale(12),
   },
   googleIconContainer: {
     backgroundColor: 'white',
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: 'white',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: moderateScale(16),
     letterSpacing: 0.5,
   },
   divider: {
@@ -421,8 +421,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0',
   },
   dividerText: {
-    marginHorizontal: 16,
-    fontSize: 10,
+    marginHorizontal: scale(16),
+    fontSize: moderateScale(10),
     fontWeight: '800',
     color: '#94a3b8',
     letterSpacing: 1.5,
@@ -434,11 +434,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '800',
     color: '#64748b',
     letterSpacing: 1,
-    marginLeft: 4,
+    marginLeft: scale(4),
   },
   passwordHeader: {
     flexDirection: 'row',
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   forgotPassword: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '800',
     color: '#2196f3',
     letterSpacing: 0.5,
@@ -463,14 +463,14 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 64,
+    height: verticalScale(64),
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 16,
-    paddingLeft: 48,
-    paddingRight: 48,
-    fontSize: 16,
+    borderRadius: scale(16),
+    paddingLeft: scale(48),
+    paddingRight: scale(48),
+    fontSize: moderateScale(16),
     fontWeight: '600',
     color: '#1e293b',
   },
@@ -480,46 +480,46 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     position: 'absolute',
-    right: 16,
+    right: scale(16),
   },
   errorText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: '#ef4444',
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: scale(8),
   },
   submitButton: {
-    marginTop: 8,
+    marginTop: verticalScale(8),
     shadowColor: '#2196f3',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: verticalScale(4) },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: scale(8),
     elevation: 5,
   },
   submitGradient: {
-    height: 64,
-    borderRadius: 16,
+    height: verticalScale(64),
+    borderRadius: scale(16),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: scale(12),
   },
   submitButtonText: {
     color: 'white',
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: moderateScale(16),
     letterSpacing: 1,
   },
   footer: {
-    marginTop: 48,
-    paddingTop: 32,
+    marginTop: verticalScale(48),
+    paddingTop: verticalScale(32),
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
     alignItems: 'center',
-    gap: 12,
+    gap: verticalScale(12),
   },
   footerText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#64748b',
   },
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   footerNote: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '500',
     color: '#94a3b8',
     fontStyle: 'italic',
@@ -536,15 +536,15 @@ const styles = StyleSheet.create({
   rememberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: -8,
-    marginBottom: 8,
-    paddingLeft: 4,
+    marginTop: verticalScale(-8),
+    marginBottom: verticalScale(8),
+    paddingLeft: scale(4),
   },
   checkbox: {
-    marginRight: 8,
+    marginRight: scale(8),
   },
   rememberText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#64748b',
   },

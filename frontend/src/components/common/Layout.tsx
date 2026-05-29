@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { scale, verticalScale } from '../../utils/responsive';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Header from './Header';
 import Footer from './Footer';
@@ -87,10 +88,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 60,
+    paddingBottom: verticalScale(60),
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(8),
   },
 });

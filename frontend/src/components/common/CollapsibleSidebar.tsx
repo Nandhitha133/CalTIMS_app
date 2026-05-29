@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import {
   View,
   Text,
@@ -238,25 +239,34 @@ export default function CollapsibleSidebar({
     if (roleName === 'admin' || roleName === 'super_admin' || roleName === 'owner') return true;
 
     // Check granular permissions if available
-    const permissions = user.roleId?.permissions;
-    if (permissions && item.module && item.submodule) {
-      const modulePerms = permissions[item.module];
-      if (modulePerms) {
-        const submodulePerms = modulePerms[item.submodule];
-        // If the submodule exists in permissions and has at least one action (like 'view'), grant access
-        if (submodulePerms && Array.isArray(submodulePerms) && submodulePerms.length > 0) {
-          return true;
+    // Permissions may be attached either to `user.roleId.permissions` (populated role object)
+    // or flattened to `user.permissions` depending on the API response shape.
+    const permissions = user.roleId?.permissions || (user as any).permissions;
+
+    // If granular permissions are available, use them decisively
+    if (permissions) {
+      if (item.module && item.submodule) {
+        const modulePerms = permissions[item.module];
+        if (modulePerms) {
+          const submodulePerms = modulePerms[item.submodule];
+          if (submodulePerms && Array.isArray(submodulePerms) && submodulePerms.length > 0) {
+            return true;
+          }
         }
+        // permissions exist but this module/submodule not allowed
+        return false;
       }
-      // If we have permissions configured but this module/submodule isn't found, deny access
+      // permissions exist but item has no module/submodule — deny by default
       return false;
     }
 
-    // Fallback to role-based check if granular permissions are not available or not applicable
-    if (!item.roles || item.roles.length === 0) return true;
+    // No granular permissions present: fall back to role-based list when provided
+    if (item.roles && item.roles.length > 0) {
+      return item.roles.map(r => r.toLowerCase()).includes(roleName);
+    }
 
-    // Check if user role is in the allowed roles list
-    return item.roles.map(r => r.toLowerCase()).includes(roleName);
+    // No permissions data and no explicit role restrictions means this item should be visible by default
+    return true;
   };
 
 
@@ -402,14 +412,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   sidebar: {
-    width: SIDEBAR_WIDTH,
+    width: scale(SIDEBAR_WIDTH),
     backgroundColor: '#ffffff',
     height: '100%',
     zIndex: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
+    shadowOffset: { width: scale(2), height: 0 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: scale(8),
     elevation: 5,
   },
   backdrop: {
@@ -418,16 +428,16 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: verticalScale(12),
+    right: scale(12),
     zIndex: 20,
-    padding: 8,
+    padding: scale(8),
   },
   logoSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(24),
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
@@ -435,79 +445,79 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   companyName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '800',
     color: '#1e293b',
   },
   companySubtitle: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: '#64748b',
     fontWeight: '500',
-    letterSpacing: 1,
-    marginTop: 2,
+    letterSpacing: scale(1),
+    marginTop: verticalScale(2),
   },
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(16),
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: scale(48),
+    height: verticalScale(48),
+    borderRadius: scale(24),
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: scale(12),
   },
   avatarText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
   },
   userInfo: {
     flex: 1,
   },
   userRole: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     color: '#64748b',
-    marginTop: 2,
+    marginTop: verticalScale(2),
     fontWeight: '600',
   },
   navSection: {
-    marginTop: 8,
+    marginTop: verticalScale(8),
   },
   sectionLabel: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '800',
     color: '#94a3b8',
-    letterSpacing: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    letterSpacing: scale(1),
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(8),
     textTransform: 'uppercase',
   },
   navItems: {
-    paddingHorizontal: 12,
+    paddingHorizontal: scale(12),
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 4,
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(12),
+    borderRadius: scale(10),
+    marginBottom: verticalScale(4),
   },
   navItemActive: {
     backgroundColor: '#eff6ff',
   },
   navLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '500',
     color: '#64748b',
-    marginLeft: 12,
+    marginLeft: scale(12),
   },
   navLabelActive: {
     color: '#3b82f6',
@@ -520,28 +530,28 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '180deg' }],
   },
   subItems: {
-    marginLeft: 32,
-    marginBottom: 4,
+    marginLeft: scale(32),
+    marginBottom: verticalScale(4),
   },
   subNavItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingVertical: verticalScale(8),
+    paddingHorizontal: scale(12),
+    borderRadius: scale(8),
   },
   subNavItemActive: {
     backgroundColor: '#eff6ff',
   },
   subNavDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: scale(4),
+    height: verticalScale(4),
+    borderRadius: scale(2),
     backgroundColor: '#cbd5e1',
-    marginRight: 12,
+    marginRight: scale(12),
   },
   subNavLabel: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '500',
     color: '#64748b',
   },
@@ -552,16 +562,16 @@ const styles = StyleSheet.create({
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
-    padding: 12,
-    borderRadius: 12,
+    margin: scale(16),
+    padding: scale(12),
+    borderRadius: scale(12),
     backgroundColor: '#fef2f2',
     marginTop: 'auto',
   },
   logoutText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#ef4444',
-    marginLeft: 12,
+    marginLeft: scale(12),
   },
 });

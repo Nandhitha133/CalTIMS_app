@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 interface FooterProps {
   showCopyright?: boolean;
@@ -28,8 +29,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(16),
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
@@ -41,13 +42,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   copyrightText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '600',
     color: '#475569',
   },
   subtitle: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     color: '#94a3b8',
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
 });

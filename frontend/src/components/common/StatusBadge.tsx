@@ -1,13 +1,14 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 interface StatusBadgeProps {
   status: string;
 }
 
 const badgeStyles = StyleSheet.create({
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start' },
-  text: { fontSize: 11, fontWeight: '600' },
+  badge: { paddingHorizontal: scale(8), paddingVertical: verticalScale(2), borderRadius: scale(6), alignSelf: 'flex-start' },
+  text: { fontSize: moderateScale(11), fontWeight: '600' },
 });
 
 const StatusBadge = memo(({ status }: StatusBadgeProps) => {

@@ -227,8 +227,21 @@ export const settingsAPI = {
     apiService.post('/settings/branding/upload', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
   updateSettings: (data: any) => 
     apiService.put('/settings', data),
-  getPermissionAuditLogs: (params: { roleName: string }) => 
-    apiService.get('/settings/permissions/audit', params),
+  getPermissionAuditLogs: async (params: { roleName: string }) => {
+    try {
+      return await apiService.get('/settings/permissions/audit', params);
+    } catch (err: any) {
+      // Fallback for environments where the newer endpoint isn't available
+      if (err?.status === 404) {
+        try {
+          return await apiService.get('/settings/permission-audit-logs', params);
+        } catch (err2) {
+          throw err; // rethrow original
+        }
+      }
+      throw err;
+    }
+  },
 
 };
 

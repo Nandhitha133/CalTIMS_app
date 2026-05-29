@@ -458,8 +458,20 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   const loadUserData = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
-      if (userData) setUser(JSON.parse(userData));
-    } catch (error) { console.error('Error loading user data:', error); }
+      if (userData) {
+        const parsed = JSON.parse(userData);
+        const parsedUser = {
+          ...parsed,
+          id: parsed.id || parsed._id,
+          _id: parsed._id || parsed.id,
+        };
+        setUser(parsedUser);
+        return parsedUser;
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+    return null;
   };
 
   const fetchProjects = async () => {
@@ -471,9 +483,10 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     } catch (error) { console.error('Error fetching projects:', error); }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (currentUser?: any) => {
     try {
-      const isAdmin = ['admin', 'super_admin', 'owner'].includes(user?.role?.toLowerCase());
+      const role = currentUser?.role || user?.role;
+      const isAdmin = ['admin', 'super_admin', 'owner'].includes(role?.toLowerCase());
       const response = await taskAPI.getAll({ isActive: true, assignedOnly: !isAdmin });
       const data = extractData(response, []);
       setAllTasks(data);
@@ -523,32 +536,34 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     } catch (error) { console.error('Error fetching attendance:', error); }
   };
 
-  const fetchExistingTimesheets = async () => {
+  const fetchExistingTimesheets = async (currentUser?: any) => {
     try {
       if (editId) {
         const response = await timesheetAPI.getById(editId);
         const data = extractData(response);
         if (data) setExistingTimesheets([data]);
       } else {
+        const userId = currentUser?.id || user?.id;
+        if (!userId) return;
         const from = format(weekStart, 'yyyy-MM-dd');
         const to = format(addDays(weekStart, 6), 'yyyy-MM-dd');
-        const response = await timesheetAPI.getAll({ from, to, userId: user?.id });
+        const response = await timesheetAPI.getAll({ from, to, userId });
         setExistingTimesheets(extractData(response, []));
       }
     } catch (error) { console.error('Error fetching timesheets:', error); }
   };
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (currentUser?: any) => {
     setLoading(true);
     await Promise.all([
       fetchProjects(),
-      fetchTasks(),
+      fetchTasks(currentUser),
       fetchSettings(),
       fetchFullSettings(),
       fetchWeekLeaves(),
       fetchGlobalHolidays(),
       fetchAttendanceLogs(),
-      fetchExistingTimesheets(),
+      fetchExistingTimesheets(currentUser),
     ]);
     setLoading(false);
   };
@@ -561,9 +576,15 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
   useFocusEffect(
     useCallback(() => {
-      loadUserData();
-      fetchAllData();
-    }, [weekStart, editId])
+      let active = true;
+      const load = async () => {
+        const loadedUser = await loadUserData();
+        if (!active) return;
+        await fetchAllData(loadedUser || user);
+      };
+      load();
+      return () => { active = false; };
+    }, [weekStart, editId, user?.id])
   );
 
   // Navigation Guard

@@ -33,6 +33,16 @@ router.get('/:id', asyncHandler(async (req, res) => {
   ApiResponse.success(res, { data: project });
 }));
 
+router.get('/:id/analytics/productivity', asyncHandler(async (req, res) => {
+  const data = await projectService.analyzeProductivity(req.params.id, req.organizationId);
+  ApiResponse.success(res, { data });
+}));
+
+router.get('/:id/analytics/cost', asyncHandler(async (req, res) => {
+  const data = await projectService.analyzeAICost(req.params.id, req.organizationId);
+  ApiResponse.success(res, { data });
+}));
+
 router.put('/:id', checkPermission('manageProjects'), asyncHandler(async (req, res) => {
   const project = await projectService.update(req.params.id, req.body, req.user, req.organizationId);
   ApiResponse.success(res, { message: 'Project updated', data: project });

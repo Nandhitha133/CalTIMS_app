@@ -16,6 +16,7 @@ import {
   TextInput,
   Platform,
 } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
@@ -79,6 +80,7 @@ interface User {
   name: string;
   email: string;
   role: string;
+  isOwner?: boolean;
   department?: string;
   employeeId?: string;
 }
@@ -394,12 +396,14 @@ const ProjectCard = ({ project, isSelected, onPress, theme }: any) => {
 };
 
 // Announcement Card Component
-const AnnouncementCard = ({ announcement, theme }: { announcement: Announcement; theme: 'light' | 'dark' }) => (
-  <View style={[styles.announcementCard, { borderBottomColor: theme === 'dark' ? '#334155' : COLORS.border }]}>
-    <Text style={[styles.announcementTitle, { color: theme === 'dark' ? COLORS.white : COLORS.dark }]}>{announcement.title}</Text>
-    <Text style={styles.announcementContent} numberOfLines={2}>{announcement.content}</Text>
-    <Text style={styles.announcementDate}>{format(new Date(announcement.createdAt), 'MMM dd, yyyy')}</Text>
-  </View>
+const AnnouncementCard = ({ announcement, theme, onPress }: { announcement: Announcement; theme: 'light' | 'dark'; onPress?: () => void }) => (
+  <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+    <View style={[styles.announcementCard, { borderBottomColor: theme === 'dark' ? '#334155' : COLORS.border }]}> 
+      <Text style={[styles.announcementTitle, { color: theme === 'dark' ? COLORS.white : COLORS.dark }]}>{announcement.title}</Text>
+      <Text style={styles.announcementContent} numberOfLines={2}>{announcement.content}</Text>
+      <Text style={styles.announcementDate}>{format(new Date(announcement.createdAt), 'MMM dd, yyyy')}</Text>
+    </View>
+  </TouchableOpacity>
 );
 
 // Customization Modal
@@ -468,7 +472,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   });
 
   const userRole = user?.role?.toLowerCase() || '';
-  const isAdmin = userRole === 'admin' || userRole === 'super_admin' || userRole === 'owner';
+  const isAdmin = user?.isOwner || userRole === 'admin' || userRole === 'super_admin' || userRole === 'owner';
   const isHR = userRole === 'hr';
 
   useEffect(() => { loadPreferences(); }, []);
@@ -576,7 +580,23 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
       // Fetch announcements
       try {
-        const announcementsResponse = await announcementAPI.getAll({ limit: 10 });
+        const isAdminUser = currentUser?.isOwner || ['admin', 'super_admin', 'owner'].includes(currentUser?.role?.toLowerCase() || '');
+        let announcementsResponse: any;
+        if (isAdminUser) {
+          try {
+            announcementsResponse = await announcementAPI.getAllAdmin({ limit: 10 });
+          } catch (err: any) {
+            if (err?.status === 403) {
+              console.warn('Admin dashboard announcements forbidden; falling back to public announcements.', err?.message);
+              announcementsResponse = await announcementAPI.getAll({ limit: 10 });
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          announcementsResponse = await announcementAPI.getAll({ limit: 10 });
+        }
+
         const announcementsData = extractData(announcementsResponse, []);
         setAnnouncements(announcementsData);
       } catch (err: any) {
@@ -947,8 +967,23 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           {/* Announcements */}
           {preferences.showAnnouncements && (
             <View style={[styles.announcementsCard, { backgroundColor: preferences.theme === 'dark' ? COLORS.dark : COLORS.white }]}>
-              <View style={styles.announcementsHeader}><Megaphone size={18} color={COLORS.error} /><Text style={[styles.announcementsTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Announcements</Text></View>
-              {announcements.slice(0, 5).map(announcement => (<AnnouncementCard key={announcement._id || announcement.id} announcement={announcement} theme={preferences.theme} />))}
+              <View style={styles.announcementsHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Megaphone size={18} color={COLORS.error} />
+                  <Text style={[styles.announcementsTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark, marginLeft: 8 }]}>Announcements</Text>
+                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('Announcements')}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
+              {announcements.slice(0, 5).map(announcement => (
+                <AnnouncementCard
+                  key={announcement._id || announcement.id}
+                  announcement={announcement}
+                  theme={preferences.theme}
+                  onPress={() => navigation.navigate('Announcements')}
+                />
+              ))}
               {announcements.length === 0 && <Text style={styles.emptyText}>No announcements</Text>}
             </View>
           )}
@@ -976,149 +1011,149 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, paddingBottom: 100 },
+  content: { padding: scale(16), paddingBottom: verticalScale(100) },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.light },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.light, padding: 20 },
-  errorText: { fontSize: 14, color: COLORS.error, textAlign: 'center', marginTop: 12, marginBottom: 16 },
-  retryButton: { backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12 },
-  retryButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.white },
-  heroSection: { borderRadius: 24, padding: 20, marginBottom: 20, position: 'relative' },
-  settingsButton: { position: 'absolute', top: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, zIndex: 10 },
-  settingsButtonText: { fontSize: 10, color: '#94a3b8', fontWeight: '600' },
-  dateText: { fontSize: 12, color: '#94a3b8', fontWeight: '600', marginBottom: 8 },
-  greetingText: { fontSize: 28, fontWeight: '800', color: COLORS.white, marginBottom: 4 },
-  weekText: { fontSize: 13, color: '#cbd5e1', marginTop: 4 },
-  progressSection: { marginTop: 16 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  progressLabel: { fontSize: 11, fontWeight: '600', color: '#94a3b8' },
-  progressPercent: { fontSize: 13, fontWeight: '700' },
-  progressBarContainer: { height: 8, backgroundColor: '#334155', borderRadius: 4, overflow: 'hidden' },
-  progressBar: { height: '100%', borderRadius: 4 },
-  actionButtons: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  actionButton: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.light, padding: scale(20) },
+  errorText: { fontSize: moderateScale(14), color: COLORS.error, textAlign: 'center', marginTop: verticalScale(12), marginBottom: verticalScale(16) },
+  retryButton: { backgroundColor: COLORS.primary, paddingHorizontal: scale(24), paddingVertical: verticalScale(10), borderRadius: scale(12) },
+  retryButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: COLORS.white },
+  heroSection: { borderRadius: scale(24), padding: scale(20), marginBottom: verticalScale(20), position: 'relative' },
+  settingsButton: { position: 'absolute', top: verticalScale(16), right: scale(16), flexDirection: 'row', alignItems: 'center', gap: scale(6), backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(20), zIndex: 10 },
+  settingsButtonText: { fontSize: moderateScale(10), color: '#94a3b8', fontWeight: '600' },
+  dateText: { fontSize: moderateScale(12), color: '#94a3b8', fontWeight: '600', marginBottom: verticalScale(8) },
+  greetingText: { fontSize: moderateScale(28), fontWeight: '800', color: COLORS.white, marginBottom: verticalScale(4) },
+  weekText: { fontSize: moderateScale(13), color: '#cbd5e1', marginTop: verticalScale(4) },
+  progressSection: { marginTop: verticalScale(16) },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(8) },
+  progressLabel: { fontSize: moderateScale(11), fontWeight: '600', color: '#94a3b8' },
+  progressPercent: { fontSize: moderateScale(13), fontWeight: '700' },
+  progressBarContainer: { height: verticalScale(8), backgroundColor: '#334155', borderRadius: scale(4), overflow: 'hidden' },
+  progressBar: { height: '100%', borderRadius: scale(4) },
+  actionButtons: { flexDirection: 'row', gap: scale(12), marginTop: verticalScale(16) },
+  actionButton: { flex: 1, paddingVertical: verticalScale(10), borderRadius: scale(12), alignItems: 'center' },
   primaryButton: { backgroundColor: COLORS.primary },
   secondaryButton: { backgroundColor: '#334155' },
-  actionButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 12 },
-  adminStats: { marginTop: 16, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 16, flexDirection: 'row', justifyContent: 'space-around' },
+  actionButtonText: { color: COLORS.white, fontWeight: '700', fontSize: moderateScale(12) },
+  adminStats: { marginTop: verticalScale(16), backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: scale(16), padding: scale(16), flexDirection: 'row', justifyContent: 'space-around' },
   adminStatItem: { alignItems: 'center' },
-  adminStatValue: { fontSize: 32, fontWeight: '800', color: COLORS.white },
-  adminStatLabel: { fontSize: 11, color: '#94a3b8', marginTop: 4 },
+  adminStatValue: { fontSize: moderateScale(32), fontWeight: '800', color: COLORS.white },
+  adminStatLabel: { fontSize: moderateScale(11), color: '#94a3b8', marginTop: verticalScale(4) },
   adminStatDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
-  quickActions: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  quickAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 14, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  quickActionIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  quickActionText: { fontSize: 14, fontWeight: '600' },
-  statsGrid: { marginBottom: 20 },
-  statRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  statCard: { flex: 1, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  quickActions: { flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(20) },
+  quickAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(12), padding: scale(14), borderRadius: scale(16), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
+  quickActionIcon: { width: scale(40), height: verticalScale(40), borderRadius: scale(12), alignItems: 'center', justifyContent: 'center' },
+  quickActionText: { fontSize: moderateScale(14), fontWeight: '600' },
+  statsGrid: { marginBottom: verticalScale(20) },
+  statRow: { flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(12) },
+  statCard: { flex: 1, borderRadius: scale(16), padding: scale(16), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
   statCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  statIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  statValue: { fontSize: 24, fontWeight: '800' },
-  statCardFooter: { marginTop: 12 },
-  statTitle: { fontSize: 14, fontWeight: '700' },
-  statSubtitle: { fontSize: 11, color: COLORS.gray, marginTop: 4 },
-  chartCard: { borderRadius: 24, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3 },
-  chartHeader: { marginBottom: 20 },
-  chartHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  chartTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  chartIconContainer: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' },
-  chartTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  chartSubtitle: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginTop: 2, letterSpacing: 0.5 },
+  statIcon: { width: scale(40), height: verticalScale(40), borderRadius: scale(12), alignItems: 'center', justifyContent: 'center' },
+  statValue: { fontSize: moderateScale(24), fontWeight: '800' },
+  statCardFooter: { marginTop: verticalScale(12) },
+  statTitle: { fontSize: moderateScale(14), fontWeight: '700' },
+  statSubtitle: { fontSize: moderateScale(11), color: COLORS.gray, marginTop: verticalScale(4) },
+  chartCard: { borderRadius: scale(24), padding: scale(20), marginBottom: verticalScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.05, shadowRadius: scale(12), elevation: 3 },
+  chartHeader: { marginBottom: verticalScale(20) },
+  chartHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: verticalScale(16) },
+  chartTitleRow: { flexDirection: 'row', alignItems: 'center', gap: scale(12) },
+  chartIconContainer: { width: scale(36), height: verticalScale(36), borderRadius: scale(10), backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' },
+  chartTitle: { fontSize: moderateScale(18), fontWeight: '800', letterSpacing: -0.5 },
+  chartSubtitle: { fontSize: moderateScale(10), fontWeight: '700', color: '#94a3b8', marginTop: verticalScale(2), letterSpacing: 0.5 },
   weekNavigationWrapper: { flexDirection: 'row', justifyContent: 'flex-start' },
-  weekNavigation: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 4, borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9' },
-  navBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  weekDateRange: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f1f5f9' },
-  weekDate: { fontSize: 11, fontWeight: '800', color: '#1e293b' },
+  weekNavigation: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: scale(4), borderRadius: scale(12), borderWidth: 1, borderColor: '#f1f5f9' },
+  navBtn: { width: scale(28), height: verticalScale(28), alignItems: 'center', justifyContent: 'center' },
+  weekDateRange: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(12), borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f1f5f9' },
+  weekDate: { fontSize: moderateScale(11), fontWeight: '800', color: '#1e293b' },
   chartTotalContainer: { alignItems: 'flex-end' },
-  chartTotalValue: { fontSize: 24, fontWeight: '800', letterSpacing: -1 },
-  chartTotalUnit: { fontSize: 14, color: '#94a3b8', fontWeight: '600' },
-  chartTotalLabel: { fontSize: 9, fontWeight: '700', color: '#94a3b8', marginTop: 2 },
-  chartMainContent: { flexDirection: 'row', height: 200 },
-  yAxis: { width: 30, justifyContent: 'space-between', paddingBottom: 25, paddingTop: 5 },
-  yAxisLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', textAlign: 'right', paddingRight: 8 },
+  chartTotalValue: { fontSize: moderateScale(24), fontWeight: '800', letterSpacing: -1 },
+  chartTotalUnit: { fontSize: moderateScale(14), color: '#94a3b8', fontWeight: '600' },
+  chartTotalLabel: { fontSize: moderateScale(9), fontWeight: '700', color: '#94a3b8', marginTop: verticalScale(2) },
+  chartMainContent: { flexDirection: 'row', height: verticalScale(200) },
+  yAxis: { width: scale(30), justifyContent: 'space-between', paddingBottom: verticalScale(25), paddingTop: verticalScale(5) },
+  yAxisLabel: { fontSize: moderateScale(12), fontWeight: '700', color: '#94a3b8', textAlign: 'right', paddingRight: scale(8) },
   chartArea: { flex: 1, position: 'relative' },
-  gridLines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 25, justifyContent: 'space-between' },
+  gridLines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: verticalScale(25), justifyContent: 'space-between' },
   gridLine: { height: 1, backgroundColor: '#f1f5f9', width: '100%' },
-  barsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', paddingBottom: 25, zIndex: 1 },
-  barWrapper: { alignItems: 'center', width: 40 },
+  barsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', paddingBottom: verticalScale(25), zIndex: 1 },
+  barWrapper: { alignItems: 'center', width: scale(40) },
   barStack: { flex: 1, justifyContent: 'flex-end', width: '100%', alignItems: 'center' },
-  bar: { width: 20 },
-  barDayLabel: { fontSize: 12, fontWeight: '700', color: '#94a3b8', marginTop: 12 },
-  projectsCard: { borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  projectsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  projectsTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  projectsTitle: { fontSize: 16, fontWeight: '700' },
-  viewAllText: { fontSize: 11, fontWeight: '600', color: COLORS.primary },
-  projectCard: { padding: 12, borderRadius: 12, marginBottom: 8, borderWidth: 1 },
-  projectCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  projectName: { fontSize: 14, fontWeight: '600' },
-  projectHours: { fontSize: 14, fontWeight: '700' },
-  projectBudget: { fontSize: 10, color: COLORS.gray, marginTop: 6 },
-  announcementsCard: { borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  announcementsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  announcementsTitle: { fontSize: 16, fontWeight: '700' },
-  announcementCard: { paddingVertical: 12, borderBottomWidth: 1 },
-  announcementTitle: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
-  announcementContent: { fontSize: 11, color: COLORS.gray, marginBottom: 4 },
-  announcementDate: { fontSize: 10, color: COLORS.gray },
-  insightCard: { backgroundColor: '#eff6ff', borderRadius: 16, padding: 16, flexDirection: 'row', gap: 12, marginBottom: 20 },
+  bar: { width: scale(20) },
+  barDayLabel: { fontSize: moderateScale(12), fontWeight: '700', color: '#94a3b8', marginTop: verticalScale(12) },
+  projectsCard: { borderRadius: scale(20), padding: scale(16), marginBottom: verticalScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
+  projectsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) },
+  projectsTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: scale(8) },
+  projectsTitle: { fontSize: moderateScale(16), fontWeight: '700' },
+  viewAllText: { fontSize: moderateScale(11), fontWeight: '600', color: COLORS.primary },
+  projectCard: { padding: scale(12), borderRadius: scale(12), marginBottom: verticalScale(8), borderWidth: 1 },
+  projectCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(8) },
+  projectName: { fontSize: moderateScale(14), fontWeight: '600' },
+  projectHours: { fontSize: moderateScale(14), fontWeight: '700' },
+  projectBudget: { fontSize: moderateScale(10), color: COLORS.gray, marginTop: verticalScale(6) },
+  announcementsCard: { borderRadius: scale(20), padding: scale(16), marginBottom: verticalScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
+  announcementsHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: verticalScale(16) },
+  announcementsTitle: { fontSize: moderateScale(16), fontWeight: '700' },
+  announcementCard: { paddingVertical: verticalScale(12), borderBottomWidth: 1 },
+  announcementTitle: { fontSize: moderateScale(13), fontWeight: '600', marginBottom: verticalScale(4) },
+  announcementContent: { fontSize: moderateScale(11), color: COLORS.gray, marginBottom: verticalScale(4) },
+  announcementDate: { fontSize: moderateScale(10), color: COLORS.gray },
+  insightCard: { backgroundColor: '#eff6ff', borderRadius: scale(16), padding: scale(16), flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(20) },
   insightContent: { flex: 1 },
-  insightTitle: { fontSize: 13, fontWeight: '700', color: COLORS.dark, marginBottom: 4 },
-  insightText: { fontSize: 12, color: '#475569', marginBottom: 8 },
-  insightLink: { fontSize: 11, fontWeight: '600', color: COLORS.primary },
-  emptyText: { textAlign: 'center', color: COLORS.gray, padding: 20 },
+  insightTitle: { fontSize: moderateScale(13), fontWeight: '700', color: COLORS.dark, marginBottom: verticalScale(4) },
+  insightText: { fontSize: moderateScale(12), color: '#475569', marginBottom: verticalScale(8) },
+  insightLink: { fontSize: moderateScale(11), fontWeight: '600', color: COLORS.primary },
+  emptyText: { textAlign: 'center', color: COLORS.gray, padding: scale(20) },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%', padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontSize: 20, fontWeight: '700' },
-  modalSection: { marginBottom: 24 },
-  modalSectionTitle: { fontSize: 14, fontWeight: '700', color: COLORS.dark, marginBottom: 12 },
-  optionsRow: { flexDirection: 'row', gap: 12 },
-  optionButton: { flex: 1, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, backgroundColor: COLORS.light, alignItems: 'center' },
+  modalContainer: { borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), maxHeight: '80%', padding: scale(20) },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(20), paddingBottom: verticalScale(12), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalTitle: { fontSize: moderateScale(20), fontWeight: '700' },
+  modalSection: { marginBottom: verticalScale(24) },
+  modalSectionTitle: { fontSize: moderateScale(14), fontWeight: '700', color: COLORS.dark, marginBottom: verticalScale(12) },
+  optionsRow: { flexDirection: 'row', gap: scale(12) },
+  optionButton: { flex: 1, paddingVertical: verticalScale(10), paddingHorizontal: scale(16), borderRadius: scale(12), backgroundColor: COLORS.light, alignItems: 'center' },
   optionButtonActive: { backgroundColor: COLORS.primary },
-  optionText: { fontSize: 13, fontWeight: '600', color: COLORS.gray },
+  optionText: { fontSize: moderateScale(13), fontWeight: '600', color: COLORS.gray },
   optionTextActive: { color: COLORS.white },
-  switchItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  switchItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  switchLabel: { fontSize: 14, fontWeight: '500' },
-  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 12, marginTop: 16, marginBottom: 8 },
-  saveButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  switchItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: verticalScale(12), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  switchItemLeft: { flexDirection: 'row', alignItems: 'center', gap: scale(12) },
+  switchLabel: { fontSize: moderateScale(14), fontWeight: '500' },
+  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), backgroundColor: COLORS.primary, paddingVertical: verticalScale(14), borderRadius: scale(12), marginTop: verticalScale(16), marginBottom: verticalScale(8) },
+  saveButtonText: { fontSize: moderateScale(14), fontWeight: '700', color: COLORS.white },
   disabledButton: { opacity: 0.6 },
-  timesheetModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
-  projectSelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, marginBottom: 12 },
-  projectSelectorLabel: { fontSize: 14, fontWeight: '500' },
-  projectPicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, marginBottom: 12 },
-  projectPickerItem: { padding: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  projectPickerText: { fontSize: 14 },
-  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, padding: 14, fontSize: 14, marginBottom: 12 },
-  textArea: { height: 80, textAlignVertical: 'top' },
-  leaveModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
-  leaveTypeSelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, marginBottom: 12 },
-  leaveTypeText: { fontSize: 14, fontWeight: '500' },
-  leaveTypePicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, marginBottom: 12 },
-  leaveTypePickerItem: { padding: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border, alignItems: 'center' },
-  leaveTypePickerText: { fontSize: 14, fontWeight: '600' },
-  dateRangeRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  datePickerButton: { flex: 1, padding: 14, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: 'center' },
-  datePickerLabel: { fontSize: 10, color: COLORS.gray, marginBottom: 4 },
-  datePickerValue: { fontSize: 12, fontWeight: '500' },
-  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 12, marginTop: 8 },
-  submitButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
-  calendarContainer: { borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  calendarNav: { padding: 8 },
-  calendarMonth: { fontSize: 16, fontWeight: '700' },
-  weekDaysRow: { flexDirection: 'row', marginBottom: 8 },
-  weekDayText: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '600', color: COLORS.gray },
+  timesheetModal: { borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), padding: scale(20) },
+  projectSelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: scale(14), borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(12), marginBottom: verticalScale(12) },
+  projectSelectorLabel: { fontSize: moderateScale(14), fontWeight: '500' },
+  projectPicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(12), marginBottom: verticalScale(12) },
+  projectPickerItem: { padding: scale(14), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  projectPickerText: { fontSize: moderateScale(14) },
+  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(12), padding: scale(14), fontSize: moderateScale(14), marginBottom: verticalScale(12) },
+  textArea: { height: verticalScale(80), textAlignVertical: 'top' },
+  leaveModal: { borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), padding: scale(20) },
+  leaveTypeSelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: scale(14), borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(12), marginBottom: verticalScale(12) },
+  leaveTypeText: { fontSize: moderateScale(14), fontWeight: '500' },
+  leaveTypePicker: { borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(12), marginBottom: verticalScale(12) },
+  leaveTypePickerItem: { padding: scale(14), borderBottomWidth: 1, borderBottomColor: COLORS.border, alignItems: 'center' },
+  leaveTypePickerText: { fontSize: moderateScale(14), fontWeight: '600' },
+  dateRangeRow: { flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(12) },
+  datePickerButton: { flex: 1, padding: scale(14), borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(12), alignItems: 'center' },
+  datePickerLabel: { fontSize: moderateScale(10), color: COLORS.gray, marginBottom: verticalScale(4) },
+  datePickerValue: { fontSize: moderateScale(12), fontWeight: '500' },
+  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), backgroundColor: COLORS.primary, paddingVertical: verticalScale(14), borderRadius: scale(12), marginTop: verticalScale(8) },
+  submitButtonText: { fontSize: moderateScale(14), fontWeight: '700', color: COLORS.white },
+  calendarContainer: { borderRadius: scale(20), padding: scale(16), marginBottom: verticalScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
+  calendarHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) },
+  calendarNav: { padding: scale(8) },
+  calendarMonth: { fontSize: moderateScale(16), fontWeight: '700' },
+  weekDaysRow: { flexDirection: 'row', marginBottom: verticalScale(8) },
+  weekDayText: { flex: 1, textAlign: 'center', fontSize: moderateScale(11), fontWeight: '600', color: COLORS.gray },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calendarDay: { width: `${100 / 7}%`, aspectRatio: 1, padding: 4, position: 'relative' },
+  calendarDay: { width: `${100 / 7}%`, aspectRatio: 1, padding: scale(4), position: 'relative' },
   calendarDayOutside: { opacity: 0.3 },
-  calendarDayToday: { backgroundColor: `${COLORS.primary}15`, borderRadius: 8 },
-  calendarEventBar: { position: 'absolute', top: 0, left: 4, right: 4, height: 3, borderRadius: 2 },
-  calendarDayText: { textAlign: 'center', fontSize: 14, fontWeight: '600', marginTop: 6 },
+  calendarDayToday: { backgroundColor: `${COLORS.primary}15`, borderRadius: scale(8) },
+  calendarEventBar: { position: 'absolute', top: 0, left: scale(4), right: scale(4), height: verticalScale(3), borderRadius: scale(2) },
+  calendarDayText: { textAlign: 'center', fontSize: moderateScale(14), fontWeight: '600', marginTop: verticalScale(6) },
   calendarDayTextOutside: { opacity: 0.5 },
   calendarDayTextToday: { color: COLORS.primary },
-  calendarEventCount: { position: 'absolute', bottom: 4, right: 4, backgroundColor: COLORS.primary, borderRadius: 10, paddingHorizontal: 4, paddingVertical: 1 },
-  calendarEventCountText: { fontSize: 8, color: COLORS.white, fontWeight: '600' },
-  calendarLoader: { height: 200 },
+  calendarEventCount: { position: 'absolute', bottom: verticalScale(4), right: scale(4), backgroundColor: COLORS.primary, borderRadius: scale(10), paddingHorizontal: scale(4), paddingVertical: verticalScale(1) },
+  calendarEventCountText: { fontSize: moderateScale(8), color: COLORS.white, fontWeight: '600' },
+  calendarLoader: { height: verticalScale(200) },
 });

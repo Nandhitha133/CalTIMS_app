@@ -38,6 +38,7 @@ interface TimesheetPolicy {
   allowEditAfterSubmission: boolean;
   managerApprovalRequired: boolean;
   minHoursPerDay: number;
+
   maxHoursPerDay: number;
   enforceMinHoursOnSubmit: boolean;
   permissionMaxHoursPerDay: number;
@@ -152,6 +153,7 @@ export default function TimesheetPolicyTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
@@ -263,6 +265,7 @@ export default function TimesheetPolicyTab() {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={scrollEnabled}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
@@ -350,6 +353,8 @@ export default function TimesheetPolicyTab() {
               step={0.5}
               value={policy.permissionMaxHoursPerDay}
               onValueChange={(value) => updatePolicy('permissionMaxHoursPerDay', value)}
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
               minimumTrackTintColor="#f59e0b"
               maximumTrackTintColor="#e2e8f0"
               thumbTintColor="#f59e0b"
@@ -385,6 +390,8 @@ export default function TimesheetPolicyTab() {
               step={1}
               value={policy.permissionMaxDaysPerWeek}
               onValueChange={(value) => updatePolicy('permissionMaxDaysPerWeek', value)}
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
               minimumTrackTintColor="#6366f1"
               maximumTrackTintColor="#e2e8f0"
               thumbTintColor="#6366f1"
@@ -421,6 +428,8 @@ export default function TimesheetPolicyTab() {
               step={1}
               value={policy.permissionMaxDaysPerMonth}
               onValueChange={(value) => updatePolicy('permissionMaxDaysPerMonth', value)}
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
               minimumTrackTintColor="#6366f1"
               maximumTrackTintColor="#e2e8f0"
               thumbTintColor="#6366f1"
@@ -456,6 +465,8 @@ export default function TimesheetPolicyTab() {
               step={0.5}
               value={policy.minHoursPerDay}
               onValueChange={(value) => updatePolicy('minHoursPerDay', value)}
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
               minimumTrackTintColor="#4f46e5"
               maximumTrackTintColor="#e2e8f0"
               thumbTintColor="#4f46e5"
@@ -488,6 +499,8 @@ export default function TimesheetPolicyTab() {
               step={0.5}
               value={policy.maxHoursPerDay}
               onValueChange={(value) => updatePolicy('maxHoursPerDay', value)}
+              onSlidingStart={() => setScrollEnabled(false)}
+              onSlidingComplete={() => setScrollEnabled(true)}
               minimumTrackTintColor="#4f46e5"
               maximumTrackTintColor="#e2e8f0"
               thumbTintColor="#4f46e5"

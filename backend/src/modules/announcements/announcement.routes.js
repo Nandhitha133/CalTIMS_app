@@ -18,12 +18,23 @@ router.use(authenticate);
 router.get('/', asyncHandler(async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
   const now = new Date();
+  const effectiveRole = req.user.isOwner ? 'admin' : (req.user.role || '').toLowerCase();
+  const roleVariants = [
+    effectiveRole,
+    effectiveRole.toUpperCase(),
+    effectiveRole.charAt(0).toUpperCase() + effectiveRole.slice(1),
+  ].filter(Boolean);
   const filter = {
     organizationId: req.organizationId,
     isActive: true,
     $and: [
       { $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] },
-      { $or: [{ targetRoles: { $size: 0 } }, { targetRoles: req.user.role }] },
+      { $or: [
+          { targetRoles: { $size: 0 } },
+          { targetRoles: 'all' },
+          { targetRoles: { $in: roleVariants } },
+        ]
+      },
     ],
   };
 
@@ -50,6 +61,39 @@ router.get('/admin', authorize('admin'), asyncHandler(async (req, res) => {
     Announcement.countDocuments(filter),
   ]);
   ApiResponse.success(res, { data: announcements, pagination: buildPaginationMeta(total, page, limit) });
+}));
+
+// Get single announcement by ID
+router.get('/:id', asyncHandler(async (req, res) => {
+  const announcement = await Announcement.findOne({ _id: req.params.id, organizationId: req.organizationId })
+    .populate('publishedBy', 'name email')
+    .lean();
+
+  if (!announcement) return ApiResponse.notFound(res);
+
+  const userRole = req.user.isOwner ? 'admin' : (req.user.role || '').toLowerCase();
+  const roleVariants = [
+    userRole,
+    userRole.toUpperCase(),
+    userRole.charAt(0).toUpperCase() + userRole.slice(1),
+  ].filter(Boolean);
+  const now = new Date();
+  const isAdminUser = ['admin', 'super_admin', 'owner'].includes(userRole);
+
+  if (!isAdminUser) {
+    const isExpired = announcement.expiresAt && new Date(announcement.expiresAt) <= now;
+    const isVisible = announcement.isActive && !isExpired && (
+      !announcement.targetRoles || announcement.targetRoles.length === 0 ||
+      announcement.targetRoles.includes('all') ||
+      announcement.targetRoles.some(role => roleVariants.includes(role))
+    );
+
+    if (!isVisible) {
+      return ApiResponse.forbidden(res, 'Announcement not visible for your role');
+    }
+  }
+
+  ApiResponse.success(res, { data: announcement });
 }));
 
 // Admin-only: Create announcement + notify all active users

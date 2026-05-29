@@ -164,6 +164,7 @@ export default function IncidentDetailsScreen() {
           category: data.issueType || 'Support',
           incidentId: data.ticketId || data._id?.slice(-8),
           priority: 'Medium', // Default for support tickets as they lack it
+          employee: data.employee || data.user || data.createdBy,
         });
       } else {
         setTicket(data);
@@ -290,7 +291,9 @@ export default function IncidentDetailsScreen() {
                   <View style={styles.metaRowMain}>
                     <View style={styles.metaItemMain}>
                       <User size={14} color="#64748b" />
-                      <Text style={styles.metaTextMain}>{ticket?.employee?.name || 'Unknown'}</Text>
+                      <Text style={styles.metaTextMain}>
+                        {ticket?.employee?.user?.name || ticket?.employee?.name || (ticket as any)?.user?.name || 'Unknown'}
+                      </Text>
                     </View>
                     <View style={styles.metaItemMain}>
                       <Calendar size={14} color="#64748b" />

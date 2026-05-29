@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
+import { scale } from '../../utils/responsive';
 
 interface LoadingSpinnerProps {
   size?: 'small' | 'large';
@@ -24,7 +25,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: scale(20),
     backgroundColor: 'transparent',
   },
 });
