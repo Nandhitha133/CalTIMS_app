@@ -77,6 +77,9 @@ interface NavSection {
   items: NavItem[];
 }
 
+// Super admin email – only this account sees the SUPER ADMIN sidebar section
+const SUPER_ADMIN_EMAIL = 'superadmin@timesheetpro.com';
+
 const navSections: NavSection[] = [
   {
     label: 'Timesheets',
@@ -144,6 +147,7 @@ export default function CollapsibleSidebar({
   const navigation = useNavigation();
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState('CALTIMS');
+  const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
   const slideAnim = React.useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   const currentRoute = useNavigationState(state => {
@@ -170,8 +174,23 @@ export default function CollapsibleSidebar({
 
   useEffect(() => {
     loadCompanyName();
+    checkSuperAdminEmail();
     return () => { };
   }, []);
+
+  const checkSuperAdminEmail = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const parsed = JSON.parse(userData);
+        setIsSuperAdminUser(
+          parsed?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+        );
+      }
+    } catch {
+      setIsSuperAdminUser(false);
+    }
+  };
 
   const loadCompanyName = async () => {
     try {
@@ -324,9 +343,45 @@ export default function CollapsibleSidebar({
                   ))}
                 </View>
               </View>
-            ) : navSections.map((section) => {
-              const visibleItems = section.items.filter(hasPermission);
-              if (visibleItems.length === 0) return null;
+            ) : (
+              <>
+                {/* ── SUPER ADMIN Section ── visible only to superadmin@timesheetpro.com */}
+                {isSuperAdminUser && (
+                  <View style={styles.navSection}>
+                    <View style={styles.superAdminSectionLabel}>
+                      <Text style={styles.superAdminSectionText}>SUPER ADMIN</Text>
+                    </View>
+                    <View style={styles.navItems}>
+                      <TouchableOpacity
+                        style={[
+                          styles.navItem,
+                          styles.superAdminNavItem,
+                          isActive('AdminDashboard') && styles.superAdminNavItemActive,
+                        ]}
+                        onPress={() => navigateToScreen('AdminDashboard')}
+                      >
+                        <LayoutDashboard
+                          size={20}
+                          color={isActive('AdminDashboard') ? '#ffffff' : '#c7d2fe'}
+                        />
+                        <Text
+                          style={[
+                            styles.navLabel,
+                            styles.superAdminNavLabel,
+                            isActive('AdminDashboard') && styles.superAdminNavLabelActive,
+                          ]}
+                        >
+                          Super Dashboard
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* ── Normal Sections ── */}
+                {navSections.map((section) => {
+                  const visibleItems = section.items.filter(hasPermission);
+                  if (visibleItems.length === 0) return null;
 
               return (
                 <View key={section.label} style={styles.navSection}>
@@ -391,14 +446,16 @@ export default function CollapsibleSidebar({
                   </View>
                 </View>
               );
-            })}
-          </ScrollView>
+                })}
+              </>
+            )}
 
           {/* Logout Button */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <LogOut size={20} color="#ef4444" />
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
+        </ScrollView>
         </Animated.View>
         <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
       </View>
@@ -573,5 +630,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ef4444',
     marginLeft: scale(12),
+  },
+
+  // ─── Super Admin Section Styles ───────────────────────────────────────────────
+  superAdminSectionLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(6),
+    marginTop: verticalScale(4),
+    backgroundColor: '#1e1b4b',
+    marginHorizontal: scale(12),
+    borderRadius: scale(8),
+    marginBottom: verticalScale(4),
+  },
+  superAdminSectionText: {
+    fontSize: moderateScale(10),
+    fontWeight: '800',
+    color: '#a5b4fc',
+    letterSpacing: scale(1),
+    textTransform: 'uppercase',
+  },
+  superAdminNavItem: {
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.2)',
+  },
+  superAdminNavItemActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  superAdminNavLabel: {
+    color: '#6366f1',
+    fontWeight: '700',
+  },
+  superAdminNavLabelActive: {
+    color: '#ffffff',
   },
 });

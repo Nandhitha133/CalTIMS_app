@@ -217,7 +217,8 @@ exports.createOrUpdateProfile = async (req, res, next) => {
     console.log('Target User ID:', targetUserId);
     console.log('Organization ID from Request:', req.organizationId);
     
-    if (!targetUserId || !mongoose.Types.isValidObjectId(targetUserId)) {
+    const isValidUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(targetUserId);
+    if (!targetUserId || (!mongoose.Types.isValidObjectId(targetUserId) && !isValidUUID)) {
       return res.status(400).json({ success: false, message: 'Valid User ID is required' });
     }
 

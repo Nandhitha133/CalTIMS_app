@@ -1046,8 +1046,8 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       const rawId = editingEmployee?._id || editingEmployee?.id || (editingEmployee as any).user?._id || (editingEmployee as any).user?.id;
       let targetUserId = getSafeId(rawId);
       
-      // Validation: Ensure it's a valid 24-character hex string (standard MongoDB ID)
-      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(targetUserId);
+      // Validation: Ensure it's a valid 24-character hex string (standard MongoDB ID) or UUID
+      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(targetUserId) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(targetUserId);
       if (!isValidObjectId) {
         throw new Error(`The Employee ID (${targetUserId}) is not a valid format. Please contact support or try re-syncing the employee list.`);
       }

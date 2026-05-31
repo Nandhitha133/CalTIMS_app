@@ -7,6 +7,7 @@ import ResetPasswordScreen from '../screens/login/ResetPasswordScreen';
 import OAuthSuccessScreen from '../screens/login/OAuthSuccessScreen';
 import SignupScreen from '../screens/login/SignupScreen';
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
+import AdminDashboard from '../screens/admin/AdminDashboard';
 import SubscriptionScreen from '../screens/subscription/SubscriptionScreen';
 import MyPayslipsScreen from '../screens/payroll/MyPayslipsScreen';
 import {
@@ -128,7 +129,7 @@ export default function AppNavigator() {
       <Stack.Screen name="OAuthSuccess" component={OAuthSuccessScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
-      <Stack.Screen name="AdminDashboard" component={DashboardScreen} />
+      <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
       <Stack.Screen name="Subscription" component={SubscriptionScreen} />
 
       <Stack.Screen name="Announcements" component={AnnouncementsScreen} />

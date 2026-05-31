@@ -11,7 +11,7 @@ const processedPayrollSchema = new mongoose.Schema(
       index: true
     },
     user: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: 'User',
       required: true,
     },
