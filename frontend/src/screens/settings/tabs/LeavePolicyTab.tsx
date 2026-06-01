@@ -415,7 +415,7 @@ export default function LeavePolicyTab() {
   // Fetch settings
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
-    queryFn: () => settingsAPI.getSettings().then((r: any) => r.data?.data || r.data || r),
+    queryFn: () => settingsAPI.getSettings().then((r: any) => r?.data?.data ?? r?.data ?? r ?? null),
   });
 
   useSocketEvent('settings_updated', (payload) => {

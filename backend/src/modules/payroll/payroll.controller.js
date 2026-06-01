@@ -211,110 +211,158 @@ exports.getProfile = async (req, res, next) => {
 exports.createOrUpdateProfile = async (req, res, next) => {
   try {
     const { user, userId, _id, __v, createdAt, updatedAt, ...bodyData } = req.body;
-    const targetUserId = user || userId;
+    const targetUserId = user || userId || _id;
+    const organizationId = req.organizationId;
+
+    if (!targetUserId || !organizationId) {
+      return res.status(400).json({ success: false, message: 'User ID and Organization ID are mandatory' });
+    }
+
+    // Helper to normalize IDs for Mixed fields
+    const toMixedId = (id) => {
+      if (!id) return null;
+      const idStr = typeof id === 'object' ? (id._id || id.id || id.$oid || String(id)) : String(id);
+      // For Mixed fields, we prefer strings to avoid casting issues, 
+      // but we convert to ObjectId ONLY if we're sure it's a valid MongoDB ID hex
+      return mongoose.Types.isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : idStr;
+    };
+
+    const castUserId = toMixedId(targetUserId);
+    const castOrgId = toMixedId(organizationId);
 
     console.log('--- PAYROLL PROFILE SAVE ATTEMPT ---');
-    console.log('Target User ID:', targetUserId);
-    console.log('Organization ID from Request:', req.organizationId);
-    
-    const isValidUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(targetUserId);
-    if (!targetUserId || (!mongoose.Types.isValidObjectId(targetUserId) && !isValidUUID)) {
-      return res.status(400).json({ success: false, message: 'Valid User ID is required' });
-    }
+    console.log('Target User ID:', castUserId);
+    console.log('Organization ID:', castOrgId);
 
-    const orgId = req.organizationId;
-    if (!orgId) {
-      return res.status(400).json({ success: false, message: 'Organization context missing' });
-    }
-
-    // Ensure organizationId is treated as a string if it's a UUID
-    const organizationId = orgId.toString();
-
-    // BANK-GRADE: Update User model with bank details if provided
+    // Update User model with bank details if provided
     if (bodyData.bankDetails) {
       try {
-        console.log('Updating user bank details...');
-        await User.findOneAndUpdate(
-          { _id: targetUserId },
-          {
-            bankName: bodyData.bankDetails.bankName,
-            accountNumber: bodyData.bankDetails.accountNumber,
-            ifscCode: bodyData.bankDetails.ifscCode,
-            pan: bodyData.bankDetails.pan,
-            uan: bodyData.bankDetails.uan
-          }
-        );
-        console.log('User bank details updated.');
+        if (mongoose.Types.isValidObjectId(castUserId)) {
+          await User.findOneAndUpdate(
+            { _id: castUserId },
+            {
+              $set: {
+                bankName: bodyData.bankDetails.bankName,
+                accountNumber: bodyData.bankDetails.accountNumber,
+                ifscCode: bodyData.bankDetails.ifscCode,
+                pan: bodyData.bankDetails.pan,
+                uan: bodyData.bankDetails.uan
+              }
+            }
+          );
+        }
       } catch (userUpdateErr) {
-        console.error('User bank update failed:', userUpdateErr.message);
+        console.warn('User bank update failed:', userUpdateErr.message);
       }
     }
 
     // Clean up earnings/deductions to match schema
-    const sanitize = (comps) => (Array.isArray(comps) ? comps : []).map(c => ({
-      name: String(c.name || 'Unnamed Component'),
-      value: Number(c.value) || 0,
-      calculationType: ['Fixed', 'Percentage', 'Formula'].includes(c.calculationType) ? c.calculationType : 'Fixed',
-      formula: c.formula || null,
-      config: c.config || {},
-      organizationId: organizationId
-    }));
+    const sanitize = (comps) => (Array.isArray(comps) ? comps : []).map(c => {
+      const compOrgId = c.organizationId || castOrgId;
+      return {
+        name: String(c.name || 'Unnamed Component'),
+        value: Number(c.value) || 0,
+        calculationType: ['Fixed', 'Percentage', 'Formula'].includes(c.calculationType) ? c.calculationType : 'Fixed',
+        formula: c.formula || null,
+        config: c.config || {},
+        organizationId: toMixedId(compOrgId)
+      };
+    });
 
     const earnings = sanitize(bodyData.earnings);
     const deductions = sanitize(bodyData.deductions);
 
     // Prepare clean profile data
     const updatePayload = {
-      organizationId,
-      user: targetUserId,
+      organizationId: castOrgId,
+      user: castUserId,
       payrollType: bodyData.payrollType || 'Monthly',
       employeeType: bodyData.employeeType || 'Permanent',
       salaryMode: bodyData.salaryMode || 'Employee-Based',
       earnings,
       deductions,
-      salaryStructureId: mongoose.Types.isValidObjectId(bodyData.salaryStructureId) ? bodyData.salaryStructureId : null,
+      salaryStructureId: toMixedId(bodyData.salaryStructureId),
       weeklyRate: Number(bodyData.weeklyRate) || 0,
       hourlyRate: Number(bodyData.hourlyRate) || 0,
       dailyRate: Number(bodyData.dailyRate) || 0,
       monthlyCTC: Number(bodyData.monthlyCTC) || 0,
-      isActive: true
+      annualCTC: Number(bodyData.annualCTC) || 0,
+      status: 'Active',
+      payrollStatus: 'Active',
+      isActive: true,
+      lastUpdatedAt: new Date()
     };
 
-    let profile;
+    let result;
     try {
-      console.log('Saving payroll profile for user:', targetUserId);
+      // Use a more flexible filter that works regardless of whether stored as string or ObjectId
+      const filter = { 
+        $or: [
+          { user: castUserId, organizationId: castOrgId },
+          { user: String(castUserId), organizationId: String(castOrgId) }
+        ]
+      };
       
-      // Attempt manual find and update to bypass any strict Mongoose casting
-      profile = await PayrollProfile.findOne({ user: targetUserId, organizationId });
+      console.log('Searching/Upserting for profile with filter:', JSON.stringify(filter));
       
-      if (profile) {
-        console.log('Updating existing profile:', profile._id);
-        Object.assign(profile, updatePayload);
-        await profile.save();
-      } else {
-        console.log('Creating new profile...');
-        profile = new PayrollProfile(updatePayload);
-        await profile.save();
+      // Atomic Upsert
+      result = await PayrollProfile.findOneAndUpdate(
+        filter,
+        { 
+          $set: { 
+            ...updatePayload, 
+            lastUpdatedAt: new Date(),
+            updatedAt: new Date()
+          },
+          $setOnInsert: { 
+            createdAt: new Date(),
+            profileVersion: 1 
+          }
+        },
+        { 
+          upsert: true, 
+          new: true, 
+          runValidators: false, 
+          setDefaultsOnInsert: true
+        }
+      ).lean();
+      
+      if (!result) {
+        throw new Error('Upsert failed to return a document');
       }
-      console.log('Payroll profile saved successfully:', profile._id);
+      
+      console.log('Payroll profile synced successfully:', result._id);
     } catch (dbErr) {
-      console.error('DATABASE SAVE ERROR:', dbErr.message);
+      console.error('DATABASE SYNC ERROR:', dbErr);
       return res.status(500).json({ 
         success: false, 
-        message: `Database Error: ${dbErr.message}` 
+        message: `Database Sync Error: ${dbErr.message || 'Unknown database error'}`
       });
     }
 
-    // Populate user details before returning
-    const populatedProfile = await PayrollProfile.findById(profile._id)
-      .populate('user', 'name employeeId department designation');
+    // Attempt to add user info manually to the response instead of using .populate()
+    // which can crash on non-standard ID formats
+    try {
+      if (result && result.user) {
+        const userData = await User.findById(result.user).select('name employeeId department designation').lean();
+        if (userData) {
+          result.user = userData;
+          result.userId = result.user._id;
+          result.employeeId = result.user.employeeId;
+        }
+      }
+    } catch (popErr) {
+      console.warn('Manual population failed, returning raw profile:', popErr.message);
+    }
     
-    return res.status(200).json({ success: true, data: populatedProfile });
+    return res.status(200).json({ success: true, data: result });
+
   } catch (err) {
-    console.error('CRITICAL PAYROLL PROFILE ERROR:', err.message);
+    console.error('CRITICAL PAYROLL PROFILE ERROR:', err);
     return res.status(500).json({ 
       success: false, 
-      message: err.message || 'Internal Server Error' 
+      message: err.message || 'Internal Server Error',
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 };

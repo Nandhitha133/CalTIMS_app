@@ -450,7 +450,7 @@ export default function UsersAndRolesTab() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
-    queryFn: () => settingsAPI.getSettings().then((r: any) => r.data?.data || r.data || r),
+    queryFn: () => settingsAPI.getSettings().then((r: any) => r?.data?.data ?? r?.data ?? r ?? null),
   });
 
   useSocketEvent('settings_updated', (payload) => {
@@ -861,7 +861,7 @@ export default function UsersAndRolesTab() {
               </View>
 
               {/* Permission Tree View */}
-              <ScrollView style={styles.treeContainer}>
+              <View style={styles.treeContainer}>
                 {Object.entries(PERMISSION_STRUCTURE)
                   .filter(([moduleName]) => {
                     // Restrict visible modules for the Employee role to only what's in their sidebar
@@ -883,7 +883,7 @@ export default function UsersAndRolesTab() {
                     isAdmin={currentRole.name === 'Admin'}
                   />
                 ))}
-              </ScrollView>
+              </View>
             </View>
           )}
 
@@ -1287,7 +1287,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   treeContainer: {
-    maxHeight: 500,
     padding: 12,
   },
   treeNode: {

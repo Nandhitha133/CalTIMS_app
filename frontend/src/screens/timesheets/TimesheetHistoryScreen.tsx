@@ -703,7 +703,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         limit: 10,
       };
       
-      if (search.length >= 2) params.search = search;
+      if (search.length >= 1) params.search = search;
       if (filters.year !== 'All Years') params.year = filters.year;
       if (filters.month !== 'All Months') params.month = filters.month;
       if (filters.status !== 'All Status') params.status = filters.status;
@@ -820,7 +820,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         year: filters.year,
         month: filters.month,
         status: filters.status === 'All Status' ? '' : filters.status,
-        search: search.length >= 2 ? search : '',
+        search: search.length >= 1 ? search : '',
       });
 
       const allData = response.data || [];

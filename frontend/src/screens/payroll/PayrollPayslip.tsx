@@ -12,12 +12,9 @@ import {
   Modal,
   TextInput,
   Alert,
-  Platform,
-  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
-  Plus, 
   Search, 
   Filter, 
   RefreshCw, 
@@ -26,16 +23,13 @@ import {
   FileText, 
   CreditCard, 
   Mail, 
-  CheckCircle2, 
-  AlertCircle,
-  ChevronDown,
   ArrowDown,
   Receipt,
   Check,
   Eye,
   X
 } from 'lucide-react-native';
-import { payrollAPI, userAPI } from '../../services/endpoints';
+import { payrollAPI } from '../../services/endpoints';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -332,17 +326,18 @@ export const PayrollPayslip = () => {
   const handleGeneratePayslips = async () => {
     setGenerating(true);
     try {
-      const response = await payrollAPI.getHistory({
+      const response: any = await payrollAPI.run({
         month: selectedMonth,
         year: selectedYear,
       });
-      const data = extractData(response, []);
       
-      Alert.alert('Success', `Payslips generated for ${months[selectedMonth - 1]} ${selectedYear}`);
+      const message = response.message || `Payslips generated successfully for ${months[selectedMonth - 1]} ${selectedYear}`;
+      Alert.alert('Success', message);
       fetchPayslips();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating payslips:', error);
-      Alert.alert('Info', 'Payslip generation feature coming soon');
+      const errorMsg = error.data?.message || error.message || 'Failed to generate payslips';
+      Alert.alert('Error', errorMsg);
     } finally {
       setGenerating(false);
     }
@@ -353,7 +348,11 @@ export const PayrollPayslip = () => {
     
     try {
       // Call API to mark as paid
-      // await monthlyPayrollAPI.markAsPaid(payslipToMark._id);
+      await payrollAPI.markPaid({
+        ids: [payslipToMark._id],
+        paymentDate: new Date().toISOString(),
+        paymentMethod: 'Bank Transfer'
+      });
       
       // Update local state
       setPayslips(prev => prev.map(p => 
@@ -363,9 +362,11 @@ export const PayrollPayslip = () => {
       ));
       
       Alert.alert('Success', `Payslip marked as paid for ${payslipToMark.employeeName}`);
-    } catch (error) {
+      fetchPayslips();
+    } catch (error: any) {
       console.error('Error marking as paid:', error);
-      Alert.alert('Error', 'Failed to mark as paid');
+      const errorMsg = error.data?.message || error.message || 'Failed to mark as paid';
+      Alert.alert('Error', errorMsg);
     } finally {
       setShowMarkPaidConfirm(false);
       setPayslipToMark(null);
@@ -375,7 +376,7 @@ export const PayrollPayslip = () => {
   const handleSendEmail = async (payslip: PayslipData) => {
     try {
       // Call API to send email
-      // await monthlyPayrollAPI.sendPayslipEmail(payslip._id);
+      await payrollAPI.sendPayslipEmail(payslip._id);
       
       // Update local state
       setPayslips(prev => prev.map(p => 
@@ -385,10 +386,58 @@ export const PayrollPayslip = () => {
       ));
       
       Alert.alert('Success', `Payslip sent to ${payslip.employeeName}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending email:', error);
-      Alert.alert('Error', 'Failed to send email');
+      const errorMsg = error.data?.message || error.message || 'Failed to send email';
+      Alert.alert('Error', errorMsg);
     }
+  };
+
+  const handleSendAll = async () => {
+    const currentFilteredPayslips = getFilteredPayslips();
+    const payslipsToSend = currentFilteredPayslips.filter(p => !p.isEmailSent);
+    
+    if (payslipsToSend.length === 0) {
+      Alert.alert('Info', 'No pending payslips to send in this view.');
+      return;
+    }
+
+    Alert.alert(
+      'Send All Payslips',
+      `Send ${payslipsToSend.length} payslips via email to employees?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send All',
+          onPress: async () => {
+            setGenerating(true);
+            try {
+              if (!payrollAPI || typeof payrollAPI.bulkSendPayslipEmails !== 'function') {
+                throw new Error('Bulk send feature is not yet available. Please check your network or app version.');
+              }
+
+              const ids = payslipsToSend.map(p => p._id);
+              await payrollAPI.bulkSendPayslipEmails(ids);
+              
+              // Update local state
+              setPayslips(prev => prev.map(p => 
+                ids.includes(p._id) 
+                  ? { ...p, isEmailSent: true, status: 'SENT' as const }
+                  : p
+              ));
+              
+              Alert.alert('Success', `${ids.length} payslips have been queued for sending.`);
+              fetchPayslips();
+            } catch (error: any) {
+              console.error('Error sending all payslips:', error);
+              Alert.alert('Error', error.message || 'Failed to send all payslips');
+            } finally {
+              setGenerating(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderProcessSteps = () => (
@@ -622,7 +671,7 @@ export const PayrollPayslip = () => {
             )}
             
             <TouchableOpacity 
-              onPress={() => (item.status === 'PAID' || item.isEmailSent) && handleSendEmail(item)}
+              onPress={() => (item.status === 'PAID' || item.isEmailSent) ? handleSendEmail(item) : null}
               disabled={!(item.status === 'PAID' || item.isEmailSent)}
               style={!(item.status === 'PAID' || item.isEmailSent) && { opacity: 0.5 }}
             >
@@ -1006,7 +1055,8 @@ export const PayrollPayslip = () => {
 
             <TouchableOpacity 
               style={styles.sendAllButton}
-              onPress={() => Alert.alert('Info', 'Send All feature coming soon')}
+              onPress={handleSendAll}
+              disabled={generating}
             >
               <Send size={16} color={COLORS.white} />
               <Text style={styles.sendAllButtonText}>Send All</Text>
@@ -1044,12 +1094,11 @@ export const PayrollPayslip = () => {
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.tableContainer}>
               {renderTableHeader()}
-              <FlatList
-                data={filteredPayslips}
-                keyExtractor={(item) => item._id}
-                renderItem={renderPayslipItem}
-                scrollEnabled={false}
-              />
+              {filteredPayslips.map((item) => (
+                <View key={item._id}>
+                  {renderPayslipItem({ item })}
+                </View>
+              ))}
             </View>
           </ScrollView>
         )}

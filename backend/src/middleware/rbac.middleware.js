@@ -47,7 +47,8 @@ const checkPermission = (module, submodule, action) => {
       }
 
       // Find the user's role in the settings
-      const userRole = settings.roles.find(r => r.name.toLowerCase() === req.user.role.toLowerCase());
+      const reqRole = (req.user.role || '').toLowerCase();
+      const userRole = (settings.roles || []).find(r => (r.name || '').toLowerCase() === reqRole);
       
       if (!userRole) {
         return next(new AppError(`Role '${req.user.role}' not found in permission profiles.`, 403));

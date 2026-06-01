@@ -1006,7 +1006,7 @@ const timesheetService = {
 
     if (query.status && query.status !== 'All Status') filter.status = query.status;
 
-    if (query.search && query.search.trim().length >= 2) {
+    if (query.search && query.search.trim().length >= 1) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
       filter.$or = [
         { 'rows.category': searchRegex },
@@ -1647,7 +1647,7 @@ const timesheetService = {
       filter['rows.projectId'] = query.projectId;
     }
 
-    if (query.search && query.search.trim().length >= 2) {
+    if (query.search && query.search.trim().length >= 1) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
       const [userIds, projectIds] = await Promise.all([
         User.find({ organizationId, $or: [{ name: searchRegex }, { employeeId: searchRegex }] }).distinct('_id'),
@@ -1731,7 +1731,7 @@ const timesheetService = {
     }
     if (query.projectId) filter['rows.projectId'] = query.projectId;
 
-    if (query.search && query.search.trim().length >= 2) {
+    if (query.search && query.search.trim().length >= 1) {
       const searchRegex = new RegExp(query.search.trim(), 'i');
       const [userIds, projectIds] = await Promise.all([
         User.find({ organizationId, $or: [{ name: searchRegex }, { employeeId: searchRegex }] }).distinct('_id'),

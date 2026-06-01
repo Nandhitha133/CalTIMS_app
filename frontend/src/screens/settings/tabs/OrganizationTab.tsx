@@ -360,7 +360,7 @@ export default function OrganizationTab() {
   // Fetch settings
   const { data: settings, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
-    queryFn: () => settingsAPI.getSettings().then((r: any) => r.data.data),
+    queryFn: () => settingsAPI.getSettings().then((r: any) => r?.data?.data ?? r?.data ?? r ?? null),
   });
 
   useSocketEvent('settings_updated', (payload) => {
@@ -532,20 +532,15 @@ export default function OrganizationTab() {
               />
             </View>
 
-            {/* Logo Upload */}
-            <TouchableOpacity style={styles.logoUpload} onPress={pickImage}>
-              {form.companyLogo || logoFile ? (
+            {/* Logo Display (Upload Disabled) */}
+            { (form.companyLogo || logoFile) && (
+              <View style={styles.logoUpload}>
                 <Image
                   source={{ uri: logoFile?.uri || form.companyLogo }}
                   style={styles.logoImage}
                 />
-              ) : (
-                <View style={styles.logoPlaceholder}>
-                  <Upload size={24} color="#9ca3af" />
-                  <Text style={styles.logoText}>Tap to upload</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              </View>
+            )}
 
             {/* About Institution */}
             <View style={styles.inputGroup}>

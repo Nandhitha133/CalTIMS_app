@@ -51,7 +51,7 @@ const errorHandler = (err, req, res, next) => {
   }
 
   // Production: don't leak error details
-  if (err.isOperational) {
+  if (error.isOperational || err.isOperational) {
     return res.status(error.statusCode).json({ success: false, message: error.message });
   }
 

@@ -425,7 +425,7 @@ export default function PayrollPolicyTab() {
     queryFn: async () => {
       try {
         const response: any = await policyAPI.getPolicy();
-        return response.data?.data || response.data || response;
+        return response?.data?.data ?? response?.data ?? response ?? null;
       } catch (error) {
         console.error('Failed to fetch policy:', error);
         return null;

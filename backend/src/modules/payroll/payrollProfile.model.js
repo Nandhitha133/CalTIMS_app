@@ -28,8 +28,16 @@ const payrollProfileSchema = new mongoose.Schema(
     },
     user: {
       type: mongoose.Schema.Types.Mixed,
-      ref: 'User',
       required: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      default: 'Active',
+    },
+    payrollStatus: {
+      type: String,
+      default: 'Active',
     },
     payrollType: {
       type: String,
@@ -52,8 +60,7 @@ const payrollProfileSchema = new mongoose.Schema(
     deductions: [salaryComponentSchema],
 
     salaryStructureId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'RoleSalaryStructure',
+      type: mongoose.Schema.Types.Mixed,
       default: null,
     },
     weeklyRate: {
@@ -72,11 +79,19 @@ const payrollProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    annualCTC: {
+      type: Number,
+      default: 0,
+    },
     profileVersion: {
       type: Number,
       default: 1,
     },
     lastUpdatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
       type: Date,
       default: Date.now,
     },

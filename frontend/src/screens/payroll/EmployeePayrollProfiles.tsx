@@ -265,6 +265,9 @@ const getSafeId = (id: any): string => {
     finalId = String(id);
   }
 
+  // Normalize: trim and lowercase for reliable matching
+  finalId = finalId.trim().toLowerCase();
+
   // BANK-GRADE: Strip virtual prefix if present before sending to backend
   if (finalId.startsWith('v-')) {
     return finalId.substring(2);
@@ -343,7 +346,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   useEffect(() => {
     filterEmployees();
-  }, [employees, profiles, searchTerm, deptFilter, statusFilter]);
+  }, [employees, profiles, searchTerm, deptFilter, statusFilter, ctcValue]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -581,38 +584,22 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const filterEmployees = () => {
     let filtered = employees.map(emp => {
-      const eId = getSafeId(emp._id).toLowerCase();
-      const eEmpId = String(emp.employeeId || '').toLowerCase();
-      const eEmail = String(emp.email || '').toLowerCase();
-      const eName = String(emp.name || '').toLowerCase();
-
-      // Normalize ID (extract numbers) for fuzzy matching
-      const normalizeId = (id: string) => id.replace(/[^0-9]/g, '');
-      const eNormId = normalizeId(eEmpId);
-
+      const eId = getSafeId(emp._id);
+      const eEmpId = String(emp.employeeId || emp.empId || '').trim().toLowerCase();
+      
       // Exhaustive search for a matching profile in the profiles list
       let profile = profiles.find(p => {
-        // Discovery: check if the profile is nested within the list item
-        const pObj = (p.annualCTC || p.monthlyCTC || p.earnings || p.ctc || p.salary || p.ctcAmount) ? p : 
-                     (p.profile || p.payrollProfile || p.payroll || p.salaryDetails || p.salaryInfo || p);
+        const pUserId = getSafeId(p.userId || (p.user && (typeof p.user === 'object' ? p.user._id || p.user.id : p.user)));
+        const pEmpId = String(p.employeeId || p.empId || (p.user && typeof p.user === 'object' ? p.user.employeeId : '') || '').trim().toLowerCase();
         
-        const pId = getSafeId(pObj._id || pObj.id).toLowerCase();
-        const pUserId = getSafeId(pObj.userId || (typeof pObj.user === 'object' ? pObj.user?._id || pObj.user?.id : pObj.user)).toLowerCase();
-        const pEmpId = String(pObj.employeeId || pObj.empId || (typeof pObj.user === 'object' ? pObj.user?.employeeId || pObj.user?.empId : '') || '').toLowerCase();
-        const pEmail = String(pObj.email || (typeof pObj.user === 'object' ? pObj.user?.email : '') || '').toLowerCase();
-        const pName = String(pObj.employeeName || pObj.fullName || (typeof pObj.user === 'object' ? pObj.user?.name || pObj.user?.fullName : '') || '').toLowerCase();
-
-        return (
-          (eId && pUserId && eId === pUserId) ||
-          (eEmpId && pEmpId && eEmpId === pEmpId) ||
-          (eId && pId && eId === pId) ||
-          (eEmail && pEmail && eEmail === pEmail) ||
-          (eName && pName && eName === pName) ||
-          (eNormId && pEmpId && normalizeId(pEmpId) === eNormId)
-        );
+        // Match by User ID or Employee ID
+        const idMatch = (eId && pUserId && eId === pUserId);
+        const empIdMatch = (eEmpId && pEmpId && eEmpId === pEmpId);
+        
+        return idMatch || empIdMatch;
       });
 
-      // If not found in standalone list, check if it's already attached to the employee object
+      // Discovery: check if the profile is nested within the employee object
       if (!profile) {
         profile = emp.profile || (emp as any).payrollProfile || (emp as any).payroll || (emp as any).salaryDetails || (emp as any).salaryInfo;
       }
@@ -621,66 +608,35 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       if (!profile) {
         for (const key in emp) {
           const val = (emp as any)[key];
-          if (val && typeof val === 'object' && (val.annualCTC || val.monthlyCTC || val.earnings || val.ctc || val.salary || val.ctcAmount)) {
+          if (val && typeof val === 'object' && !Array.isArray(val) && (val.annualCTC || val.monthlyCTC || val.earnings || val.ctc || val.salary)) {
             profile = val;
             break;
           }
         }
       }
 
-      // Normalize the profile object if it's still nested
-      let finalProfile = profile ? (profile.annualCTC || profile.monthlyCTC || profile.ctc || profile.salary || profile.ctcAmount ? profile : 
+      // Final normalization of the profile object
+      let finalProfile = profile ? (profile.annualCTC || profile.monthlyCTC || profile.ctc || profile.salary ? profile : 
                          (profile.profile || profile.payrollProfile || profile.payroll || profile.salaryDetails || profile.salaryInfo || profile)) : null;
 
-      // Final fallback: check for flat CTC fields on the employee record itself
-      if (!finalProfile || (!finalProfile.annualCTC && !finalProfile.monthlyCTC && !finalProfile.ctc && !finalProfile.salary)) {
-        const ctc = Number((emp as any).annualCTC || (emp as any).ctc || (emp as any).salary || (emp as any).ctcAmount || 
-                    ((emp as any).monthlyCTC ? (emp as any).monthlyCTC * 12 : 
-                    (finalProfile && (finalProfile.ctc || finalProfile.salary || finalProfile.ctcAmount)) ? 
-                    (finalProfile.ctc || finalProfile.salary || finalProfile.ctcAmount) : 0));
-        
-        if (ctc > 0) {
-          finalProfile = {
-            ...(finalProfile || {}),
-            _id: (finalProfile && getSafeId(finalProfile._id)) || emp._id,
-            userId: (finalProfile && getSafeId(finalProfile.userId)) || emp._id,
-            employeeId: (finalProfile && finalProfile.employeeId) || emp.employeeId,
-            employeeName: (finalProfile && finalProfile.employeeName) || emp.name,
-            annualCTC: ctc,
-            monthlyCTC: Number((emp as any).monthlyCTC || ctc / 12),
-            payrollType: (emp as any).payrollType || (finalProfile && finalProfile.payrollType) || 'Monthly',
-            status: (emp as any).status || (finalProfile && finalProfile.status) || 'Active',
-            earnings: (finalProfile && finalProfile.earnings) || (emp as any).earnings || [],
-            deductions: (finalProfile && finalProfile.deductions) || (emp as any).deductions || [],
-          } as any;
-        }
-      }
-
-      // If it's a virtual profile from our tertiary discovery, ensure it's matched
-      if (!finalProfile && profiles.length > 0) {
-        const virtualProfile = profiles.find(p => getSafeId(p._id) === `v-${eId}`);
-        if (virtualProfile) finalProfile = virtualProfile;
-      }
-
-      const bankDetailsComplete = !!(emp.bankName && emp.accountNumber && emp.ifscCode && emp.pan);
-      let bankStatus = bankDetailsComplete ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing');
-      
+      // Status determination
       let payrollStatus = 'Not Configured';
       if (finalProfile) {
-        const rawStatus = String(
+        const statusStr = String(
           finalProfile.status || 
           finalProfile.payrollStatus || 
-          (finalProfile.isActive === true || finalProfile.active === true ? 'Active' : '') || 
+          (finalProfile.isActive === true ? 'Active' : '') || 
           (finalProfile.monthlyCTC > 0 || finalProfile.annualCTC > 0 ? 'Active' : '') ||
           'Active'
         ).toUpperCase();
         
-        if (rawStatus === 'ACTIVE' || rawStatus === 'CONFIGURED' || rawStatus === 'SET' || rawStatus === 'TRUE' || rawStatus === 'COMPLETED') {
+        if (['ACTIVE', 'CONFIGURED', 'SET', 'TRUE', 'COMPLETED', 'VERIFIED'].includes(statusStr)) {
           payrollStatus = 'Active';
-        } else if (rawStatus === 'INACTIVE' || rawStatus === 'DISABLED' || rawStatus === 'FALSE') {
-          payrollStatus = 'Inactive';
+        } else if (['INACTIVE', 'DISABLED', 'FALSE', 'PENDING'].includes(statusStr)) {
+          // If it has CTC but is marked pending, it's still "Active" in our summary view usually
+          payrollStatus = (finalProfile.monthlyCTC > 0 || finalProfile.annualCTC > 0) ? 'Active' : 'Inactive';
         } else {
-          payrollStatus = finalProfile.status || finalProfile.payrollStatus || 'Active';
+          payrollStatus = finalProfile.status || 'Active';
         }
       }
 
@@ -689,7 +645,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         profile: finalProfile,
         hasProfile: !!finalProfile,
         payrollStatus,
-        bankStatus,
+        bankStatus: (emp.bankName && emp.accountNumber && emp.ifscCode) ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing'),
       };
     });
 
@@ -1027,7 +983,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       calculationType: ['Fixed', 'Percentage', 'Formula'].includes(comp.calculationType) ? comp.calculationType : 'Fixed',
       basedOn: comp.basedOn || 'CTC',
       formula: comp.formula || null,
-      organizationId: orgId // Include orgId in each component for backend validation
+      organizationId: orgId
     });
 
     const cleanedDeductions = structure.deductions.filter(d => {
@@ -1046,13 +1002,12 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       const rawId = editingEmployee?._id || editingEmployee?.id || (editingEmployee as any).user?._id || (editingEmployee as any).user?.id;
       let targetUserId = getSafeId(rawId);
       
-      // Validation: Ensure it's a valid 24-character hex string (standard MongoDB ID) or UUID
       const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(targetUserId) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(targetUserId);
       if (!isValidObjectId) {
-        throw new Error(`The Employee ID (${targetUserId}) is not a valid format. Please contact support or try re-syncing the employee list.`);
+        throw new Error(`The Employee ID (${targetUserId}) is not a valid format.`);
       }
 
-      // 5. Construct Payload (Strict Enterprise Schema)
+      // 5. Construct Payload
       const payload: any = {
         user: targetUserId,
         userId: targetUserId,
@@ -1064,6 +1019,8 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         salaryMode: 'Employee-Based',
         annualCTC: Number(annualCTC.toFixed(2)),
         monthlyCTC: Number(monthlyCTC.toFixed(2)),
+        ctc: Number(annualCTC.toFixed(2)),
+        ctcAmount: Number(annualCTC.toFixed(2)),
         earnings: (structure.earnings || []).map(mapComponent),
         deductions: (cleanedDeductions || []).map(mapComponent),
         bankDetails: {
@@ -1074,6 +1031,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
           uan: String(bankDetails.uan || '').trim()
         },
         status: 'Active',
+        payrollStatus: 'Active',
         isActive: true,
         lastUpdatedAt: new Date().toISOString()
       };
@@ -1092,7 +1050,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     } catch (err: any) {
       console.error('CRITICAL SAVE ERROR:', err);
       // Detailed diagnostics for the user
-      const serverMsg = err.message || 'An unexpected error occurred (500). Please ensure all mandatory fields are filled and try again.';
+      const serverMsg = err.data?.message || err.message || 'An unexpected error occurred (500). Please ensure all mandatory fields are filled and try again.';
       Alert.alert('Save Failed', serverMsg);
     } finally {
       setIsSaving(false);
@@ -1101,24 +1059,26 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const getKPIs = () => {
     const totalEmployees = employees.length;
-    // Calculate based on the full list of employees if possible
-    const sourceList = filteredEmployees.length > 0 ? filteredEmployees : employees;
-    const configuredProfiles = sourceList.filter(e => {
-      // If we haven't run filterEmployees yet, we check if they have a profile attached or in the standalone list
-      if ((e as any).hasProfile) return true;
-      if ((e as any).profile) return true;
+    // CRITICAL: Calculate counts from the full processed list (employees with profiles merged)
+    const processedList = employees.map(emp => {
+      // Re-run the matching logic briefly for the KPI calculation to ensure accuracy
+      const eId = getSafeId(emp._id).toLowerCase();
+      const eEmpId = String(emp.employeeId || emp.empId || '').toLowerCase();
       
-      // Standalone list check
-      const eId = getSafeId(e._id).toLowerCase();
-      const eEmpId = String((e as any).employeeId || '').toLowerCase();
-      return profiles.some(p => {
-        const pUserId = getSafeId(p.userId || (p.user && (getSafeId(p.user._id || p.user.id)))).toLowerCase();
-        const pEmpId = String(p.employeeId || p.empId || (p.user && p.user.employeeId) || '').toLowerCase();
+      const hasProfile = profiles.some(p => {
+        const pUserId = getSafeId(p.userId || (p.user && (typeof p.user === 'object' ? p.user._id || p.user.id : p.user))).toLowerCase();
+        const pEmpId = String(p.employeeId || p.empId || (p.user && typeof p.user === 'object' ? p.user.employeeId : '') || '').toLowerCase();
         return (eId && pUserId && eId === pUserId) || (eEmpId && pEmpId && eEmpId === pEmpId);
-      });
-    }).length;
+      }) || !!(emp.profile || (emp as any).payrollProfile || (emp as any).monthlyCTC || (emp as any).annualCTC);
 
+      return { ...emp, hasProfile };
+    });
+
+    const configuredProfiles = processedList.filter(e => e.hasProfile).length;
     const pendingSetup = totalEmployees - configuredProfiles;
+    
+    // Errors based on bank details or specific warning status
+    const sourceList = filteredEmployees.length > 0 ? filteredEmployees : processedList;
     const criticalErrors = sourceList.filter(e => (e as any).payrollStatus === 'Warning' || (e as any).bankStatus === 'Missing').length;
 
     return [

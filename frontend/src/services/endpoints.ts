@@ -253,6 +253,8 @@ export const payrollAPI = {
     apiService.get(`/payroll/payslip/${id}/download`),
   sendPayslipEmail: (id: string) => 
     apiService.post(`/payroll/payslip/${id}/send-email`),
+  bulkSendPayslipEmails: (ids: string[]) => 
+    apiService.post('/payroll/payslips/bulk-send-email', { ids }),
   getProfiles: (params?: any) => 
     apiService.get('/payroll/profiles', params),
   getRoleStructures: () => 
