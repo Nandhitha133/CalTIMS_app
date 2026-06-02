@@ -37,6 +37,7 @@ import {
   CheckCircle,
   CheckCircle2,
   Clock,
+  Zap,
 } from 'lucide-react-native';
 import { timesheetAPI, projectAPI, settingsAPI, taskAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
@@ -244,13 +245,32 @@ const FillModal = ({
   };
 
   const handleUpdateHour = (rowId: string, dayIndex: number, value: string) => {
+    // Only allow numeric input
     const hours = value.replace(/\D/g, '').slice(0, 2);
+    
     setRows(rows.map(r => {
       if (r.id !== rowId) return r;
       const newHours = [...r.dayHours];
       const currentM = r.dayHours[dayIndex].split(':')[1] || '00';
-      newHours[dayIndex] = `${hours.padStart(2, '0')}:${currentM}`;
+      
+      // Store exactly what they typed to allow empty strings/clearing
+      newHours[dayIndex] = `${hours}:${currentM}`;
       return { ...r, dayHours: newHours };
+    }));
+  };
+
+  const handleFillRowStandardHours = (rowId: string) => {
+    setRows(rows.map(r => {
+      if (r.id !== rowId) return r;
+      const newDayHours = [...r.dayHours];
+      weekDays.forEach((day, i) => {
+        // Simple Mon-Fri check
+        const isWorkDay = day.getDay() !== 0 && day.getDay() !== 6;
+        if (isWorkDay && !isDayBeforeProjectStart(day, r.projectId)) {
+          newDayHours[i] = '08:00';
+        }
+      });
+      return { ...r, dayHours: newDayHours };
     }));
   };
 
@@ -336,7 +356,9 @@ const FillModal = ({
                       <Text style={modalStyles.dayNumber}>{format(day, 'dd')}</Text>
                     </View>
                   ))}
-                  <Text style={[modalStyles.headerCell, modalStyles.actionCell]}>⚡</Text>
+                  <View style={[modalStyles.headerCell, modalStyles.actionCell]}>
+                    <Text style={modalStyles.dayName}>⚡</Text>
+                  </View>
                 </View>
 
                 {/* Rows */}
@@ -389,8 +411,17 @@ const FillModal = ({
                       })}
 
                       <View style={[modalStyles.cell, modalStyles.actionCell]}>
-                        <TouchableOpacity onPress={() => handleRemoveRow(row.id)}>
-                          <Trash2 size={16} color="#ef4444" />
+                        <TouchableOpacity 
+                          style={modalStyles.rowActionBtn} 
+                          onPress={() => handleFillRowStandardHours(row.id)}
+                        >
+                          <Zap size={14} color="#3b82f6" />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={modalStyles.rowActionBtn} 
+                          onPress={() => handleRemoveRow(row.id)}
+                        >
+                          <Trash2 size={14} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -673,7 +704,9 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
         category: row.taskType,
         weekStartDate: format(weekStart, 'yyyy-MM-dd'),
         entries: weekDays.map((day, i) => {
-          const [h, m] = row.dayHours[i].split(':').map(Number);
+          const [hStr, mStr] = row.dayHours[i].split(':');
+          const h = parseInt(hStr || '0', 10);
+          const m = parseInt(mStr || '0', 10);
           return {
             date: format(day, 'yyyy-MM-dd'),
             hoursWorked: (h || 0) + ((m || 0) / 60),
@@ -1132,8 +1165,13 @@ const modalStyles = StyleSheet.create({
     alignItems: 'center',
   },
   actionCell: {
-    width: 40,
+    width: 60,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rowActionBtn: {
+    padding: 4,
   },
   dayName: {
     fontSize: 10,

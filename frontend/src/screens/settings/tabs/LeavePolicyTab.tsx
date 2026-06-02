@@ -35,8 +35,9 @@ import {
 } from 'lucide-react-native';
 import { settingsAPI } from '../../../services/endpoints';
 import { useSocketEvent } from '../../../services/socket';
-import Header from '../../../components/common/Header';
 import { useAuthStore } from '../../../store/authStore';
+import Layout from '../../../components/common/Layout';
+import PageHeader from '../../../components/common/PageHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -406,6 +407,7 @@ const AllowanceSlider = ({
 export default function LeavePolicyTab() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [initialState, setInitialState] = useState<string | null>(null);
@@ -512,65 +514,45 @@ export default function LeavePolicyTab() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <Layout
+      title="Leave Policy"
+      user={user}
+      sidebarVisible={sidebarVisible}
+      setSidebarVisible={setSidebarVisible}
+      refreshing={isLoading}
+      onRefresh={handleRefresh}
+      scrollable={false}
+      backgroundColor="#f8fafc"
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
     >
-      <Header
-        title="Leave Policy"
-        showBackButton={true}
-        showSidebarButton={false}
-        onBackPress={() => navigation.navigate('Settings' as never)}
-      />
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        {/* Sticky Header */}
-        <View style={styles.stickyHeader}>
-          <View>
-            <Text style={styles.title}>Leave & Wellness Standards</Text>
-            <Text style={styles.description}>Configure global entitlements and health-related coverage</Text>
-          </View>
-          
-          <View style={styles.headerActions}>
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Active Categories</Text>
-                <Text style={styles.statValue}>{validation.count}</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Global Status</Text>
-                <Text style={[styles.statStatus, validation.isValid && styles.statStatusValid]}>
-                  {validation.isValid ? 'Valid Policy' : 'Incomplete'}
-                </Text>
-              </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <PageHeader
+            title="Leave Management"
+            subtitle="Configure leave types, accruals, and approval workflows"
+            icon={Calendar}
+            iconColor="#6366f1"
+            iconBgColor="#eef2ff"
+          />
+
+          {/* Sticky Header with Save Button - Moved content out */}
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.title}>Global Leave Settings</Text>
+              <Text style={styles.description}>Manage institutional leave entitlements</Text>
             </View>
-
-            <TouchableOpacity
-              style={[styles.saveButton, saveMutation.isPending && styles.saveButtonDisabled]}
-              onPress={handleSave}
-              disabled={saveMutation.isPending}
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Save size={18} color="#fff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Leave Library Section */}
+          {/* Leave Library Section */}
         <SectionCard title="Leave Library" subtitle="Define your standard time-off categories" icon={Briefcase}>
           <View style={styles.leaveLibraryContent}>
             {leaveTypes.map((leave) => (
@@ -639,6 +621,22 @@ export default function LeavePolicyTab() {
             </Text>
           </View>
         </SectionCard>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={styles.bottomSaveButton}
+          onPress={handleSave}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <View style={styles.saveButtonContent}>
+              <Save size={20} color="white" />
+              <Text style={styles.saveButtonText}>Save Leave Policies</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Add Leave Type Modal */}
@@ -648,6 +646,7 @@ export default function LeavePolicyTab() {
         onAdd={addLeave}
       />
     </KeyboardAvoidingView>
+    </Layout>
   );
 }
 
@@ -749,12 +748,32 @@ const styles = StyleSheet.create({
   saveButtonDisabled: {
     opacity: 0.5,
   },
+  bottomSaveButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   saveButtonText: {
-    fontSize: 11,
+    fontSize: 16,
     fontWeight: '700',
     color: '#fff',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  },
+  sectionHeaderRow: {
+    marginBottom: 20,
   },
   sectionCard: {
     backgroundColor: '#fff',

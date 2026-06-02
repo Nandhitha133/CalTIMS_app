@@ -32,20 +32,21 @@ import {
   HelpCircle,
   Settings as SettingsIcon,
   Shield,
+  ShieldCheck,
   Search,
   Trash2,
   AlertCircle,
   ListChecks,
   Plus,
   Save,
-  Square,
-  ListChecks as ListChecksDup
+  Square
 } from 'lucide-react-native';
 import CollapsibleSidebar from '../../../components/common/CollapsibleSidebar';
-import { settingsAPI } from '../../../services/endpoints';
+import { settingsAPI, userAPI } from '../../../services/endpoints';
 import { useSocketEvent } from '../../../services/socket';
-import Header from '../../../components/common/Header';
 import { useAuthStore } from '../../../store/authStore';
+import Layout from '../../../components/common/Layout';
+import PageHeader from '../../../components/common/PageHeader';
 
 // Types
 interface Permission {
@@ -434,6 +435,7 @@ const EMPLOYEE_VISIBLE_MODULES = [
 export default function UsersAndRolesTab() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [roles, setRoles] = useState<Role[]>([]);
   const [activeRoleIdx, setActiveRoleIdx] = useState(0);
   const [selectedRoleIdxs, setSelectedRoleIdxs] = useState<number[]>([]);
@@ -661,50 +663,41 @@ export default function UsersAndRolesTab() {
   }
 
   return (
-    <View style={styles.container}>
-      <Header
-        title="Access Control"
-        showBackButton={true}
-        showSidebarButton={false}
-        onBackPress={() => navigation.navigate('Settings' as never)}
-      />
-      
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Header Actions */}
-        <View style={styles.headerActions}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Access Control</Text>
-            <Text style={styles.description}>Enterprise RBAC with hierarchical module trees</Text>
-          </View>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.addButton} onPress={handleAddRole}>
-              <Plus size={18} color="#64748b" />
-              <Text style={styles.addButtonText}>Add Role</Text>
+    <Layout
+      title="Users & Access"
+      user={currentUser}
+      sidebarVisible={sidebarVisible}
+      setSidebarVisible={setSidebarVisible}
+      refreshing={isLoading}
+      onRefresh={handleRefresh}
+      scrollable={false}
+      backgroundColor="#f8fafc"
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
+    >
+      <View style={{ flex: 1 }}>
+        <PageHeader
+          title="Access Governance"
+          subtitle="Enterprise RBAC with hierarchical module trees"
+          icon={ShieldCheck}
+          iconColor="#6366f1"
+          iconBgColor="#eef2ff"
+          rightElement={
+            <TouchableOpacity style={styles.headerAddButton} onPress={handleAddRole}>
+              <Plus size={18} color="#6366f1" />
+              <Text style={styles.headerAddButtonText}>Add Role</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveButton, (!isDirty || saveMutation.isPending) && styles.saveButtonDisabled]}
-              onPress={() => saveMutation.mutate()}
-              disabled={!isDirty || saveMutation.isPending}
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Save size={18} color="#fff" />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+          }
+        />
 
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+        >
         {/* Main Content */}
         <View style={styles.mainContent}>
           {/* Role List */}
@@ -896,6 +889,22 @@ export default function UsersAndRolesTab() {
             </View>
           )}
         </View>
+
+        {/* Bottom Save Button */}
+        <TouchableOpacity
+          style={[styles.saveButton, (!isDirty || saveMutation.isPending) && styles.saveButtonDisabled, { marginHorizontal: 16, marginBottom: 16 }]}
+          onPress={() => saveMutation.mutate()}
+          disabled={!isDirty || saveMutation.isPending}
+        >
+          {saveMutation.isPending ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <Save size={18} color="white" />
+              <Text style={styles.saveButtonText}>Synchronize Access Rules</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Delete Confirmation Modal */}
@@ -968,7 +977,8 @@ export default function UsersAndRolesTab() {
           }}
         />
       )}
-    </View>
+      </View>
+    </Layout>
   );
 }
 
@@ -1051,11 +1061,25 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   saveButtonText: {
-    fontSize: 11,
-    fontWeight: '700',
     color: '#fff',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  headerAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#e0e7ff',
+  },
+  headerAddButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6366f1',
   },
   mainContent: {
     flexDirection: 'column',

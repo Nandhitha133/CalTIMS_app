@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Switch,
   Dimensions,
+  StyleSheet,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -42,7 +43,8 @@ import LinearGradient from 'react-native-linear-gradient';
 import { policyAPI } from '../../../services/endpoints';
 import { useSocketEvent } from '../../../services/socket';
 import { useAuthStore } from '../../../store/authStore';
-import Header from '../../../components/common/Header';
+import Layout from '../../../components/common/Layout';
+import PageHeader from '../../../components/common/PageHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -85,6 +87,7 @@ interface RoundingConfig {
 interface PayrollPolicy {
   id?: string;
   version?: number;
+  updatedAt?: string;
   salaryComponents: SalaryComponent[];
   statutory: StatutoryConfig;
   attendance: AttendanceConfig;
@@ -412,7 +415,8 @@ const StatutoryCard = ({
 export default function PayrollPolicyTab() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const { isPro } = useAuthStore();
+  const { user, isPro } = useAuthStore();
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [policy, setPolicy] = useState<PayrollPolicy | null>(null);
   const [activeTab, setActiveTab] = useState('components');
   const [preview, setPreview] = useState<PreviewData | null>(null);
@@ -577,16 +581,18 @@ export default function PayrollPolicyTab() {
 
   if (!policy) {
     return (
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <Layout
+        title="Payroll Policy"
+        user={user}
+        sidebarVisible={sidebarVisible}
+        setSidebarVisible={setSidebarVisible}
+        refreshing={isLoading}
+        onRefresh={refetch}
+        scrollable={false}
+        backgroundColor="#f8fafc"
+        showBackButton={true}
+        onBackPress={() => navigation.navigate('Settings' as never)}
       >
-        <Header
-          title="Payroll Policy"
-          showBackButton={true}
-          showSidebarButton={false}
-          onBackPress={() => navigation.navigate('Settings' as never)}
-        />
         <View style={styles.emptyContainer}>
           <AlertCircle size={48} color="#ef4444" />
           <Text style={styles.emptyTitle}>No payroll policy found</Text>
@@ -597,65 +603,84 @@ export default function PayrollPolicyTab() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </Layout>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <Layout
+      title="Payroll Policy"
+      user={user}
+      sidebarVisible={sidebarVisible}
+      setSidebarVisible={setSidebarVisible}
+      refreshing={isLoading}
+      onRefresh={refetch}
+      scrollable={false}
+      backgroundColor="#f8fafc"
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
     >
-      <Header
-        title="Payroll Policy"
-        showBackButton={true}
-        showSidebarButton={false}
-        onBackPress={() => navigation.navigate('Settings' as never)}
-      />
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        {/* Header Actions */}
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.versionButton}
-            onPress={() => handleSave(true)}
-            disabled={saving}
-          >
-            <History size={18} color="#6366f1" />
-            <Text style={styles.versionButtonText}>New Version</Text>
-          </TouchableOpacity>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <PageHeader
+            title="Payroll Engineering"
+            subtitle="Configure salary components, statutory rules, and disbursement logic"
+            icon={Calculator}
+            iconColor="#6366f1"
+            iconBgColor="#eef2ff"
+          />
 
-          <TouchableOpacity
-            style={styles.saveButton}
-            onPress={() => handleSave(false)}
-            disabled={saving}
-          >
-            <LinearGradient
-              colors={['#6366f1', '#8b5cf6']}
-              style={styles.saveButtonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+          {/* Action Header - Moved content out */}
+          <View style={styles.headerActions}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b' }}>Global Payroll Standards</Text>
+              <Text style={{ fontSize: 12, color: '#64748b' }}>V{policy.version || 1} • Last updated {policy.updatedAt ? new Date(policy.updatedAt).toLocaleDateString() : 'recently'}</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.versionButton}
+              onPress={() => handleSave(true)}
+              disabled={saving}
             >
-              {saving ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Save size={18} color="#ffffff" />
-                  <Text style={styles.saveButtonText}>Synchronize Changes</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              <History size={18} color="#6366f1" />
+              <Text style={styles.versionButtonText}>New Version</Text>
+            </TouchableOpacity>
 
-        {/* Main Content */}
-        <View style={styles.mainContent}>
-          {/* Left Column - Forms */}
-          <View style={styles.leftColumn}>
-            <PolicyTabs activeTab={activeTab} onTabChange={setActiveTab} />
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={() => handleSave(false)}
+              disabled={saving}
+            >
+              <LinearGradient
+                colors={['#6366f1', '#8b5cf6']}
+                style={styles.saveButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Save size={18} color="#ffffff" />
+                    <Text style={styles.saveButtonText}>Synchronize Changes</Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* Main Content */}
+          <View style={styles.mainContent}>
+            {/* Left Column - Forms */}
+            <View style={styles.leftColumn}>
+              <PolicyTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
             {activeTab === 'components' && (
               <View style={styles.componentsContainer}>
@@ -933,13 +958,37 @@ export default function PayrollPolicyTab() {
               </LinearGradient>
             </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+         </View>
+
+         {/* Bottom Save Button */}
+         <TouchableOpacity
+           style={styles.bottomSaveButton}
+           onPress={() => handleSave(false)}
+           disabled={saving}
+         >
+           <LinearGradient
+             colors={['#6366f1', '#8b5cf6']}
+             style={styles.bottomSaveButtonGradient}
+             start={{ x: 0, y: 0 }}
+             end={{ x: 1, y: 0 }}
+           >
+             {saving ? (
+               <ActivityIndicator color="white" />
+             ) : (
+               <View style={styles.saveButtonContent}>
+                 <Save size={20} color="white" />
+                 <Text style={styles.bottomSaveButtonText}>Synchronize Standards</Text>
+               </View>
+             )}
+           </LinearGradient>
+         </TouchableOpacity>
+       </ScrollView>
+     </KeyboardAvoidingView>
+    </Layout>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
@@ -1028,6 +1077,34 @@ const styles = {
     fontSize: 13,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  bottomSaveButton: {
+    marginTop: 24,
+    marginBottom: 40,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bottomSaveButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 10,
+  },
+  bottomSaveButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  saveButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   mainContent: {
     flexDirection: 'column',
@@ -1721,4 +1798,4 @@ const styles = {
   confirmButtonDeleteText: {
     color: '#ef4444',
   },
-} as const;
+});

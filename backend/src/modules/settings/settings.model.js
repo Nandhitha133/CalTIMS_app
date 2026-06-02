@@ -60,6 +60,7 @@ const settingsSchema = new mongoose.Schema(
       managerApprovalRequired: { type: Boolean, default: true },
       minHoursPerDay: { type: Number, default: 4 },
       maxHoursPerDay: { type: Number, default: 12 },
+      maxHoursPerWeek: { type: Number, default: 48 }, // New field
       enforceMinHoursOnSubmit: { type: Boolean, default: false },
       // Permission Log limits
       permissionMaxHoursPerDay: { type: Number, default: 2 },

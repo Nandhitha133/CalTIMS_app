@@ -34,7 +34,9 @@ import {
 } from 'lucide-react-native';
 import { settingsAPI } from '../../../services/endpoints';
 import { useSocketEvent } from '../../../services/socket';
-import Header from '../../../components/common/Header';
+import { useAuthStore } from '../../../store/authStore';
+import Layout from '../../../components/common/Layout';
+import PageHeader from '../../../components/common/PageHeader';
 import LinearGradient from 'react-native-linear-gradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -328,6 +330,8 @@ const RetentionDaysSlider = ({ value, onChange }: { value: number; onChange: (va
 export default function ComplianceLocksTab() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const [compliance, setCompliance] = useState<ComplianceConfig>({
     timesheetFreezeDay: 28,
@@ -429,55 +433,46 @@ export default function ComplianceLocksTab() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <Layout
+      title="Compliance & Locks"
+      user={user}
+      sidebarVisible={sidebarVisible}
+      setSidebarVisible={setSidebarVisible}
+      refreshing={isLoading}
+      onRefresh={handleRefresh}
+      scrollable={false}
+      backgroundColor="#f8fafc"
+      showBackButton={true}
+      onBackPress={() => navigation.navigate('Settings' as never)}
     >
-      <Header
-        title="Compliance & Data Integrity"
-        showBackButton={true}
-        showSidebarButton={false}
-        onBackPress={() => navigation.navigate('Settings' as never)}
-      />
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       >
-        {/* Sticky Header */}
-        <View style={styles.stickyHeader}>
-          <View>
-            <Text style={styles.title}>Compliance & Data Integrity</Text>
-            <Text style={styles.description}>Enforce regulatory boundaries and historical data preservation</Text>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <PageHeader
+            title="Institutional Integrity"
+            subtitle="Configure governance rules, data locks, and audit retention standards"
+            icon={ShieldCheck}
+            iconColor="#6366f1"
+            iconBgColor="#eef2ff"
+          />
+
+          {/* Sticky Header - Moved content out */}
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.title}>System Compliance</Text>
+              <Text style={styles.description}>Manage organizational guardrails and transparency</Text>
+            </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.saveButton, saveMutation.isPending && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={saveMutation.isPending}
-          >
-            <LinearGradient
-              colors={['#1e293b', '#0f172a']}
-              style={styles.saveButtonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Save size={18} color="#fff" />
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.gridContainer}>
-          {/* Temporal Constraints Section */}
+          <View style={styles.gridContainer}>
+            {/* Timesheet Rules Section */}
           <SectionCard 
             title="Temporal Constraints" 
             subtitle="Locking mechanisms for previous cycles" 
@@ -547,8 +542,32 @@ export default function ComplianceLocksTab() {
             </View>
           </LinearGradient>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        {/* Bottom Save Button */}
+          <TouchableOpacity
+            style={styles.bottomSaveButton}
+            onPress={handleSave}
+            disabled={saveMutation.isPending}
+          >
+            <LinearGradient
+              colors={['#6366f1', '#4f46e5']}
+              style={styles.bottomSaveButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              {saveMutation.isPending ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <View style={styles.saveButtonContent}>
+                  <Save size={20} color="white" />
+                  <Text style={styles.bottomSaveButtonText}>Enforce Policy</Text>
+                </View>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Layout>
   );
 }
 
@@ -613,11 +632,40 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   saveButtonText: {
-    fontSize: 13,
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '700',
-    color: '#fff',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  },
+  bottomSaveButton: {
+    marginTop: 24,
+    marginBottom: 40,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bottomSaveButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', 
+    paddingVertical: 16,
+    gap: 10,
+  },
+  bottomSaveButtonText: {
+    color: '#ffffff', 
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  saveButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionHeaderRow: {
+    marginBottom: 20,
   },
   gridContainer: {
     gap: 16,

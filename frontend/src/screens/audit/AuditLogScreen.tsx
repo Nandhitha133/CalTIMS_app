@@ -37,8 +37,6 @@ import {
   X,
   Filter,
   ChevronDown,
-  Bell,
-  Activity,
 } from 'lucide-react-native';
 import { auditAPI } from '../../services/endpoints';
 import { exportFile } from '../../utils/exportHelper';
@@ -60,16 +58,6 @@ interface AuditLog {
   };
   metadata?: Record<string, any>;
   createdAt: string;
-}
-
-interface ActivityItem {
-  _id?: string;
-  id?: string;
-  user?: string;
-  action?: string;
-  role?: string;
-  status?: 'SUCCESS' | 'FAILED' | 'WARNING';
-  timestamp?: string;
 }
 
 // ---------- Sub‑components ----------
@@ -179,7 +167,7 @@ const AuditLogCard = memo(({ log, onPress }: { log: AuditLog; onPress: () => voi
   );
 });
 
-const DetailModal = memo(({ visible, log, onClose, onExport }: any) => {
+const DetailModal = memo(({ visible, log, onClose, onExport, onExportUser }: any) => {
   if (!log) return null;
   const statusColors: Record<string, string> = { SUCCESS: '#6366f1', FAILED: '#e11d48', WARNING: '#f59e0b' };
   const bannerColor = statusColors[log.status] || '#3b82f6';
@@ -242,60 +230,13 @@ const DetailModal = memo(({ visible, log, onClose, onExport }: any) => {
             )}
           </ScrollView>
           <View style={detailStyles.footer}>
+            <TouchableOpacity style={detailStyles.exportUserButton} onPress={() => onExportUser(log)}>
+              <Download size={16} color="white" /><Text style={detailStyles.exportUserButtonText}>User Activity</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={detailStyles.exportButton} onPress={onExport}>
-              <Download size={16} color="#1e293b" /><Text style={detailStyles.exportButtonText}>Export All Logs</Text>
+              <Download size={16} color="#1e293b" /><Text style={detailStyles.exportButtonText}>Export All</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
-    </Modal>
-  );
-});
-
-const ActivityFeedModal = memo(({ visible, onClose, activities }: any) => {
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'SUCCESS': return <CheckCircle2 size={14} color="#10b981" />;
-      case 'FAILED': return <XCircle size={14} color="#ef4444" />;
-      case 'WARNING': return <AlertCircle size={14} color="#f59e0b" />;
-      default: return <Info size={14} color="#3b82f6" />;
-    }
-  };
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={activityStyles.overlay}>
-        <View style={activityStyles.container}>
-          <View style={activityStyles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Bell size={18} color="#6366f1" />
-              <Text style={activityStyles.title}>Live Activity</Text>
-            </View>
-            <TouchableOpacity onPress={onClose}><X size={20} color="#64748b" /></TouchableOpacity>
-          </View>
-          <FlatList
-            data={activities}
-            keyExtractor={(item, idx) => item._id || item.id || String(idx)}
-            contentContainerStyle={{ paddingBottom: 20 }}
-            ListEmptyComponent={
-              <View style={activityStyles.empty}>
-                <Activity size={32} color="#cbd5e1" />
-                <Text style={activityStyles.emptyText}>No recent activity</Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <View style={activityStyles.item}>
-                <View style={activityStyles.itemIcon}>{getStatusIcon(item.status)}</View>
-                <View style={{ flex: 1 }}>
-                  <Text style={activityStyles.itemUser}>{item.user || 'System'}</Text>
-                  <Text style={activityStyles.itemAction}>{(item.action || '').toLowerCase().replace(/_/g, ' ')}</Text>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                    <Text style={activityStyles.itemRole}>{item.role}</Text>
-                    <Text style={activityStyles.itemTime}>{item.timestamp ? formatDistanceToNow(new Date(item.timestamp), { addSuffix: true }) : ''}</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          />
         </View>
       </View>
     </Modal>
@@ -312,7 +253,6 @@ export default function AuditLogScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
-  const [showActivityFeed, setShowActivityFeed] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -322,9 +262,6 @@ export default function AuditLogScreen() {
   const [tempFilters, setTempFilters] = useState({ action: '', status: '' });
   const [showActionDropdown, setShowActionDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-
-  // Live activity
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   const actionOptions = [
     { value: '', label: 'All Actions' },
@@ -348,28 +285,6 @@ export default function AuditLogScreen() {
     { value: 'FAILED', label: 'Failed' },
     { value: 'WARNING', label: 'Warning' },
   ];
-
-  // Mock socket connection for demonstration (since library is missing)
-  useEffect(() => {
-    // In a real environment, you would use: import io from 'socket.io-client';
-    // const socket = io(BASE_URL.replace('/api/v1', ''));
-    // socket.on('activity', (newActivity) => setActivities(prev => [newActivity, ...prev]));
-
-    // For now, we simulate periodic activity to show how the UI works
-    const interval = setInterval(() => {
-      const mockActivity: ActivityItem = {
-        id: Math.random().toString(),
-        user: ['John Doe', 'System', 'HR Admin', 'Jane Smith'][Math.floor(Math.random() * 4)],
-        action: ['LOGIN', 'CREATE_PROJECT', 'UPDATE_TIMESHEET', 'APPROVE_LEAVE'][Math.floor(Math.random() * 4)],
-        role: 'ADMIN',
-        status: 'SUCCESS',
-        timestamp: new Date().toISOString(),
-      };
-      setActivities(prev => [mockActivity, ...prev].slice(0, 50));
-    }, 15000); // New activity every 15 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Fetch audit logs
   const fetchLogs = useCallback(async () => {
@@ -423,6 +338,34 @@ export default function AuditLogScreen() {
     await exportFile(csv, `audit_logs_${format(new Date(), 'yyyyMMdd')}.csv`, 'text/csv');
   };
 
+  const handleExportUserCSV = async (targetLog: AuditLog) => {
+    if (!targetLog.performedBy?.name) {
+      Alert.alert('Error', 'No user associated with this log.');
+      return;
+    }
+
+    const userName = targetLog.performedBy.name;
+    const userId = targetLog.performedBy._id;
+
+    // Filter logs for this specific user from the full logs set
+    const userLogs = logs.filter(l => 
+      (userId && l.performedBy?._id === userId) || 
+      (l.performedBy?.name === userName)
+    );
+
+    if (userLogs.length === 0) {
+      Alert.alert('Info', 'No additional activity found for this user.');
+      return;
+    }
+
+    const headers = ['Action', 'User', 'Role', 'Entity', 'Status', 'IP', 'Timestamp'];
+    const rows = userLogs.map(l => [
+      l.action, l.performedBy?.name || 'System', l.role, l.entity, l.status, l.ipAddress, new Date(l.createdAt).toISOString()
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    await exportFile(csv, `audit_activity_${userName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.csv`, 'text/csv');
+  };
+
   const applyFilters = () => { setActionFilter(tempFilters.action); setStatusFilter(tempFilters.status); setShowFilters(false); };
   const resetFilters = () => { setTempFilters({ action: '', status: '' }); setActionFilter(''); setStatusFilter(''); setSearchQuery(''); };
 
@@ -439,18 +382,6 @@ export default function AuditLogScreen() {
         onRefresh={onRefresh}
         scrollable={false}
       >
-        {/* Header with live activity bell */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 16 }}>
-
-          <TouchableOpacity
-            style={styles.activityBell}
-            onPress={() => setShowActivityFeed(true)}
-          >
-            <Bell size={22} color="#6366f1" />
-            {activities.length > 0 && <View style={styles.bellBadge} />}
-          </TouchableOpacity>
-        </View>
-
         {/* Search and Filter Bar */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBox}>
@@ -551,29 +482,19 @@ export default function AuditLogScreen() {
         onSelect={(val: string) => setTempFilters(prev => ({ ...prev, status: val }))}
         title="Select Status"
       />
-      <DetailModal visible={!!selectedLog} log={selectedLog} onClose={() => setSelectedLog(null)} onExport={handleExportCSV} />
-      <ActivityFeedModal visible={showActivityFeed} onClose={() => setShowActivityFeed(false)} activities={activities} />
+      <DetailModal 
+        visible={!!selectedLog} 
+        log={selectedLog} 
+        onClose={() => setSelectedLog(null)} 
+        onExport={handleExportCSV} 
+        onExportUser={handleExportUserCSV}
+      />
     </>
   );
 }
 
 // ---------- Styles ----------
 const styles = StyleSheet.create({
-  activityBell: {
-    padding: 8,
-    marginRight: 8,
-  },
-  bellBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ef4444',
-    borderWidth: 2,
-    borderColor: 'white',
-  },
   searchContainer: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 12 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
@@ -718,22 +639,44 @@ const detailStyles = StyleSheet.create({
   jsonHeader: { backgroundColor: '#1e293b', paddingHorizontal: 16, paddingVertical: 8 },
   jsonLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 1 },
   jsonContent: { padding: 16, fontSize: 11, color: '#4ade80', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
-  footer: { padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
-  exportButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#f1f5f9', paddingVertical: 14, borderRadius: 12 },
-  exportButtonText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
-});
-
-const activityStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  container: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  title: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
-  empty: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { marginTop: 12, color: '#94a3b8' },
-  item: { flexDirection: 'row', gap: 12, padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  itemIcon: { marginTop: 2 },
-  itemUser: { fontWeight: '600', color: '#1e293b', fontSize: 14 },
-  itemAction: { color: '#475569', fontSize: 13, marginTop: 2 },
-  itemRole: { fontSize: 10, backgroundColor: '#eef2ff', color: '#6366f1', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, fontWeight: '600', overflow: 'hidden' },
-  itemTime: { fontSize: 10, color: '#94a3b8' },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#fafafa',
+  },
+  exportUserButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#6366f1',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  exportUserButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'white',
+  },
+  exportButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  exportButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
 });
