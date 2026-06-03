@@ -563,8 +563,34 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
       fetchTasks();
       fetchTaskCategories();
       fetchComplianceData();
-    }, [weekStart, searchQuery, page])
+    }, [weekStart, page])
   );
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim().length >= 2 || searchQuery.trim().length === 0) {
+        fetchComplianceData();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Frontend-side filtering for instant results without reloading
+  const filteredComplianceData = useMemo(() => {
+    if (!searchQuery.trim()) return complianceData;
+    const term = searchQuery.trim().toLowerCase();
+    
+    return complianceData.filter(item => {
+      const nameMatch = (item.user?.name || '').toLowerCase().includes(term);
+      const emailMatch = (item.user?.email || '').toLowerCase().includes(term);
+      const employeeIdMatch = (item.user?.employeeId || '').toLowerCase().includes(term);
+      const departmentMatch = (item.user?.department || '').toLowerCase().includes(term);
+      const statusMatch = (item.status || '').toLowerCase().includes(term);
+      
+      return nameMatch || emailMatch || employeeIdMatch || departmentMatch || statusMatch;
+    });
+  }, [complianceData, searchQuery]);
 
   const loadUserData = async () => {
     try {
@@ -737,7 +763,7 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
     return isAfter(nextWeekStart, currentWeekStart);
   };
 
-  if (loading && !refreshing) {
+  if (loading && complianceData.length === 0 && !refreshing) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc' }]}>
         <ActivityIndicator size="large" color="#3b82f6" />
@@ -801,7 +827,6 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
                   placeholderTextColor="#94a3b8"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  onSubmitEditing={fetchComplianceData}
                 />
               </View>
             </View>
@@ -809,10 +834,13 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
             {/* Results Header */}
             <View style={styles.resultsHeader}>
               <Text style={styles.resultsText}>{totalResults} EMPLOYEES</Text>
+              {loading && complianceData.length > 0 && (
+                <ActivityIndicator size="small" color="#3b82f6" style={{ marginLeft: 8 }} />
+              )}
             </View>
 
             {/* Compliance List */}
-            {complianceData.length === 0 ? (
+            {filteredComplianceData.length === 0 ? (
               <View style={[styles.emptyContainer, {
                 backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
                 borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
@@ -825,7 +853,7 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
               </View>
             ) : (
               <>
-                {complianceData.map((item, idx) => (
+                {filteredComplianceData.map((item, idx) => (
                   <ComplianceCard
                     key={item.user._id || idx}
                     item={item}
@@ -957,6 +985,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
   resultsText: {

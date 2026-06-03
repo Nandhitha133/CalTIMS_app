@@ -248,7 +248,7 @@ export const settingsAPI = {
 // ==================== PAYROLL API ====================
 export const payrollAPI = {
   getMyPayslips: (params?: any) => 
-    apiService.get('/payroll/history', params),
+    apiService.get('/payroll/payslips/my', params),
   downloadPayslip: (id: string) => 
     apiService.get(`/payroll/payslip/${id}/download`),
   sendPayslipEmail: (id: string) => 
@@ -346,7 +346,13 @@ export const userAPI = {
   getRoles: () => 
     apiService.get('/users/roles'),
   resetPassword: (id: string, password: string) => 
-    apiService.patch(`/users/${id}/reset-password`, { password }),
+    apiService.post(`/users/${id}/reset-password`, { password }),
+  deactivate: (id: string) => 
+    apiService.patch(`/users/${id}/deactivate`),
+  activate: (id: string) => 
+    apiService.patch(`/users/${id}/activate`),
+  changeRole: (id: string, role: string) => 
+    apiService.patch(`/users/${id}/role`, { role }),
   export: (params: any) => 
     apiService.get('/users/export', params, { headers: { 'Accept': 'text/csv' } }),
 };

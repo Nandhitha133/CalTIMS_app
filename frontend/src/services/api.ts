@@ -95,9 +95,15 @@ class ApiService {
       // when some backend environments don't expose the newer audit route.
       try {
         const urlLower = (response.url || '').toLowerCase();
-        if (response.status === 404 && (urlLower.includes('/settings/permissions/audit') || urlLower.includes('/settings/permission-audit-logs'))) {
-          console.warn(`[API] 404 for audit endpoint ${response.url} — returning empty list instead of throwing`);
-          return [] as unknown as T;
+        if (response.status === 404) {
+          if (urlLower.includes('/settings/permissions/audit') || urlLower.includes('/settings/permission-audit-logs')) {
+            console.warn(`[API] 404 for audit endpoint ${response.url} — returning empty list instead of throwing`);
+            return [] as unknown as T;
+          }
+          if (urlLower.includes('/reports/filters')) {
+            console.warn(`[API] 404 for report filters ${response.url} — returning default years`);
+            return { success: true, data: { years: [2024, 2025, 2026, 2027, 2028] } } as unknown as T;
+          }
         }
       } catch (e) {
         // ignore and continue to normal error path

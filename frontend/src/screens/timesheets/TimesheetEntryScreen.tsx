@@ -563,6 +563,9 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
     setIsRepeatLoading(true);
     try {
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      
       const lastWeekStart = addDays(weekStart, -7);
       const from = format(lastWeekStart, 'yyyy-MM-dd');
       const to = format(addDays(lastWeekStart, 6), 'yyyy-MM-dd');
@@ -595,6 +598,8 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
           const newDayHours = Array(7).fill('00:00');
           weekDays.forEach((day, i) => {
+            if (day.getTime() > today.getTime()) return; // Only fill up to today
+            
             const lastWeekDay = format(addDays(lastWeekStart, i), 'yyyy-MM-dd');
             const entry = r.entries?.find((e: any) => {
               try { 
@@ -663,6 +668,9 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     const perRowM = Math.round((perRowHrs - perRowH) * 60);
     const perRowStr = `${String(perRowH).padStart(2, '0')}:${String(perRowM).padStart(2, '0')}`;
 
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
     let filledDays = 0;
 
     const newRows = rows.map((row, rowIdx) => {
@@ -672,7 +680,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       const newDayHours = [...row.dayHours];
       weekDays.forEach((day, i) => {
         if (!isWorkingDay(day)) return;
-        // REMOVED: if (day.getTime() > today.getTime()) return; // Allow filling all days
+        if (day.getTime() > today.getTime()) return; // Only fill up to today
         if (lockedDays[i]) return;
         if (holidays.has(format(day, 'yyyy-MM-dd'))) return;
         
@@ -738,23 +746,22 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     let filledDays = 0;
     const newRows = rows.map(row => ({ ...row, dayHours: [...row.dayHours] }));
 
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
     weekDays.forEach((day, i) => {
       if (!isWorkingDay(day)) return;
-      // REMOVED: if (day.getTime() > today.getTime()) return;
+      if (day.getTime() > today.getTime()) return; // Only fill up to today
       if (lockedDays[i]) return;
       if (holidays.has(format(day, 'yyyy-MM-dd'))) return;
 
       const dateKey = format(day, 'yyyy-MM-dd');
       const hasAttendance = Object.keys(attendanceByDate).length > 0;
       
-      // If we have attendance for this day, use it. Otherwise, use standard hours if it's not a future day.
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      
       let dailyTarget = 0;
       if (attendanceByDate[dateKey]) {
         dailyTarget = attendanceByDate[dateKey];
-      } else if (day.getTime() <= today.getTime()) {
+      } else {
         // Only use standard hours for past/current days if no attendance log found
         dailyTarget = workingHoursPerDay;
       }

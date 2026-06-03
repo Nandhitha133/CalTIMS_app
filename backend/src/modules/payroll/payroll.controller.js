@@ -5,7 +5,9 @@ const User = require('../users/user.model');
 const PayrollProfile = require('./payrollProfile.model');
 const RoleSalaryStructure = require('./roleSalaryStructure.model');
 const ProcessedPayroll = require('./processedPayroll.model');
+const PayrollJob = require('./payrollJob.model');
 const Settings = require('../settings/settings.model');
+const PayrollBatch = require('./payrollBatch.model');
 const payrollService = require('./payroll.service');
 const payslipService = require('./payslip.service');
 const pdfGeneratorService = require('../reports/pdfGenerator.service');
@@ -582,8 +584,17 @@ exports.getMyPayslips = async (req, res, next) => {
 
 exports.getPayslip = async (req, res, next) => {
   try {
-    const payslip = await ProcessedPayroll.findOne({ _id: req.params.id, organizationId: req.organizationId })
+    const query = { _id: req.params.id, organizationId: req.organizationId };
+    
+    // If not admin/owner role, only allow viewing own payslip
+    if (!['admin', 'super_admin', 'owner', 'finance'].includes((req.user.role || '').toLowerCase())) {
+        query.user = req.user.id;
+    }
+
+    const payslip = await ProcessedPayroll.findOne(query)
        .populate('user', 'name employeeId department designation branch email bankName accountNumber ifscCode uan pan aadhaar');
+    
+    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip not found or access denied' });
     res.status(200).json({ success: true, data: payslip });
   } catch (err) {
     next(err);
@@ -672,15 +683,25 @@ exports.downloadPayslipPDF = async (req, res, next) => {
   try {
     const { id } = req.params;
     const organizationId = req.organizationId;
-    const payroll = await ProcessedPayroll.findOne({ _id: id, organizationId }).populate('user');
     
-    if (!payroll) {
-        return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    const query = { _id: id, organizationId };
+    // Ownership check for non-admins
+    if (!['admin', 'super_admin', 'owner', 'finance'].includes((req.user.role || '').toLowerCase())) {
+        query.user = req.user.id;
     }
 
-    const settings = await Settings.findOne();
+    const payroll = await ProcessedPayroll.findOne(query).populate('user');
     
-    // Use the premium PDF generator with full context
+    if (!payroll) {
+        return res.status(404).json({ success: false, message: 'Payslip record not found or access denied' });
+    }
+
+    const settings = await Settings.findOne({ organizationId });
+    
+    if (!settings) {
+        return res.status(404).json({ success: false, message: 'Organization settings not found' });
+    }
+    
     const mappedData = _mapPayrollToReportData(payroll, settings);
     const pdfBuffer = await pdfGeneratorService.generatePayslipBuffer(mappedData, settings);
 
@@ -698,9 +719,16 @@ exports.sendPayslipEmail = async (req, res, next) => {
   try {
     const { id } = req.params;
     const organizationId = req.organizationId;
-    const payroll = await ProcessedPayroll.findOne({ _id: id, organizationId }).populate('user');
     
-    if (!payroll) return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    const query = { _id: id, organizationId };
+    // Ownership check for non-admins
+    if (!['admin', 'super_admin', 'owner', 'finance'].includes((req.user.role || '').toLowerCase())) {
+        query.user = req.user.id;
+    }
+
+    const payroll = await ProcessedPayroll.findOne(query).populate('user');
+    
+    if (!payroll) return res.status(404).json({ success: false, message: 'Payslip record not found or access denied' });
     
     const email = payroll.user?.email || payroll.employeeInfo?.email;
     if (!email) {
@@ -708,6 +736,8 @@ exports.sendPayslipEmail = async (req, res, next) => {
     }
 
     const settings = await Settings.findOne({ organizationId });
+    if (!settings) return res.status(404).json({ success: false, message: 'Organization settings not found' });
+    
     const mappedData = _mapPayrollToReportData(payroll, settings);
 
     // Call internal email service
@@ -734,14 +764,19 @@ exports.bulkSendPayslipEmails = async (req, res, next) => {
     
     // BANK-GRADE: Instead of blocking the request for a long email loop,
     // we queue the job for background fault-tolerant processing.
-    const PayrollJob = require('./payrollJob.model');
     const job = await PayrollJob.create({
         organizationId,
+        requestedBy: req.user?.id,
         type: 'SEND_PAYSLIP_EMAILS',
+        status: 'PENDING',
+        totalItems: ids.length,
         payload: { ids, organizationId },
         priority: 10
     });
     
+    // Start background processing
+    _processBulkEmails(job._id, organizationId);
+
     res.status(200).json({ 
         success: true, 
         message: 'Your request to email payslips has been queued for background processing.',
@@ -750,6 +785,66 @@ exports.bulkSendPayslipEmails = async (req, res, next) => {
   } catch (err) {
     logger.error(`[PayrollController] Background job creation failed: ${err.message}`, { stack: err.stack });
     next(err);
+  }
+};
+
+/**
+ * Helper to process bulk emails in "background"
+ */
+const _processBulkEmails = async (jobId, organizationId) => {
+  try {
+    const job = await PayrollJob.findById(jobId);
+    if (!job) return;
+
+    job.status = 'PROCESSING';
+    await job.save();
+
+    const settings = await Settings.findOne({ organizationId });
+    const payrolls = await ProcessedPayroll.find({
+      _id: { $in: job.payload.ids },
+      organizationId
+    }).populate('user');
+
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+
+    for (const payroll of payrolls) {
+      try {
+        const email = payroll.user?.email || payroll.employeeInfo?.email;
+        if (!email) {
+          throw new Error(`Employee ${payroll.user?.employeeId || 'N/A'} has no email address`);
+        }
+
+        const mappedData = _mapPayrollToReportData(payroll, settings);
+        await emailService.sendPayslipEmail(email, mappedData);
+
+        successCount++;
+        payroll.isEmailSent = true;
+        payroll.lastEmailSentAt = new Date();
+        await payroll.save();
+      } catch (e) {
+        failCount++;
+        errors.push({ id: payroll._id, error: e.message });
+      }
+      
+      // Update progress
+      job.processedItems = successCount + failCount;
+      await job.save();
+    }
+
+    job.status = failCount === 0 ? 'COMPLETED' : 'COMPLETED_WITH_ERRORS';
+    job.completedAt = new Date();
+    job.result = { successCount, failCount, errors };
+    await job.save();
+
+  } catch (err) {
+    console.error(`[PayrollController] Bulk email background job failed: ${err.message}`);
+    await PayrollJob.findByIdAndUpdate(jobId, { 
+      status: 'FAILED', 
+      error: err.message,
+      completedAt: new Date()
+    });
   }
 };
 

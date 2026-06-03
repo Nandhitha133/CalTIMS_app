@@ -35,8 +35,8 @@ import {
   Ban,
   Check,
 } from 'lucide-react-native';
-import { leaveAPI, userAPI, settingsAPI } from '../../services/endpoints';
-import { exportFile } from '../../utils/exportHelper';
+import { leaveAPI, userAPI, settingsAPI, reportAPI } from '../../services/endpoints';
+import { exportFile, convertToCSV } from '../../utils/exportHelper';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -761,6 +761,33 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
   const [eligibilityTotalPages, setEligibilityTotalPages] = useState(1);
   const [pagination, setPagination] = useState<any>(null);
 
+  const fetchStats = async () => {
+    try {
+      const response = await reportAPI.getLeaveSummary({});
+      const data = extractData(response, []);
+      
+      const newStats = { total: 0, pending: 0, approved: 0, rejected: 0 };
+      
+      data.forEach((item: any) => {
+        // Robust status matching: handle both object and string _id, and trim/lowercase
+        const rawStatus = (typeof item._id === 'object' ? item._id?.status : item._id) || '';
+        const status = String(rawStatus).toLowerCase().trim();
+        const count = Number(item.count) || 0;
+        
+        if (status || count > 0) {
+          newStats.total += count;
+          if (status.includes('pending')) newStats.pending += count;
+          else if (status.includes('approved')) newStats.approved += count;
+          else if (status.includes('rejected')) newStats.rejected += count;
+        }
+      });
+      
+      setStats(newStats);
+    } catch (error) {
+      console.error('Error fetching leave stats:', error);
+    }
+  };
+
   const fetchLeaveTypes = async () => {
     try {
       const response = await settingsAPI.getTimesheetSettings();
@@ -818,14 +845,6 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       setLeaves(mappedLeaves);
       setPagination(paginationData);
       setTotalPages(paginationData?.totalPages || 1);
-
-      // Calculate stats based on current view or all (approximated here)
-      setStats({
-        total: mappedLeaves.length,
-        pending: mappedLeaves.filter((l: LeaveRequest) => l.status === 'pending').length,
-        approved: mappedLeaves.filter((l: LeaveRequest) => l.status === 'approved').length,
-        rejected: mappedLeaves.filter((l: LeaveRequest) => l.status === 'rejected').length,
-      });
     } catch (error) {
       console.error('Error fetching leaves:', error);
       Alert.alert('Error', 'Failed to load leave applications');
@@ -848,11 +867,6 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
 
       if (eligibilityFilters.department && eligibilityFilters.department !== 'all') {
         params.department = eligibilityFilters.department;
-      }
-
-      // If no specific search, we might want to default to employees role to avoid getting everyone
-      if (!params.search && !params.department) {
-        params.role = 'employee';
       }
 
       console.log('Fetching employees with params:', params);
@@ -906,6 +920,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
   const fetchAllData = async () => {
     await loadUserData();
     await Promise.all([
+      fetchStats(),
       fetchLeaveTypes(),
       fetchDepartments(),
       activeTab === 'applications' ? fetchLeaves() : fetchEmployees(),
@@ -930,6 +945,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       await leaveAPI.approve(id);
       Alert.alert('Success', 'Leave approved!');
       fetchLeaves();
+      fetchStats();
       setShowDetailModal(false);
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to approve');
@@ -946,6 +962,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       setShowRejectModal(false);
       setSelectedLeave(null);
       fetchLeaves();
+      fetchStats();
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to reject');
     } finally {
@@ -988,68 +1005,28 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       }
 
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      const fileName = formatType === 'csv' 
-        ? `leaves_export_${timestamp}.csv` 
-        : `leaves_export_${timestamp}.xls`;
+      // Use .csv for both to ensure overall mobile compatibility (Office mobile often rejects fake .xls)
+      const fileName = `leaves_export_${timestamp}.csv`;
 
-      let content = '';
-      if (formatType === 'csv') {
-        const headers = ['Employee', 'Employee ID', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Applied On', 'Reason'];
-        const rows = leavesList.map((l: any) => {
-          const empName = l.userId?.name || '—';
-          const empId = l.userId?.employeeId || '—';
-          return [
-            `"${empName.replace(/"/g, '""')}"`,
-            `"${empId.replace(/"/g, '""')}"`,
-            l.leaveType,
-            format(new Date(l.startDate), 'yyyy-MM-dd'),
-            format(new Date(l.endDate), 'yyyy-MM-dd'),
-            l.totalDays,
-            l.status,
-            format(new Date(l.createdAt), 'yyyy-MM-dd'),
-            `"${(l.reason || '').replace(/"/g, '""')}"`
-          ].join(',');
-        });
-        content = [headers.join(','), ...rows].join('\n');
-      } else {
-        // Simple HTML table for Excel
-        const rows = leavesList.map((l: any) => {
-          const empName = l.userId?.name || '—';
-          const empId = l.userId?.employeeId || '—';
-          return `
-            <tr>
-              <td>${empName}</td>
-              <td>${empId}</td>
-              <td>${l.leaveType}</td>
-              <td>${format(new Date(l.startDate), 'yyyy-MM-dd')}</td>
-              <td>${format(new Date(l.endDate), 'yyyy-MM-dd')}</td>
-              <td>${l.totalDays}</td>
-              <td>${l.status}</td>
-              <td>${format(new Date(l.createdAt), 'yyyy-MM-dd')}</td>
-              <td>${l.reason || ''}</td>
-            </tr>
-          `;
-        }).join('');
+      const headers = ['Employee', 'Employee ID', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Applied On', 'Reason'];
+      const rows = leavesList.map((l: any) => {
+        const empName = l.userId?.name || '—';
+        const empId = l.userId?.employeeId || '—';
+        return [
+          empName,
+          empId,
+          l.leaveType,
+          format(new Date(l.startDate), 'yyyy-MM-dd'),
+          format(new Date(l.endDate), 'yyyy-MM-dd'),
+          l.totalDays,
+          l.status,
+          format(new Date(l.createdAt), 'yyyy-MM-dd'),
+          l.reason || ''
+        ];
+      });
 
-        content = `
-          <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-            <head><meta charset="UTF-8"></head>
-            <body>
-              <table>
-                <thead>
-                  <tr style="font-weight: bold; background-color: #f1f5f9;">
-                    <th>Employee</th><th>Employee ID</th><th>Leave Type</th><th>Start Date</th><th>End Date</th><th>Days</th><th>Status</th><th>Applied On</th><th>Reason</th>
-                  </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </body>
-          </html>
-        `;
-      }
-      
-      const fileType = formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel';
-      await exportFile(content, fileName, fileType);
+      const content = convertToCSV(headers, rows);
+      await exportFile(content, fileName, 'text/csv');
       setShowExportModal(false);
     } catch (error: any) {
       console.error('Export failed:', error);

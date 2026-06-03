@@ -44,7 +44,7 @@ import {
   Download,
 } from 'lucide-react-native';
 import { userAPI, auditAPI } from '../../services/endpoints';
-import { exportFile } from '../../utils/exportHelper';
+import { exportFile, convertToCSV } from '../../utils/exportHelper';
 import Layout from '../../components/common/Layout';
 import StatusBadge from '../../components/common/StatusBadge';
 import DropdownModal from '../../components/common/DropdownModal';
@@ -371,6 +371,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -424,18 +425,43 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const departmentOptions = useMemo(() => departments.map(d => ({ value: d, label: d })), [departments]);
   const employeeIdOptions = useMemo(() => allEmployees.filter(e => e.employeeId).map(e => ({ value: e.employeeId!, label: `${e.employeeId} - ${e.name}` })), [allEmployees]);
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchDepartments(),
+      fetchAllEmployees(),
+      fetchEmployees()
+    ]);
+    setRefreshing(false);
+  };
+
   useFocusEffect(useCallback(() => {
     loadUserData();
     fetchDepartments();
-    fetchRoles();
     fetchAllEmployees();
     fetchEmployees();
-  }, [page, searchQuery, roleFilter, statusFilter, departmentFilter, employeeIdFilter]));
+  }, [page, debouncedSearchQuery, roleFilter, statusFilter, departmentFilter, employeeIdFilter]));
 
   const loadUserData = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
-      if (userData) setUser(JSON.parse(userData));
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        
+        // Check permissions: only admin, manager, or owner can access this screen
+        const role = parsedUser.role?.toLowerCase();
+        if (role !== 'admin' && role !== 'manager' && role !== 'owner' && role !== 'super_admin') {
+          navigation.navigate('Dashboard');
+        }
+      }
     } catch (error) { console.error('Error loading user data:', error); }
   };
 
@@ -447,42 +473,67 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     } catch (error) { console.error('Error fetching departments:', error); }
   };
 
-  const fetchRoles = async () => {
-    try {
-      const response = await userAPI.getRoles();
-      const data = extractData(response, []);
-      setRoles(data);
-    } catch (error) { console.error('Error fetching roles:', error); }
-  };
-
   const fetchAllEmployees = async () => {
     try {
       const response = await userAPI.getAll({ limit: 5000 });
       const data = extractData(response, []);
-      setAllEmployees(data);
+      setAllEmployees(Array.isArray(data) ? data : (data?.data || []));
     } catch (error) { console.error('Error fetching all employees:', error); }
   };
 
   const fetchEmployees = async () => {
     try {
-      setLoading(true);
-      const effectiveSearch = searchQuery.trim().length >= 2 ? searchQuery.trim() : '';
-      const params: any = { page, limit, search: effectiveSearch, role: roleFilter, status: statusFilter, department: departmentFilter, employeeId: employeeIdFilter };
-      const response = await userAPI.getAll(params);
-      const data = extractData(response, {});
+      // Only show full page loader if it's the very first load or if we are refreshing/paging
+      // For search, we can avoid the full page loader if we already have data
+      if (employees.length === 0) {
+        setLoading(true);
+      }
       
-      setEmployees(data?.data || data || []);
-      setTotalPages(data?.pagination?.totalPages || 1);
-      setTotalResults(data?.pagination?.total || 0);
+      const effectiveSearch = debouncedSearchQuery.trim().length >= 2 ? debouncedSearchQuery.trim() : '';
+      const params: any = { page, limit, search: effectiveSearch, role: roleFilter, status: statusFilter, department: departmentFilter, employeeId: employeeIdFilter };
+      const response: any = await userAPI.getAll(params);
+      
+      // Handle different possible response structures
+      let rawData = [];
+      let pagination = { totalPages: 1, total: 0 };
+
+      if (response) {
+        // Case 1: response.data.data (Standard structure)
+        if (response.data?.data && Array.isArray(response.data.data)) {
+          rawData = response.data.data;
+          pagination = response.data.pagination || response.pagination || pagination;
+        } 
+        // Case 2: response.data is the array
+        else if (Array.isArray(response.data)) {
+          rawData = response.data;
+          pagination = response.pagination || pagination;
+        }
+        // Case 3: response is the array
+        else if (Array.isArray(response)) {
+          rawData = response;
+        }
+        // Case 4: response.users (Matching backend service return)
+        else if (response.users && Array.isArray(response.users)) {
+          rawData = response.users;
+          pagination = response.pagination || pagination;
+        }
+        // Case 5: response.data.users
+        else if (response.data?.users && Array.isArray(response.data.users)) {
+          rawData = response.data.users;
+          pagination = response.data.pagination || pagination;
+        }
+      }
+
+      setEmployees(rawData);
+      setTotalPages(pagination.totalPages || 1);
+      setTotalResults(pagination.total || rawData.length);
     } catch (error) {
       console.error('Error fetching employees:', error);
-      Alert.alert('Error', 'Failed to load employees');
+      // Alert.alert('Error', 'Failed to load employees'); // Removed to avoid annoying popups on transient failures
     } finally {
       setLoading(false);
     }
   };
-
-  const onRefresh = async () => { setRefreshing(true); await fetchEmployees(); setRefreshing(false); };
 
   const validateFields = (data: any, isEdit = false) => {
     const errors: Record<string, string> = {};
@@ -490,7 +541,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     else if (!/^[A-Za-z\s]+$/.test(data.name)) errors.name = 'Name should contain alphabets only';
 
     if (!data.email?.trim()) errors.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = 'Invalid email format';
+    else if (!/^[a-zA-Z0-9._%+-]+@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/.test(data.email)) errors.email = 'Invalid email format';
 
     if (!isEdit && (!data.password || data.password.length < 8)) errors.password = 'Password must be at least 8 characters';
     if (isEdit && data.newPassword && data.newPassword.length < 8) errors.newPassword = 'Password must be at least 8 characters';
@@ -612,7 +663,11 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
   const handleToggleStatus = async (employee: User) => {
     setIsToggling(true);
     try {
-      await userAPI.update(employee._id, { isActive: !employee.isActive });
+      if (employee.isActive) {
+        await userAPI.deactivate(employee._id);
+      } else {
+        await userAPI.activate(employee._id);
+      }
       Alert.alert('Success', employee.isActive ? 'Employee deactivated' : 'Employee activated');
       fetchEmployees();
     } catch (error: any) {
@@ -630,7 +685,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
         status: statusFilter,
         department: departmentFilter,
         employeeId: employeeIdFilter,
-        search: searchQuery.trim().length >= 2 ? searchQuery.trim() : '',
+        search: debouncedSearchQuery.trim().length >= 2 ? debouncedSearchQuery.trim() : '',
         limit: 10000
       };
       
@@ -643,59 +698,24 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
       }
 
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      const fileName = formatType === 'csv' 
-        ? `employees_export_${timestamp}.csv` 
-        : `employees_export_${timestamp}.xls`;
+      // Use .csv for both to ensure overall mobile compatibility (Office mobile often rejects fake .xls)
+      const fileName = `employees_export_${timestamp}.csv`;
 
-      let content = '';
-      if (formatType === 'csv') {
-        const headers = ['Employee ID', 'Name', 'Email', 'Phone', 'Role', 'Department', 'Designation', 'Join Date', 'Status'];
-        const rows = employeesList.map((emp: User) => [
-          `"${emp.employeeId || ''}"`,
-          `"${emp.name.replace(/"/g, '""')}"`,
-          `"${emp.email}"`,
-          `"${emp.phone || ''}"`,
-          emp.role,
-          `"${(emp.department || '').replace(/"/g, '""')}"`,
-          `"${(emp.designation || '').replace(/"/g, '""')}"`,
-          emp.joinDate ? format(new Date(emp.joinDate), 'yyyy-MM-dd') : '',
-          emp.isActive ? 'Active' : 'Inactive'
-        ].join(','));
-        content = [headers.join(','), ...rows].join('\n');
-      } else {
-        // Simple HTML table for Excel
-        const rows = employeesList.map((emp: User) => `
-          <tr>
-            <td>${emp.employeeId || ''}</td>
-            <td>${emp.name}</td>
-            <td>${emp.email}</td>
-            <td>${emp.phone || ''}</td>
-            <td>${emp.role}</td>
-            <td>${emp.department || ''}</td>
-            <td>${emp.designation || ''}</td>
-            <td>${emp.joinDate ? format(new Date(emp.joinDate), 'yyyy-MM-dd') : ''}</td>
-            <td>${emp.isActive ? 'Active' : 'Inactive'}</td>
-          </tr>
-        `).join('');
-        
-        content = `
-          <html>
-            <head><meta charset="UTF-8"></head>
-            <body>
-              <table border="1">
-                <thead>
-                  <tr style="background-color: #3b82f6; color: white;">
-                    <th>Employee ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Department</th><th>Designation</th><th>Join Date</th><th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </body>
-          </html>
-        `;
-      }
-      
-      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
+      const headers = ['Employee ID', 'Name', 'Email', 'Phone', 'Role', 'Department', 'Designation', 'Join Date', 'Status'];
+      const rows = employeesList.map((emp: User) => [
+        emp.employeeId || '',
+        emp.name,
+        emp.email,
+        emp.phone || '',
+        emp.role,
+        emp.department || '',
+        emp.designation || '',
+        emp.joinDate ? format(new Date(emp.joinDate), 'yyyy-MM-dd') : '',
+        emp.isActive ? 'Active' : 'Inactive'
+      ]);
+
+      const content = convertToCSV(headers, rows);
+      await exportFile(content, fileName, 'text/csv');
       setShowExportModal(false);
     } catch (error) {
       console.error('Export failed:', error);
@@ -909,7 +929,16 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
           <View style={styles.searchContainer}>
             <View style={styles.searchBox}>
               <Search size={16} color="#94a3b8" />
-              <TextInput style={styles.searchInput} placeholder="Search (min. 2 characters)..." placeholderTextColor="#94a3b8" value={searchQuery} onChangeText={setSearchQuery} onSubmitEditing={fetchEmployees} />
+              <TextInput 
+                style={styles.searchInput} 
+                placeholder="Search (min. 2 characters)..." 
+                placeholderTextColor="#94a3b8" 
+                value={searchQuery} 
+                onChangeText={setSearchQuery} 
+                 onSubmitEditing={() => {
+                   setDebouncedSearchQuery(searchQuery);
+                 }} 
+               />
             </View>
             <TouchableOpacity style={[styles.filterButton, (showFilters || activeFilterCount > 0) && styles.filterButtonActive]} onPress={() => { if (!showFilters) setTempFilters({ role: roleFilter, status: statusFilter, department: departmentFilter, employeeId: employeeIdFilter }); setShowFilters(!showFilters); }}>
               <Filter size={16} color={showFilters || activeFilterCount > 0 ? '#3b82f6' : '#64748b'} />

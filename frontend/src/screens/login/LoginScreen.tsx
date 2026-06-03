@@ -122,17 +122,11 @@ export default function LoginScreen() {
         await AsyncStorage.removeItem('rememberedEmail');
       }
 
-      if (user.role === 'super_admin' || user.role === 'admin') {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'AdminDashboard' as never }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Dashboard' as never }],
-        });
-      }
+      // Navigate all users to the main Dashboard after login
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Dashboard' as never }],
+      });
     } catch (error: any) {
       let message = 'Invalid email or password';
       if (error.message) message = error.message;

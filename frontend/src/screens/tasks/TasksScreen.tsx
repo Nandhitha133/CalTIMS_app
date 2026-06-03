@@ -42,6 +42,7 @@ import {
 import { taskAPI, projectAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import { convertToCSV } from '../../utils/exportHelper';
 import { FileSpreadsheet } from 'lucide-react-native';
 
 // ==================== Styles ====================
@@ -795,7 +796,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       Alert.alert('Success', 'Task created successfully!');
       setShowCreateModal(false);
       setFormData(INITIAL_FORM);
-      fetchTasks();
+      await fetchTasks();
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to create task');
     } finally {
@@ -815,7 +816,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       Alert.alert('Success', 'Task updated successfully!');
       setShowEditModal(false);
       setSelectedTask(null);
-      fetchTasks();
+      await fetchTasks();
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to update task');
     } finally {
@@ -832,7 +833,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       Alert.alert('Success', 'Task deleted successfully!');
       setShowDeleteModal(false);
       setSelectedTask(null);
-      fetchTasks();
+      await fetchTasks();
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to delete task');
     } finally {
@@ -867,7 +868,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       setBulkNames('');
       setBulkProjectId('');
       setBulkIsolate(false);
-      fetchTasks();
+      await fetchTasks();
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to create tasks');
     } finally {
@@ -893,61 +894,25 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       }
 
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      const fileName = formatType === 'csv' 
-        ? `tasks_export_${timestamp}.csv` 
-        : `tasks_export_${timestamp}.xls`;
+      // Use .csv for both to ensure overall mobile compatibility (Office mobile often rejects fake .xls)
+      const fileName = `tasks_export_${timestamp}.csv`;
 
-      let content = '';
-      if (formatType === 'csv') {
-        const headers = ['Task Name', 'Project', 'Status', 'Priority', 'Description', 'Due Date', 'Created At'];
-        const rows = tasksList.map((task: Task) => {
-          const projectName = typeof task.projectId === 'object' ? task.projectId?.name : '—';
-          return [
-            `"${task.name.replace(/"/g, '""')}"`,
-            `"${projectName.replace(/"/g, '""')}"`,
-            task.status,
-            task.priority,
-            `"${(task.description || '').replace(/"/g, '""')}"`,
-            task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '—',
-            format(new Date(task.createdAt), 'yyyy-MM-dd')
-          ].join(',');
-        });
-        content = [headers.join(','), ...rows].join('\n');
-      } else {
-        // Simple HTML table for Excel
-        const rows = tasksList.map((task: Task) => {
-          const projectName = typeof task.projectId === 'object' ? task.projectId?.name : '—';
-          return `
-            <tr>
-              <td>${task.name}</td>
-              <td>${projectName}</td>
-              <td>${task.status}</td>
-              <td>${task.priority}</td>
-              <td>${task.description || ''}</td>
-              <td>${task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '—'}</td>
-              <td>${format(new Date(task.createdAt), 'yyyy-MM-dd')}</td>
-            </tr>
-          `;
-        }).join('');
-        
-        content = `
-          <html>
-            <head><meta charset="UTF-8"></head>
-            <body>
-              <table border="1">
-                <thead>
-                  <tr style="background-color: #3b82f6; color: white;">
-                    <th>Task Name</th><th>Project</th><th>Status</th><th>Priority</th><th>Description</th><th>Due Date</th><th>Created At</th>
-                  </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </body>
-          </html>
-        `;
-      }
-      
-      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
+      const headers = ['Task Name', 'Project', 'Status', 'Priority', 'Description', 'Due Date', 'Created At'];
+      const rows = tasksList.map((task: Task) => {
+        const projectName = typeof task.projectId === 'object' ? task.projectId?.name : '—';
+        return [
+          task.name,
+          projectName,
+          task.status,
+          task.priority,
+          task.description || '',
+          task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '—',
+          format(new Date(task.createdAt), 'yyyy-MM-dd')
+        ];
+      });
+
+      const content = convertToCSV(headers, rows);
+      await exportFile(content, fileName, 'text/csv');
       setShowExportModal(false);
     } catch (error: any) {
       console.error('Export failed:', error);
@@ -1107,6 +1072,17 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
               >
                 <Download size={16} color="#3b82f6" />
                 <Text style={styles.exportButtonText}>Export</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.bulkButton} 
+                onPress={() => {
+                  setBulkProjectId('');
+                  setBulkNames('');
+                  setShowBulkModal(true);
+                }}
+              >
+                <ListTodo size={16} color="#3b82f6" />
+                <Text style={styles.bulkButtonText}>Bulk</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
                 <Plus size={16} color="white" />
@@ -1398,12 +1374,10 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                     </Text>
                   </View>
 
-                  {selectedTask?.dueDate && (
-                    <View style={detailModalStyles.infoCard}>
-                      <Text style={detailModalStyles.infoLabel}>Due Date</Text>
-                      <Text style={detailModalStyles.infoValue}>{selectedTask?.dueDate ? formatDate(selectedTask.dueDate) : '—'}</Text>
-                    </View>
-                  )}
+                  <View style={detailModalStyles.infoCard}>
+                    <Text style={detailModalStyles.infoLabel}>Due Date</Text>
+                    <Text style={detailModalStyles.infoValue}>{selectedTask?.dueDate ? formatDate(selectedTask.dueDate) : '—'}</Text>
+                  </View>
 
                   {selectedTask?.description && (
                     <View style={detailModalStyles.infoCard}>

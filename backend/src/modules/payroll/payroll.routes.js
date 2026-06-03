@@ -41,7 +41,7 @@ router.get('/history', requireFeature('payroll'), checkPermission('Payroll', 'Ex
 router.get('/payslips/my', requireFeature('payslips'), payrollController.getMyPayslips);
 router.get('/payslips/:id', requireFeature('payslips'), payrollController.getPayslip);
 router.get('/payslip/:id/download', requireFeature('payslips'), payrollController.downloadPayslipPDF);
-router.post('/payslip/:id/send-email', requireFeature('payslips'), checkPermission('Payroll', 'Payslip Generation', 'generate'), payrollController.sendPayslipEmail);
+router.post('/payslip/:id/send-email', requireFeature('payslips'), payrollController.sendPayslipEmail);
 router.post('/payslips/bulk-send-email', requireFeature('payslips'), checkPermission('Payroll', 'Payslip Generation', 'generate'), payrollController.bulkSendPayslipEmails);
 router.get('/payslip/:employeeId', requireFeature('payslips'), checkPermission('Payroll', 'Payslip Generation', 'view'), payrollController.getPayslipByUserId); 
 

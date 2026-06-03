@@ -47,7 +47,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
-import { exportFile } from '../../utils/exportHelper';
+import { exportFile, convertToCSV } from '../../utils/exportHelper';
 import { formatHours } from '../../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -695,39 +695,88 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
     }
   };
 
-  const fetchTimesheets = async () => {
+  // Use a debounced effect for search and other filters to fetch data
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = setTimeout(() => {
+      // If we are on page 1, just fetch. If not, resetting page to 1 will trigger the pagination effect
+      if (pagination.page === 1) {
+        fetchTimesheets(1);
+      } else {
+        setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: 1 }));
+      }
+    }, 500); // 500ms debounce for smoother typing
+
+    return () => clearTimeout(timer);
+  }, [search, filters]);
+
+  // Separate effect for pagination changes
+  useEffect(() => {
+    if (user && pagination.page !== 1) {
+      fetchTimesheets(pagination.page);
+    }
+  }, [pagination.page]);
+
+  // Frontend-side filtering for instant results and matching displayed text
+  const filteredTimesheets = useMemo(() => {
+    if (!search.trim() || search.trim().length < 2) return timesheets;
+    const term = search.trim().toLowerCase();
+    
+    return timesheets.filter(item => {
+      // 1. Project Names
+      const projectsMatch = item.projects?.some(project => 
+        (project || '').toLowerCase().includes(term)
+      );
+
+      // 2. Status
+      const statusMatch = item.statuses?.some(status => 
+        (status || '').toLowerCase().includes(term)
+      );
+
+      // 3. Date Strings
+      const weekStart = new Date(item.weekStartDate);
+      const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000);
+      const dateMatch = format(weekStart, 'MMM d').toLowerCase().includes(term) ||
+                       format(weekEnd, 'MMM d, yyyy').toLowerCase().includes(term) ||
+                       format(new Date(item.lastUpdated), 'MMM d, yyyy').toLowerCase().includes(term);
+
+      return projectsMatch || statusMatch || dateMatch;
+    });
+  }, [timesheets, search]);
+
+  // Fetch timesheets
+  const fetchTimesheets = useCallback(async (pageNumber?: number) => {
     try {
       setLoading(true);
+      const targetPage = pageNumber ?? pagination.page;
+      
       const params: any = {
-        page: pagination.page,
+        page: targetPage,
         limit: 10,
+        search: search.trim(),
+        year: filters.year !== 'All Years' ? filters.year : undefined,
+        month: filters.month !== 'All Months' ? filters.month : undefined,
+        status: filters.status !== 'All Status' ? filters.status : undefined,
+        userId: user?.id || user?._id
       };
       
-      if (search.length >= 1) params.search = search;
-      if (filters.year !== 'All Years') params.year = filters.year;
-      if (filters.month !== 'All Months') params.month = filters.month;
-      if (filters.status !== 'All Status') params.status = filters.status;
-      if (user?.id || user?._id) params.userId = user.id || user._id;
-
       const response = await timesheetService.getHistory(params);
       setTimesheets(response.data || []);
-      setPagination(response.pagination || { page: 1, totalPages: 1, total: 0 });
+      setPagination(response.pagination || { page: targetPage, totalPages: 1, total: 0 });
     } catch (error: any) {
       console.error('Error fetching timesheets:', error);
-      Alert.alert('Error', 'Failed to load timesheet history');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, search, user?.id, user?._id, pagination.page]);
 
   useFocusEffect(
     useCallback(() => {
-      // Do not re-fetch unconditionally to avoid endless loops when opening modals
-      // But we can trigger a fetch if user object is loaded
       if (user) {
         fetchTimesheets();
       }
-    }, [pagination?.page, filters, search, user?.id])
+    }, [user?.id, user?._id])
   );
 
   const onRefresh = async () => {
@@ -831,15 +880,32 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
       }
 
       const timestamp = format(new Date(), 'yyyyMMdd_HHmmss');
-      const fileName = formatType === 'csv'
-        ? `timesheet_history_${timestamp}.csv`
-        : `timesheet_history_${timestamp}.xls`;
+      // Use .csv for both to ensure overall mobile compatibility (Office mobile often rejects fake .xls)
+      const fileName = `timesheet_history_${timestamp}.csv`;
 
-      const content = formatType === 'csv'
-        ? convertToCSV(allData)
-        : generateExcelHTML(allData);
+      const headers = [
+        'Week Start Date',
+        'Week End Date',
+        'Total Hours',
+        'Status',
+        'Projects',
+        'Last Updated'
+      ];
 
-      await exportFile(content, fileName, formatType === 'csv' ? 'text/csv' : 'application/vnd.ms-excel');
+      const rows = allData.map(item => {
+        const weekEndDate = new Date(new Date(item.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000);
+        return [
+          format(new Date(item.weekStartDate), 'yyyy-MM-dd'),
+          format(weekEndDate, 'yyyy-MM-dd'),
+          item.totalHours,
+          item.statuses.join(', '),
+          item.projects.join('; '),
+          format(new Date(item.lastUpdated), 'yyyy-MM-dd HH:mm:ss')
+        ];
+      });
+
+      const content = convertToCSV(headers, rows);
+      await exportFile(content, fileName, 'text/csv');
       setShowExportModal(false);
     } catch (error: any) {
       console.error('Export failed:', error);
@@ -847,89 +913,6 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const convertToCSV = (data: TimesheetHistoryItem[]): string => {
-    const headers = [
-      'Week Start Date',
-      'Week End Date',
-      'Total Hours',
-      'Status',
-      'Projects',
-      'Last Updated'
-    ];
-
-    const rows = data.map(item => {
-      const weekEndDate = new Date(new Date(item.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000);
-      const status = item.statuses.join(', ');
-      const projects = item.projects.join('; ');
-
-      return [
-        format(new Date(item.weekStartDate), 'yyyy-MM-dd'),
-        format(weekEndDate, 'yyyy-MM-dd'),
-        item.totalHours,
-        `"${status}"`,
-        `"${projects.replace(/"/g, '""')}"`,
-        format(new Date(item.lastUpdated), 'yyyy-MM-dd HH:mm:ss')
-      ].join(',');
-    });
-
-    return [headers.join(','), ...rows].join('\n');
-  };
-
-  const generateExcelHTML = (data: TimesheetHistoryItem[]): string => {
-    const headers = [
-      'Week Start Date', 'Week End Date', 'Total Hours', 'Status', 'Projects', 'Last Updated'
-    ];
-
-    const rows = data.map(item => {
-      const weekEndDate = new Date(new Date(item.weekStartDate).getTime() + 6 * 24 * 60 * 60 * 1000);
-      const status = item.statuses.join(', ');
-      const projects = item.projects.join(', ');
-
-      return `
-        <tr>
-          <td>${format(new Date(item.weekStartDate), 'yyyy-MM-dd')}</td>
-          <td>${format(weekEndDate, 'yyyy-MM-dd')}</td>
-          <td>${item.totalHours}</td>
-          <td>${status}</td>
-          <td>${escapeHtml(projects)}</td>
-          <td>${format(new Date(item.lastUpdated), 'yyyy-MM-dd HH:mm:ss')}</td>
-        </tr>
-      `;
-    }).join('');
-
-    return `
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <style>
-            table { border-collapse: collapse; width: 100%; }
-            th { background-color: #6366f1; color: white; padding: 10px; text-align: left; border: 1px solid #e2e8f0; }
-            td { padding: 8px; border: 1px solid #e2e8f0; }
-            tr:nth-child(even) { background-color: #f8fafc; }
-          </style>
-        </head>
-        <body>
-          <h2>Timesheet History Report</h2>
-          <p>Generated on: ${format(new Date(), 'MMMM dd, yyyy HH:mm:ss')}</p>
-          <table>
-            <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </body>
-      </html>
-    `;
-  };
-
-  const escapeHtml = (text: string): string => {
-    if (!text) return '';
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   };
 
   const getStatusColor = (status: string) => {
@@ -962,10 +945,13 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
             <Search size={18} color="#64748b" />
             <TextInput
               style={[styles.searchInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-              placeholder="Search timesheets..."
+              placeholder="Search by project, category, or status..."
               placeholderTextColor="#64748b"
               value={search}
-              onChangeText={setSearch}
+              onChangeText={(text) => {
+                setSearch(text);
+                setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: 1 }));
+              }}
             />
           </View>
           <TouchableOpacity
@@ -1018,19 +1004,24 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         {loading && timesheets.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={styles.loadingText}>Searching timesheets...</Text>
           </View>
-        ) : timesheets.length === 0 ? (
+        ) : filteredTimesheets.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <XCircle size={48} color="#94a3b8" />
+            <Search size={48} color="#94a3b8" />
             <Text style={styles.emptyTitle}>No timesheets found</Text>
-            <Text style={styles.emptySubtitle}>Try adjusting your filters or search criteria</Text>
+            <Text style={styles.emptySubtitle}>
+              {search.length > 0 
+                ? `No results match your search "${search}".`
+                : "Try adjusting your filters or search criteria"}
+            </Text>
             <TouchableOpacity style={styles.resetButton} onPress={handleClearFilters}>
               <Text style={styles.resetButtonText}>Reset Filters</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.timesheetList}>
-            {timesheets.map((item) => (
+            {filteredTimesheets.map((item) => (
               <TimesheetCard
                 key={item.id || item._id}
                 item={item}

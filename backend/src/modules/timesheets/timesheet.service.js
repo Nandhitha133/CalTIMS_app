@@ -999,40 +999,91 @@ const timesheetService = {
 
   async getHistory(query, requestor, organizationId) {
     const { page, limit, skip } = parsePagination(query);
-    const filter = { organizationId: new mongoose.Types.ObjectId(organizationId) };
+    const filter = { 
+      organizationId: new mongoose.Types.ObjectId(organizationId),
+      userId: new mongoose.Types.ObjectId(requestor._id)
+    };
 
-    // Strictly restrict to the current user for history view
-    filter.userId = new mongoose.Types.ObjectId(requestor._id);
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-    if (query.status && query.status !== 'All Status') filter.status = query.status;
+    if (query.status && query.status !== 'All Status') {
+      filter.status = query.status;
+    }
 
     if (query.search && query.search.trim().length >= 1) {
-      const searchRegex = new RegExp(query.search.trim(), 'i');
-      filter.$or = [
+      const searchTerm = query.search.trim();
+      const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedSearchTerm, 'i');
+      
+      const searchConditions = [
         { 'rows.category': searchRegex },
         { rejectionReason: searchRegex },
         { status: searchRegex }
       ];
 
-      // Also search by project name/code if possible
+      const monthIndex = MONTHS.findIndex(m => m.toLowerCase().startsWith(searchTerm.toLowerCase()));
+      
+      if (monthIndex !== -1 && searchTerm.length >= 3) {
+        let searchYear = new Date().getUTCFullYear();
+        if (query.year && query.year !== 'All Years') {
+          searchYear = parseInt(query.year);
+        }
+
+        // Broaden the search: any week starting in this month OR ending in this month
+        searchConditions.push({
+          $or: [
+            {
+              weekStartDate: {
+                $gte: new Date(Date.UTC(searchYear, monthIndex, 1)),
+                $lte: new Date(Date.UTC(searchYear, monthIndex + 1, 0, 23, 59, 59, 999))
+              }
+            },
+            {
+              // A week starting up to 6 days before the month starts might end in the month
+              weekStartDate: {
+                $gte: new Date(Date.UTC(searchYear, monthIndex, 1 - 6)),
+                $lt: new Date(Date.UTC(searchYear, monthIndex, 1))
+              }
+            }
+          ]
+        });
+      }
+
+      if (/^\d{4}$/.test(searchTerm)) {
+        const year = parseInt(searchTerm);
+        searchConditions.push({
+          weekStartDate: {
+            $gte: new Date(Date.UTC(year, 0, 1)),
+            $lte: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+          }
+        });
+      }
+
       const projects = await Project.find({
-        organizationId,
+        organizationId: filter.organizationId,
         $or: [{ name: searchRegex }, { code: searchRegex }]
       }).distinct('_id');
 
       if (projects.length > 0) {
-        filter.$or.push({ 'rows.projectId': { $in: projects } });
+        searchConditions.push({ 'rows.projectId': { $in: projects } });
       }
+
+      // WRAP IN $AND TO PREVENT CONFLICTS WITH ORG/USER FILTERS
+      if (!filter.$and) {
+          const originalFilter = { ...filter };
+          filter.$and = [originalFilter];
+          // Clear top level except $and
+          Object.keys(filter).forEach(key => { if(key !== '$and') delete filter[key]; });
+      }
+      filter.$and.push({ $or: searchConditions });
     }
 
-    // Support year + optional month filtering
-    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    // Support year + optional month filtering from dropdowns
     if (query.year && query.year !== 'All Years') {
       const year = parseInt(query.year);
       if (query.month && query.month !== 'All Months') {
         const monthIndex = MONTHS.indexOf(query.month);
         if (monthIndex !== -1) {
-          // Filter to specific month: weekStartDate can fall in that month
           filter.weekStartDate = {
             $gte: new Date(Date.UTC(year, monthIndex, 1)),
             $lte: new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999))
@@ -1045,8 +1096,6 @@ const timesheetService = {
         };
       }
     } else if (query.month && query.month !== 'All Months') {
-      // Month filter without year: use current year
-      const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const monthIndex = MONTHS.indexOf(query.month);
       if (monthIndex !== -1) {
         const now = new Date();

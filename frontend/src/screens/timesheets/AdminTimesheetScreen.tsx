@@ -1,27 +1,21 @@
 // screens/timesheets/AdminTimesheetScreen.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
   ActivityIndicator,
   Alert,
   Modal,
   TextInput,
   StyleSheet,
   Dimensions,
-  Platform,
-  FlatList,
-  Share,
 } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, getISOWeek } from 'date-fns';
-import RNFS from 'react-native-fs';
 import {
-  Filter,
   Eye,
   CheckCircle,
   XCircle,
@@ -34,7 +28,6 @@ import {
   FileText,
   SlidersHorizontal,
   AlertCircle,
-  Send,
   RotateCcw,
   Calendar,
   Briefcase,
@@ -772,34 +765,98 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
     }
   };
 
-  const fetchTimesheets = async () => {
+  const fetchTimesheets = async (pageNumber?: number) => {
     try {
       setLoading(true);
+      const targetPage = pageNumber ?? pagination.page;
+      
       const response = await timesheetService.getAdminList({
-        page: pagination.page,
+        page: targetPage,
         limit: pagination.limit,
         organizationId: user?.organizationId,
         isAdminView: true,
         ...filters,
-        search: search.length >= 2 ? search : '',
+        // Only send search to backend if it's 2+ characters
+        search: search.trim().length >= 2 ? search.trim() : undefined,
       });
       setTimesheets((response.data as any) || []);
-      setPagination((response.pagination as any) || { page: 1, totalPages: 1, total: 0, limit: 10 });
+      setPagination((response.pagination as any) || { page: targetPage, totalPages: 1, total: 0, limit: 10 });
     } catch (error: any) {
       console.error('Error fetching admin timesheets:', error);
-      Alert.alert('Error', error.message || 'Failed to load timesheet list');
       setTimesheets([]);
-      setPagination(prev => ({ ...prev, totalPages: 1, total: 0 }));
     } finally {
       setLoading(false);
     }
   };
 
+  // Frontend-side filtering for instant results and matching displayed text
+  const filteredTimesheets = useMemo(() => {
+    if (!search.trim() || search.trim().length < 2) return timesheets;
+    const term = search.trim().toLowerCase();
+    
+    return timesheets.filter(item => {
+      // 1. Employee Info
+      const employeeMatch = (item.userId?.name || '').toLowerCase().includes(term) ||
+                           (item.userId?.employeeId || '').toLowerCase().includes(term);
+
+      // 2. Project Names
+      const projectsMatch = item.rows?.some(row => 
+        (row.projectId?.name || '').toLowerCase().includes(term) ||
+        (row.projectId?.code || '').toLowerCase().includes(term)
+      );
+
+      // 3. Status
+      const statusMatch = (item.status || '').toLowerCase().includes(term);
+
+      // 4. Date Strings (as displayed in the card)
+      const weekStr = formatWeek(item.weekStartDate).toLowerCase();
+      const weekStart = new Date(item.weekStartDate);
+      const monthName = format(weekStart, 'MMMM').toLowerCase();
+      const monthShort = format(weekStart, 'MMM').toLowerCase();
+      
+      const dateMatch = weekStr.includes(term) || 
+                       monthName.includes(term) || 
+                       monthShort.includes(term);
+
+      return employeeMatch || projectsMatch || statusMatch || dateMatch;
+    });
+  }, [timesheets, search]);
+
+  // Use a debounced effect for search and other filters to fetch data
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = setTimeout(() => {
+      // Always reset to page 1 when search or filters change
+      if (search.trim().length >= 2 || filters.userId || filters.projectId || filters.status || filters.year || filters.week) {
+        if (pagination.page === 1) {
+          fetchTimesheets(1);
+        } else {
+          setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0, limit: 10 }), page: 1 }));
+        }
+      } else if (search.trim().length === 0) {
+        fetchTimesheets(1);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [search, filters]);
+
+  // Handle page change separately
+  useEffect(() => {
+    if (user && pagination.page !== 1) {
+      fetchTimesheets(pagination.page);
+    }
+  }, [pagination.page]);
+
   useFocusEffect(
     useCallback(() => {
       fetchStats();
-      fetchTimesheets();
-    }, [pagination.page, pagination.limit, filters, search])
+      // Initial fetch if page is 1
+      if (pagination.page === 1) {
+        fetchTimesheets(1);
+      }
+    }, [user?.id, user?._id])
   );
 
   const onRefresh = async () => {
@@ -987,18 +1044,22 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#6366f1" />
           </View>
-        ) : timesheets.length === 0 ? (
+        ) : filteredTimesheets.length === 0 ? (
           <View style={styles.emptyContainer}>
             <AlertCircle size={48} color="#94a3b8" />
             <Text style={styles.emptyTitle}>No timesheets found</Text>
-            <Text style={styles.emptySubtitle}>Try adjusting your filters or search criteria</Text>
+            <Text style={styles.emptySubtitle}>
+              {search.length > 0 
+                ? `No results match your search "${search}".`
+                : "Try adjusting your filters or search criteria"}
+            </Text>
             <TouchableOpacity style={styles.resetButton} onPress={handleClearFilters}>
               <Text style={styles.resetButtonText}>Clear Filters</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.timesheetList}>
-            {timesheets.map((item) => (
+            {filteredTimesheets.map((item: TimesheetAdminItem) => (
               <AdminTimesheetCard
                 key={item.id || item._id}
                 item={item}
@@ -1020,7 +1081,7 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
         )}
 
         {/* Pagination */}
-        {!loading && timesheets.length > 0 && pagination.totalPages > 1 && (
+        {!loading && filteredTimesheets.length > 0 && pagination.totalPages > 1 && (
           <View style={styles.pagination}>
             <TouchableOpacity
               style={[styles.paginationButton, pagination.page === 1 && styles.paginationButtonDisabled]}

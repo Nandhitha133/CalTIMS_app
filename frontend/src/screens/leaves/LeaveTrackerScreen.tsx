@@ -21,11 +21,9 @@ import {
     Plus,
     Calendar,
     X,
-    FileText,
     Eye,
     AlertCircle,
     CheckCircle2,
-    XCircle,
     Ban,
     Send,
 } from 'lucide-react-native';
@@ -67,17 +65,6 @@ const BalanceCard = ({ title, value, color }: { title: string; value: number; co
         <Text style={styles.balanceTitle}>{title}</Text>
         <Text style={styles.balanceLabel}>days left</Text>
     </View>
-);
-
-// Stat Card Component
-const StatCard = ({ title, value, icon: Icon, color, bgColor, onPress }: any) => (
-  <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>
-    <View style={[styles.statIconContainer, { backgroundColor: bgColor }]}>
-      <Icon size={20} color={color} />
-    </View>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{title.toUpperCase()}</Text>
-  </TouchableOpacity>
 );
 
 // Leave Request Card
@@ -460,9 +447,15 @@ const ApplyLeaveModal = ({
                                 </View>
                                 <View style={[styles.formField, { flex: 1 }]}>
                                     <Text style={styles.formLabel}>End Date *</Text>
-                                    <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
-                                        <Calendar size={16} color="#64748b" />
-                                        <Text style={styles.dateText}>{format(endDate, 'MMM dd, yyyy')}</Text>
+                                    <TouchableOpacity 
+                                        style={[styles.dateButton, isHalfDay && styles.dateButtonDisabled]} 
+                                        onPress={() => setShowEndPicker(true)}
+                                        disabled={isHalfDay}
+                                    >
+                                        <Calendar size={16} color={isHalfDay ? "#cbd5e1" : "#64748b"} />
+                                        <Text style={[styles.dateText, isHalfDay && { color: "#cbd5e1" }]}>
+                                            {format(endDate, 'MMM dd, yyyy')}
+                                        </Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -474,7 +467,13 @@ const ApplyLeaveModal = ({
                                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                                     onChange={(event, date) => {
                                         setShowStartPicker(false);
-                                        if (date) setStartDate(date);
+                                        if (date) {
+                                            setStartDate(date);
+                                            // If half day is enabled, automatically sync end date
+                                            if (isHalfDay) {
+                                                setEndDate(date);
+                                            }
+                                        }
                                     }}
                                 />
                             )}
@@ -491,7 +490,17 @@ const ApplyLeaveModal = ({
                             )}
 
                             <View style={styles.formField}>
-                                <TouchableOpacity style={styles.halfDayButton} onPress={() => setIsHalfDay(!isHalfDay)}>
+                                <TouchableOpacity 
+                                    style={styles.halfDayButton} 
+                                    onPress={() => {
+                                        const nextVal = !isHalfDay;
+                                        setIsHalfDay(nextVal);
+                                        // If switching to half day, sync end date with start date
+                                        if (nextVal) {
+                                            setEndDate(startDate);
+                                        }
+                                    }}
+                                >
                                     <View style={[styles.checkbox, isHalfDay && styles.checkboxChecked]} />
                                     <Text style={styles.halfDayText}>Apply as Half Day</Text>
                                 </TouchableOpacity>
@@ -765,13 +774,6 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
         setShowActionModal(false);
     };
 
-    const stats = {
-        total: leaves.length,
-        pending: leaves.filter(l => l.status === 'pending').length,
-        approved: leaves.filter(l => l.status === 'approved').length,
-        rejected: leaves.filter(l => l.status === 'rejected').length,
-    };
-
     return (
         <Layout
             title="Leave Tracker"
@@ -823,14 +825,6 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
                                 />
                             );
                         })}
-                    </View>
-
-                    {/* Stats */}
-                    <View style={styles.statsContainer}>
-                        <StatCard title="Total" value={stats.total} icon={FileText} color="#3b82f6" bgColor="#eff6ff" />
-                        <StatCard title="Pending" value={stats.pending} icon={AlertCircle} color="#f59e0b" bgColor="#fffbeb" />
-                        <StatCard title="Approved" value={stats.approved} icon={CheckCircle2} color="#10b981" bgColor="#ecfdf5" />
-                        <StatCard title="Rejected" value={stats.rejected} icon={XCircle} color="#ef4444" bgColor="#fef2f2" />
                     </View>
 
                     {/* Leave Requests List */}
@@ -932,48 +926,6 @@ const styles = StyleSheet.create({
     balanceValue: { fontSize: 24, fontWeight: '800' },
     balanceTitle: { fontSize: 12, fontWeight: '600', color: '#1e293b', marginTop: 4 },
     balanceLabel: { fontSize: 10, color: '#64748b', marginTop: 2 },
-
-    statsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 20,
-        justifyContent: 'space-between',
-    },
-    statCard: {
-        width: '48%',
-        backgroundColor: 'white',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#f1f5f9',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-        minHeight: 110,
-    },
-    statIconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
-    },
-    statValue: {
-        fontSize: 22,
-        fontWeight: '800',
-        color: '#1e293b',
-    },
-    statLabel: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#64748b',
-        marginTop: 4,
-        letterSpacing: 0.5,
-    },
 
     sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
 
@@ -1103,6 +1055,7 @@ const styles = StyleSheet.create({
     balanceText: { fontSize: 11, color: '#64748b', marginTop: 4 },
 
     dateButton: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, backgroundColor: '#f8fafc' },
+    dateButtonDisabled: { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0', opacity: 0.8 },
     dateText: { fontSize: 14, color: '#1e293b', flex: 1 },
 
     halfDayButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },

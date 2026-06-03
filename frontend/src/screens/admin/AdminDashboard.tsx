@@ -276,18 +276,24 @@ export default function AdminDashboard() {
         if (userData) {
           const parsed = JSON.parse(userData);
           setUser(parsed);
-          setIsSuperAdmin(
-            parsed?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
-          );
+          const isSA = parsed?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+          setIsSuperAdmin(isSA);
+          
+          // If not super admin, redirect to regular dashboard immediately
+          if (!isSA) {
+            navigation.navigate('Dashboard' as never);
+          }
         } else {
           setIsSuperAdmin(false);
+          navigation.navigate('Dashboard' as never);
         }
       } catch {
         setIsSuperAdmin(false);
+        navigation.navigate('Dashboard' as never);
       }
     };
     checkSuperAdmin();
-  }, []);
+  }, [navigation]);
 
   const fetchMetrics = useCallback(async (isManual = false) => {
     if (!isManual) setLoading(true);

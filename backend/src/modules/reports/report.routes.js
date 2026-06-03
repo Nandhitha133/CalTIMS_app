@@ -13,6 +13,12 @@ const { TIMESHEET_STATUS, LEAVE_STATUS } = require('../../constants');
 const { checkSubscription, requireFeature } = require('../../middleware/subscription.middleware');
 const { getPeriodRange, getWeekStart } = require('../../shared/utils/dateHelpers');
 
+router.use(authenticate);
+router.use(checkSubscription);
+router.use(requireFeature('reports'));
+router.use(checkPermission('viewReports'));
+
+// ─── Filter Options (Years, etc.) ──────────────────────────────────────────
 router.get('/filters', (req, res) => {
   const currentYear = new Date().getFullYear();
   const years = [
@@ -24,16 +30,8 @@ router.get('/filters', (req, res) => {
     currentYear + 3,
     currentYear + 4
   ];
-  res.status(200).json({
-    success: true,
-    data: { years }
-  });
+  ApiResponse.success(res, { data: { years } });
 });
-
-router.use(authenticate);
-router.use(checkSubscription);
-router.use(requireFeature('reports'));
-router.use(checkPermission('viewReports'));
 
 // ─── Timesheet hours summary (by employee and project) ─────────────────────
 router.get('/timesheet-summary', asyncHandler(async (req, res) => {

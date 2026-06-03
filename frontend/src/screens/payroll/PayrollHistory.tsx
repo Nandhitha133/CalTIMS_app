@@ -42,7 +42,7 @@ import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import SafeSelector from '../../components/common/SafeSelector';
 import { formatCurrency } from './payrollFormatters';
-import { exportFile } from '../../utils/exportHelper';
+import { exportFile, convertToCSV } from '../../utils/exportHelper';
 
 const COLORS = {
   primary: '#6366f1',
@@ -361,9 +361,9 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
         return;
       }
 
-      const isExcel = type === 'Excel';
-      const extension = isExcel ? 'xls' : 'csv';
-      const fileName = `Payroll_History_${new Date().getFullYear()}.${extension}`;
+      const timestamp = new Date().getFullYear();
+      // Use .csv for both to ensure overall mobile compatibility (Office mobile often rejects fake .xls)
+      const fileName = `Payroll_History_${timestamp}.csv`;
       
       // Define CSV headers
       const headers = [
@@ -374,21 +374,19 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
 
       // Format records for CSV
       const rows = allRuns.map((run: any) => [
-        `"${run.runId || 'N/A'}"`,
+        run.runId || 'N/A',
         run.month || '-',
         run.year || '-',
         run.totalEmployees || 0,
         run.totalGross || 0,
         run.totalDeductions || 0,
         run.totalNet || 0,
-        `"${run.status || 'Processed'}"`,
-        `"${run.processedAt ? new Date(run.processedAt).toLocaleDateString() : 'N/A'}"`
+        run.status || 'Processed',
+        run.processedAt ? new Date(run.processedAt).toLocaleDateString() : 'N/A'
       ]);
 
-      const content = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
-      
-      const fileType = isExcel ? 'application/vnd.ms-excel' : 'text/csv';
-      await exportFile(content, fileName, fileType, false);
+      const content = convertToCSV(headers, rows);
+      await exportFile(content, fileName, 'text/csv', false);
     } catch (error) {
       console.error('Export failed:', error);
       Alert.alert('Error', 'Failed to fetch and export all records. Please try again.');

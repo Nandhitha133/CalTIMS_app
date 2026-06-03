@@ -4,6 +4,23 @@ import RNFS from 'react-native-fs';
 const { FileViewer } = NativeModules;
 
 /**
+ * Converts data to a proper CSV string with BOM for Excel compatibility.
+ */
+export function convertToCSV(headers: string[], rows: any[][]): string {
+  const BOM = '\uFEFF';
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => 
+      row.map(cell => {
+        const str = String(cell ?? '').replace(/"/g, '""');
+        return `"${str}"`;
+      }).join(',')
+    )
+  ].join('\n');
+  return BOM + csvContent;
+}
+
+/**
  * Helper to handle file exports across all modules.
  * Saves the file directly to the device Downloads folder on Android,
  * and allows immediate viewing/opening using default document viewers!
@@ -22,6 +39,12 @@ export async function exportFile(
   }
 
   try {
+    // Automatically add BOM for CSV files to ensure overall compatibility with Excel and mobile Office apps
+    let finalContent = content;
+    if (fileType === 'text/csv' && !isBase64 && typeof content === 'string' && !content.startsWith('\uFEFF')) {
+      finalContent = '\uFEFF' + content;
+    }
+
     // 1. Web browser fallback (if running in a web platform context)
     const globalAny = globalThis as any;
     if (Platform.OS === 'web' && globalAny.document) {
@@ -36,7 +59,7 @@ export async function exportFile(
         const byteArray = new Uint8Array(byteNumbers);
         blob = new globalAny.Blob([byteArray], { type: fileType });
       } else {
-        blob = new globalAny.Blob([content], { type: fileType });
+        blob = new globalAny.Blob([finalContent], { type: fileType });
       }
 
       const url = globalAny.URL.createObjectURL(blob);
@@ -68,7 +91,7 @@ export async function exportFile(
         if (isBase64) {
           await RNFS.writeFile(downloadPath, content, 'base64');
         } else {
-          await RNFS.writeFile(downloadPath, content, 'utf8');
+          await RNFS.writeFile(downloadPath, finalContent, 'utf8');
         }
 
         try {
@@ -113,7 +136,7 @@ export async function exportFile(
                   if (isBase64) {
                     await RNFS.writeFile(cachePath, content, 'base64');
                   } else {
-                    await RNFS.writeFile(cachePath, content, 'utf8');
+                    await RNFS.writeFile(cachePath, finalContent, 'utf8');
                   }
 
                   Alert.alert(
@@ -161,7 +184,7 @@ export async function exportFile(
       if (isBase64) {
         await RNFS.writeFile(cachePath, content, 'base64');
       } else {
-        await RNFS.writeFile(cachePath, content, 'utf8');
+        await RNFS.writeFile(cachePath, finalContent, 'utf8');
       }
 
       const shareResult = await Share.share({

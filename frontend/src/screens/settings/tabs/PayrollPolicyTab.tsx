@@ -3,1799 +3,913 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  Platform,
-  ActivityIndicator,
-  Modal,
-  KeyboardAvoidingView,
-  Switch,
-  Dimensions,
   StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Switch,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Plus,
-  Save,
-  History,
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  ShieldCheck, 
+  Clock, 
+  Settings2, 
+  Save, 
+  Plus, 
+  Trash2, 
+  RefreshCcw, 
   Calculator,
-  ShieldCheck,
-  Clock,
-  Settings2,
-  Trash2,
-  ChevronRight,
-  AlertCircle,
-  RefreshCcw,
-  Percent,
-  DollarSign,
-  Wallet,
-  Scaling,
-  Briefcase,
   IndianRupee,
-  X,
-  TrendingUp,
-  TrendingDown,
+  Globe,
+  Briefcase,
+  Percent,
+  AlertCircle,
+  ChevronDown
 } from 'lucide-react-native';
-import LinearGradient from 'react-native-linear-gradient';
 import { policyAPI } from '../../../services/endpoints';
-import { useSocketEvent } from '../../../services/socket';
-import { useAuthStore } from '../../../store/authStore';
+import { complianceEngine } from '../../../features/payroll/complianceEngine';
 import Layout from '../../../components/common/Layout';
 import PageHeader from '../../../components/common/PageHeader';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Types
-interface SalaryComponent {
-  name: string;
-  type: 'EARNING' | 'DEDUCTION';
-  calculationType: 'fixed' | 'percentage' | 'formula';
-  value: number;
-  formula: string;
-}
-
-interface StatutoryRule {
-  enabled: boolean;
-  employeeRate: number;
-  employerRate?: number;
-  wageLimit: number;
-}
-
-interface StatutoryConfig {
-  pf: StatutoryRule;
-  esi: StatutoryRule & { employeeRate: number; wageLimit: number };
-}
-
-interface AttendanceConfig {
-  workingDaysPerMonth: number;
-  prorateSalary: boolean;
-}
-
-interface OvertimeConfig {
-  enabled: boolean;
-  multiplier: number;
-}
-
-interface RoundingConfig {
-  rule: 'ROUND_OFF' | 'ROUND_UP' | 'ROUND_DOWN';
-  decimals: number;
-}
-
-interface PayrollPolicy {
-  id?: string;
-  version?: number;
-  updatedAt?: string;
-  salaryComponents: SalaryComponent[];
-  statutory: StatutoryConfig;
-  attendance: AttendanceConfig;
-  overtime: OvertimeConfig;
-  rounding: RoundingConfig;
-}
-
-interface PreviewData {
-  ctc: number;
-  sampleEmployee: string;
-  breakdown: {
-    earnings: { components: Array<{ name: string; value: number }> };
-    deductions: { components: Array<{ name: string; value: number }> };
-    netPay: number;
-  };
-}
-
-// Custom Tabs Component
-const PolicyTabs = ({ activeTab, onTabChange }: { activeTab: string; onTabChange: (tab: string) => void }) => {
-  const tabs = [
-    { id: 'components', label: 'Salary Components', icon: Wallet },
-    { id: 'statutory', label: 'Statutory Rules', icon: ShieldCheck },
-    { id: 'attendance', label: 'Attendance & OT', icon: Clock },
-    { id: 'rounding', label: 'Engine Config', icon: Settings2 },
-  ];
-
-  return (
-    <View style={styles.tabsContainer}>
-      {tabs.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeTab === tab.id;
-        return (
-          <TouchableOpacity
-            key={tab.id}
-            style={[styles.tabButton, isActive && styles.tabButtonActive]}
-            onPress={() => onTabChange(tab.id)}
-            activeOpacity={0.7}
-          >
-            <Icon size={16} color={isActive ? '#6366f1' : '#6b7280'} />
-            <Text style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-};
-
-// Salary Component Item Component
-const SalaryComponentItem = ({
-  component,
-  index,
-  onUpdate,
-  onRemove,
-}: {
-  component: SalaryComponent;
-  index: number;
-  onUpdate: (index: number, field: string, value: any) => void;
-  onRemove: (index: number) => void;
-}) => {
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
-
-  return (
-    <View style={styles.componentItem}>
-      <TouchableOpacity
-        style={styles.componentRemoveButton}
-        onPress={() => setShowRemoveConfirm(true)}
-      >
-        <Trash2 size={16} color="#ef4444" />
-      </TouchableOpacity>
-
-      <View style={styles.componentRow}>
-        <View style={styles.componentField}>
-          <Text style={styles.componentLabel}>Component Name</Text>
-          <TextInput
-            style={styles.componentInput}
-            value={component.name}
-            onChangeText={(text) => onUpdate(index, 'name', text)}
-            placeholder="Enter name"
-            placeholderTextColor="#9ca3af"
-          />
-        </View>
-      </View>
-
-      <View style={styles.componentRow}>
-        <View style={[styles.componentField, styles.flex1]}>
-          <Text style={styles.componentLabel}>Type</Text>
-          <View style={styles.typeSelector}>
-            <TouchableOpacity
-              style={[
-                styles.typeOption,
-                component.type === 'EARNING' && styles.typeOptionActive,
-              ]}
-              onPress={() => onUpdate(index, 'type', 'EARNING')}
-            >
-              <TrendingUp size={14} color={component.type === 'EARNING' ? '#10b981' : '#6b7280'} />
-              <Text
-                style={[
-                  styles.typeOptionText,
-                  component.type === 'EARNING' && styles.typeOptionTextActive,
-                ]}
-              >
-                Earning
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.typeOption,
-                component.type === 'DEDUCTION' && styles.typeOptionActive,
-              ]}
-              onPress={() => onUpdate(index, 'type', 'DEDUCTION')}
-            >
-              <TrendingDown size={14} color={component.type === 'DEDUCTION' ? '#ef4444' : '#6b7280'} />
-              <Text
-                style={[
-                  styles.typeOptionText,
-                  component.type === 'DEDUCTION' && styles.typeOptionTextActive,
-                ]}
-              >
-                Deduction
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={[styles.componentField, styles.flex1]}>
-          <Text style={styles.componentLabel}>Calculation Basis</Text>
-          <View style={styles.calculationSelector}>
-            {['fixed', 'percentage', 'formula'].map((type) => (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.calcOption,
-                  component.calculationType === type && styles.calcOptionActive,
-                ]}
-                onPress={() => onUpdate(index, 'calculationType', type)}
-              >
-                <Text
-                  style={[
-                    styles.calcOptionText,
-                    component.calculationType === type && styles.calcOptionTextActive,
-                  ]}
-                >
-                  {type === 'fixed' ? 'Fixed' : type === 'percentage' ? '%' : 'Formula'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.componentRow}>
-        <View style={[styles.componentField, styles.flex1]}>
-          <Text style={styles.componentLabel}>
-            {component.calculationType === 'formula' ? 'Formula' : 'Value'}
-          </Text>
-          <View style={styles.valueInputContainer}>
-            <View style={styles.valueIcon}>
-              {component.calculationType === 'formula' ? (
-                <Calculator size={16} color="#9ca3af" />
-              ) : component.calculationType === 'percentage' ? (
-                <Percent size={16} color="#9ca3af" />
-              ) : (
-                <DollarSign size={16} color="#9ca3af" />
-              )}
-            </View>
-            {component.calculationType === 'formula' ? (
-              <TextInput
-                style={styles.formulaInput}
-                value={component.formula}
-                onChangeText={(text) => onUpdate(index, 'formula', text)}
-                placeholder="e.g., BASIC * 0.4"
-                placeholderTextColor="#9ca3af"
-              />
-            ) : (
-              <TextInput
-                style={styles.valueInput}
-                value={String(component.value)}
-                onChangeText={(text) => onUpdate(index, 'value', parseFloat(text) || 0)}
-                keyboardType="numeric"
-                placeholder="0"
-                placeholderTextColor="#9ca3af"
-              />
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* Remove Confirmation Modal */}
-      <Modal visible={showRemoveConfirm} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModal}>
-            <Text style={styles.confirmTitle}>Remove Component</Text>
-            <Text style={styles.confirmMessage}>
-              Are you sure you want to remove "{component.name}"?
-            </Text>
-            <View style={styles.confirmButtons}>
-              <TouchableOpacity
-                style={[styles.confirmButton, styles.confirmButtonCancel]}
-                onPress={() => setShowRemoveConfirm(false)}
-              >
-                <Text style={styles.confirmButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmButton, styles.confirmButtonDelete]}
-                onPress={() => {
-                  onRemove(index);
-                  setShowRemoveConfirm(false);
-                }}
-              >
-                <Text style={[styles.confirmButtonText, styles.confirmButtonDeleteText]}>
-                  Remove
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-};
-
-// Statutory Card Component
-const StatutoryCard = ({
-  title,
-  icon: Icon,
-  color,
-  config,
-  onToggle,
-  onUpdate,
-  type,
-}: {
-  title: string;
-  icon: any;
-  color: string;
-  config: any;
-  onToggle: (enabled: boolean) => void;
-  onUpdate: (field: string, value: number) => void;
-  type: 'pf' | 'esi';
-}) => {
-  const IconComponent = Icon;
-  const isPF = type === 'pf';
-
-  return (
-    <View style={styles.statutoryCard}>
-      <View style={styles.statutoryHeader}>
-        <View style={styles.statutoryHeaderLeft}>
-          <View style={[styles.statutoryIcon, { backgroundColor: `${color}15` }]}>
-            <IconComponent size={24} color={color} />
-          </View>
-          <View>
-            <Text style={styles.statutoryTitle}>{title}</Text>
-            <Text style={styles.statutorySubtitle}>
-              {isPF ? 'Statutory Deductions' : 'Employee State Insurance'}
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={config.enabled}
-          onValueChange={onToggle}
-          trackColor={{ false: '#d1d5db', true: color }}
-          thumbColor="#ffffff"
-        />
-      </View>
-
-      {config.enabled && (
-        <View style={styles.statutoryContent}>
-          <View style={styles.statutoryRow}>
-            <View style={[styles.statutoryField, styles.flex1]}>
-              <Text style={styles.statutoryFieldLabel}>
-                {isPF ? 'Employee Contribution %' : 'Employee Rate %'}
-              </Text>
-              <TextInput
-                style={styles.statutoryInput}
-                value={String(config.employeeRate)}
-                onChangeText={(text) => onUpdate('employeeRate', parseFloat(text) || 0)}
-                keyboardType="numeric"
-              />
-            </View>
-            {isPF && (
-              <View style={[styles.statutoryField, styles.flex1]}>
-                <Text style={styles.statutoryFieldLabel}>Employer Contribution %</Text>
-                <TextInput
-                  style={styles.statutoryInput}
-                  value={String(config.employerRate)}
-                  onChangeText={(text) => onUpdate('employerRate', parseFloat(text) || 0)}
-                  keyboardType="numeric"
-                />
-              </View>
-            )}
-          </View>
-
-          <View style={styles.statutoryRow}>
-            <View style={[styles.statutoryField, styles.flex1]}>
-              <Text style={styles.statutoryFieldLabel}>
-                {isPF ? 'Wage Ceiling for PF' : 'Wage Limit Ceiling'}
-              </Text>
-              <View style={styles.wageLimitInput}>
-                <IndianRupee size={16} color="#9ca3af" />
-                <TextInput
-                  style={styles.wageLimitField}
-                  value={String(config.wageLimit)}
-                  onChangeText={(text) => onUpdate('wageLimit', parseFloat(text) || 0)}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-          </View>
-
-          {!isPF && (
-            <View style={styles.infoBox}>
-              <AlertCircle size={16} color="#f59e0b" />
-              <Text style={styles.infoBoxText}>
-                ESI is only applicable for employees whose Gross Salary is less than or equal to the specified wage limit.
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
-    </View>
-  );
+const PT_STATE_CONFIGS: any = {
+  TN: {
+    name: "Tamil Nadu",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 3500, amount: 0 },
+      { min: 3501, max: 5000, amount: 22.5 },
+      { min: 5001, max: 7500, amount: 52.5 },
+      { min: 7501, max: 10000, amount: 115 },
+      { min: 10001, max: 12500, amount: 171 },
+      { min: 12501, max: 15000, amount: 195 },
+      { min: 15001, max: 999999999, amount: 208 },
+    ],
+  },
+  MH: {
+    name: "Maharashtra",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 7500, amount: 0 },
+      { min: 7501, max: 10000, amount: 175 },
+      { min: 10001, max: 999999999, amount: 200 },
+    ],
+    specialNote: "February month tax is ₹300 for salaries above ₹10,000.",
+  },
+  KA: {
+    name: "Karnataka",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 15000, amount: 0 },
+      { min: 15001, max: 999999999, amount: 200 },
+    ],
+  },
+  WB: {
+    name: "West Bengal",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 8500, amount: 0 },
+      { min: 8501, max: 10000, amount: 90 },
+      { min: 10001, max: 15000, amount: 110 },
+      { min: 15001, max: 25000, amount: 130 },
+      { min: 25001, max: 40000, amount: 150 },
+      { min: 40001, max: 999999999, amount: 200 },
+    ],
+  },
+  AP: {
+    name: "Andhra Pradesh",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 15000, amount: 0 },
+      { min: 15001, max: 20000, amount: 150 },
+      { min: 20001, max: 999999999, amount: 200 },
+    ],
+  },
+  TS: {
+    name: "Telangana",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 15000, amount: 0 },
+      { min: 15001, max: 20000, amount: 150 },
+      { min: 20001, max: 999999999, amount: 200 },
+    ],
+  },
+  GJ: {
+    name: "Gujarat",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 6000, amount: 0 },
+      { min: 6001, max: 9000, amount: 80 },
+      { min: 9001, max: 12000, amount: 150 },
+      { min: 12001, max: 999999999, amount: 200 },
+    ],
+  },
+  MP: {
+    name: "Madhya Pradesh",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 18750, amount: 0 },
+      { min: 18751, max: 25000, amount: 125 },
+      { min: 25001, max: 33333, amount: 167 },
+      { min: 33334, max: 999999999, amount: 208 },
+    ],
+  },
+  CG: {
+    name: "Chhattisgarh",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 15000, amount: 0 },
+      { min: 15001, max: 16666, amount: 125 },
+      { min: 16667, max: 999999999, amount: 208 },
+    ],
+  },
+  OD: {
+    name: "Odisha",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 13333, amount: 0 },
+      { min: 13334, max: 25000, amount: 125 },
+      { min: 25001, max: 999999999, amount: 200 },
+    ],
+  },
+  KL: {
+    name: "Kerala",
+    isApplicable: true,
+    mode: "HALF_YEARLY",
+    slabs: [
+      { min: 0, max: 11999, amount: 0 },
+      { min: 12000, max: 17999, amount: 120 },
+      { min: 18000, max: 29999, amount: 180 },
+      { min: 30000, max: 44999, amount: 300 },
+      { min: 45000, max: 59999, amount: 450 },
+      { min: 60000, max: 74999, amount: 600 },
+      { min: 75000, max: 99999, amount: 750 },
+      { min: 100000, max: 124999, amount: 1000 },
+      { min: 125000, max: 999999999, amount: 1250 },
+    ],
+    note: "Slabs are applied on half-yearly income (total of 6 months).",
+  },
+  AS: {
+    name: "Assam",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 10000, amount: 0 },
+      { min: 10001, max: 15000, amount: 150 },
+      { min: 15001, max: 20000, amount: 180 },
+      { min: 20001, max: 999999999, amount: 208 },
+    ],
+  },
+  ML: {
+    name: "Meghalaya",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 4166, amount: 0 },
+      { min: 4167, max: 6250, amount: 16.66 },
+      { min: 6251, max: 8333, amount: 25 },
+      { min: 8334, max: 12500, amount: 41.66 },
+      { min: 12501, max: 16666, amount: 62.5 },
+      { min: 16667, max: 20833, amount: 83.33 },
+      { min: 20834, max: 999999999, amount: 104.16 },
+    ],
+  },
+  TR: {
+    name: "Tripura",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 7500, amount: 0 },
+      { min: 7501, max: 10000, amount: 110 },
+      { min: 10001, max: 15000, amount: 150 },
+      { min: 15001, max: 999999999, amount: 208 },
+    ],
+  },
+  SK: {
+    name: "Sikkim",
+    isApplicable: true,
+    slabs: [
+      { min: 0, max: 16666, amount: 0 },
+      { min: 16667, max: 999999999, amount: 125 },
+    ],
+  },
+  DL: { name: "Delhi", isApplicable: false },
+  HR: { name: "Haryana", isApplicable: false },
+  UP: { name: "Uttar Pradesh", isApplicable: false },
+  RJ: { name: "Rajasthan", isApplicable: false },
+  PB: { name: "Punjab", isApplicable: false },
+  HP: { name: "Himachal Pradesh", isApplicable: false },
+  JK: { name: "Jammu & Kashmir", isApplicable: false },
+  UK: { name: "Uttarakhand", isApplicable: false },
+  BR: { name: "Bihar", isApplicable: false },
+  JH: { name: "Jharkhand", isApplicable: false },
+  GA: { name: "Goa", isApplicable: false },
 };
 
 export default function PayrollPolicyTab() {
-  const navigation = useNavigation();
-  const queryClient = useQueryClient();
-  const { user, isPro } = useAuthStore();
+  const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [policy, setPolicy] = useState<PayrollPolicy | null>(null);
-  const [activeTab, setActiveTab] = useState('components');
-  const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [policy, setPolicy] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Fetch policy
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['payrollPolicy'],
-    queryFn: async () => {
-      try {
-        const response: any = await policyAPI.getPolicy();
-        return response?.data?.data ?? response?.data ?? response ?? null;
-      } catch (error) {
-        console.error('Failed to fetch policy:', error);
-        return null;
-      }
-    },
-  });
-
-  useSocketEvent('settings_updated', (payload) => {
-    console.log('[Socket] Settings updated event received in PayrollPolicyTab:', payload);
-    refetch();
-  });
+  const [activeTab, setActiveTab] = useState("statutory");
+  const [simulationSalary, setSimulationSalary] = useState(50000);
+  const [initialState, setInitialState] = useState<string | null>(null);
 
   useEffect(() => {
-    if (data) {
-      setPolicy(data);
-      if (data) fetchPreview(data);
-    }
-  }, [data]);
+    loadUserData();
+    fetchPolicy();
+  }, []);
 
-  const fetchPreview = async (currentPolicy: PayrollPolicy) => {
-    setPreviewLoading(true);
+  const loadUserData = async () => {
     try {
-      const response: any = await policyAPI.preview(currentPolicy);
-      setPreview(response.data?.data || response.data || response);
-    } catch (err) {
-      console.error('Preview failed', err);
-    } finally {
-      setPreviewLoading(false);
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
     }
   };
 
-  const handleSave = async (isNewVersion = false) => {
-    if (!policy) return;
+  const fetchPolicy = async () => {
+    try {
+      setLoading(true);
+      const response = await policyAPI.getPolicy() as any;
+      const policyData = response.data?.data || response.data || response;
+      setPolicy(policyData);
+      setInitialState(JSON.stringify(policyData));
+    } catch (err: any) {
+      console.error("[PayrollPolicy] Fetch Error:", err);
+      const errorMessage = err.message || "Failed to load payroll policy";
+      Alert.alert("Error", errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // Check for PRO plan
-    if (!isPro()) {
-      Alert.alert(
-        'Upgrade Required',
-        'Payroll policy settings are available on PRO plan only. Please upgrade to continue.',
-        [{ text: 'OK' }]
-      );
+  const handleSave = async () => {
+    if (JSON.stringify(policy) === initialState) {
+      Alert.alert("Info", "No changes detected");
       return;
     }
 
     setSaving(true);
     try {
-      if (isNewVersion) {
-        await policyAPI.createVersion(policy);
-        Alert.alert('Success', 'New policy version created');
-      } else {
-        await policyAPI.updatePolicy(policy);
-        Alert.alert('Success', 'Policy updated successfully');
-      }
-      refetch();
+      await policyAPI.updatePolicy(policy);
+      setInitialState(JSON.stringify(policy));
+      Alert.alert("Success", "Payroll policy updated successfully");
+      fetchPolicy();
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.message || 'Failed to save policy');
+      const errorMessage = err.message || "Failed to save policy";
+      Alert.alert("Error", errorMessage);
     } finally {
       setSaving(false);
     }
   };
 
-  const addComponent = () => {
-    if (!policy) return;
-    const newComponent: SalaryComponent = {
-      name: 'New Component',
-      type: 'EARNING',
-      calculationType: 'percentage',
-      value: 0,
-      formula: '',
+  const handlePTStateChange = (stateCode: string) => {
+    const config = PT_STATE_CONFIGS[stateCode];
+    if (!config) return;
+
+    const newPT = {
+      ...policy.statutory.pt,
+      state: stateCode,
+      enabled: config.isApplicable,
+      mode: config.mode || "MONTHLY",
+      slabs: config.isApplicable ? [...(config.slabs || [])] : [],
     };
-    setPolicy({
-      ...policy,
-      salaryComponents: [...(policy.salaryComponents || []), newComponent],
-    });
-  };
 
-  const removeComponent = (index: number) => {
-    if (!policy) return;
-    const updated = [...(policy.salaryComponents || [])];
-    updated.splice(index, 1);
-    setPolicy({ ...policy, salaryComponents: updated });
-  };
-
-  const updateComponent = (index: number, field: string, value: any) => {
-    if (!policy) return;
-    const updated = [...(policy.salaryComponents || [])];
-    updated[index] = { ...updated[index], [field]: value };
-    setPolicy({ ...policy, salaryComponents: updated });
-  };
-
-  const updateStatutory = (type: 'pf' | 'esi', field: string, value: any) => {
-    if (!policy) return;
     setPolicy({
       ...policy,
       statutory: {
         ...policy.statutory,
-        [type]: { ...policy.statutory[type], [field]: value },
+        pt: newPT,
       },
     });
+
+    if (config.isApplicable) {
+      Alert.alert("Success", `PT slabs prefilled for ${config.name}`);
+    } else {
+      Alert.alert("Info", `Professional Tax is not applicable for ${config.name}`);
+    }
   };
 
-  const toggleStatutory = (type: 'pf' | 'esi', enabled: boolean) => {
-    if (!policy) return;
-    setPolicy({
-      ...policy,
-      statutory: {
-        ...policy.statutory,
-        [type]: { ...policy.statutory[type], enabled },
-      },
-    });
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchPolicy();
+    setRefreshing(false);
   };
 
-  const updateAttendance = (field: string, value: any) => {
-    if (!policy) return;
-    setPolicy({
-      ...policy,
-      attendance: { ...policy.attendance, [field]: value },
-    });
-  };
-
-  const updateOvertime = (field: string, value: any) => {
-    if (!policy) return;
-    setPolicy({
-      ...policy,
-      overtime: { ...policy.overtime, [field]: value },
-    });
-  };
-
-  const updateRounding = (field: string, value: any) => {
-    if (!policy) return;
-    setPolicy({
-      ...policy,
-      rounding: { ...policy.rounding, [field]: value },
-    });
-  };
-
-  const triggerPreview = () => {
-    if (policy) fetchPreview(policy);
-  };
-
-  if (isLoading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.loadingText}>Loading payroll policy...</Text>
       </View>
     );
   }
 
   if (!policy) {
     return (
-      <Layout
-        title="Payroll Policy"
-        user={user}
-        sidebarVisible={sidebarVisible}
-        setSidebarVisible={setSidebarVisible}
-        refreshing={isLoading}
-        onRefresh={refetch}
-        scrollable={false}
-        backgroundColor="#f8fafc"
-        showBackButton={true}
-        onBackPress={() => navigation.navigate('Settings' as never)}
-      >
-        <View style={styles.emptyContainer}>
-          <AlertCircle size={48} color="#ef4444" />
-          <Text style={styles.emptyTitle}>No payroll policy found</Text>
-          <Text style={styles.emptyMessage}>
-            The backend could not return a policy. Please check your connection or seed the database.
-          </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      </Layout>
+      <View style={styles.errorContainer}>
+        <AlertCircle size={40} color="#ef4444" />
+        <Text style={styles.errorText}>No payroll policy found.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchPolicy}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
   return (
     <Layout
-      title="Payroll Policy"
+      title="Payroll Architecture"
       user={user}
       sidebarVisible={sidebarVisible}
       setSidebarVisible={setSidebarVisible}
-      refreshing={isLoading}
-      onRefresh={refetch}
-      scrollable={false}
-      backgroundColor="#f8fafc"
-      showBackButton={true}
-      onBackPress={() => navigation.navigate('Settings' as never)}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <PageHeader
-            title="Payroll Engineering"
-            subtitle="Configure salary components, statutory rules, and disbursement logic"
-            icon={Calculator}
-            iconColor="#6366f1"
-            iconBgColor="#eef2ff"
-          />
+      <View style={styles.container}>
+        <PageHeader 
+          title="Payroll Architecture" 
+          subtitle="Define statutory rules, overtime engines, and disbursement cycles" 
+        />
 
-          {/* Action Header - Moved content out */}
-          <View style={styles.headerActions}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b' }}>Global Payroll Standards</Text>
-              <Text style={{ fontSize: 12, color: '#64748b' }}>V{policy.version || 1} • Last updated {policy.updatedAt ? new Date(policy.updatedAt).toLocaleDateString() : 'recently'}</Text>
-            </View>
-            
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          {[
+            { id: "statutory", label: "Statutory", icon: ShieldCheck },
+            { id: "attendance", label: "Attendance & OT", icon: Clock },
+            { id: "rounding", label: "Engine", icon: Settings2 },
+          ].map((tab) => (
             <TouchableOpacity
-              style={styles.versionButton}
-              onPress={() => handleSave(true)}
-              disabled={saving}
+              key={tab.id}
+              onPress={() => setActiveTab(tab.id)}
+              style={[
+                styles.tabButton,
+                activeTab === tab.id && styles.activeTabButton
+              ]}
             >
-              <History size={18} color="#6366f1" />
-              <Text style={styles.versionButtonText}>New Version</Text>
+              <tab.icon size={16} color={activeTab === tab.id ? "#6366f1" : "#64748b"} />
+              <Text style={[
+                styles.tabText,
+                activeTab === tab.id && styles.activeTabText
+              ]}>
+                {tab.label}
+              </Text>
             </TouchableOpacity>
+          ))}
+        </View>
 
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={() => handleSave(false)}
-              disabled={saving}
-            >
-              <LinearGradient
-                colors={['#6366f1', '#8b5cf6']}
-                style={styles.saveButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <>
-                    <Save size={18} color="#ffffff" />
-                    <Text style={styles.saveButtonText}>Synchronize Changes</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {/* Main Content */}
-          <View style={styles.mainContent}>
-            {/* Left Column - Forms */}
-            <View style={styles.leftColumn}>
-              <PolicyTabs activeTab={activeTab} onTabChange={setActiveTab} />
-
-            {activeTab === 'components' && (
-              <View style={styles.componentsContainer}>
-                <View style={styles.componentsHeader}>
-                  <View style={styles.componentsHeaderLeft}>
-                    <View style={styles.componentsIcon}>
-                      <Scaling size={20} color="#6366f1" />
+        {/* Content Area */}
+        <View style={styles.content}>
+          {activeTab === "statutory" && (
+            <View style={styles.section}>
+              {/* PF Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#eef2ff' }]}>
+                      <ShieldCheck size={20} color="#6366f1" />
                     </View>
-                    <Text style={styles.componentsTitle}>Earning & Deduction Hub</Text>
+                    <View>
+                      <Text style={styles.cardTitle}>Provident Fund (PF)</Text>
+                      <Text style={styles.cardSubtitle}>STATUTORY CONTRIBUTION</Text>
+                    </View>
                   </View>
-                  <TouchableOpacity style={styles.addButton} onPress={addComponent}>
-                    <Plus size={20} color="#10b981" />
-                  </TouchableOpacity>
-                </View>
-
-                {policy.salaryComponents?.map((component, idx) => (
-                  <SalaryComponentItem
-                    key={idx}
-                    component={component}
-                    index={idx}
-                    onUpdate={updateComponent}
-                    onRemove={removeComponent}
+                  <Switch
+                    value={policy?.statutory?.pf?.enabled}
+                    onValueChange={(val) => 
+                      setPolicy({
+                        ...policy,
+                        statutory: {
+                          ...policy.statutory,
+                          pf: { ...policy.statutory.pf, enabled: val }
+                        }
+                      })
+                    }
+                    trackColor={{ false: "#e2e8f0", true: "#6366f1" }}
                   />
-                ))}
-
-                {(!policy.salaryComponents || policy.salaryComponents.length === 0) && (
-                  <View style={styles.emptyComponents}>
-                    <Text style={styles.emptyComponentsText}>No salary components added yet</Text>
-                    <TouchableOpacity onPress={addComponent}>
-                      <Text style={styles.emptyComponentsLink}>Add your first component</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {activeTab === 'statutory' && (
-              <View style={styles.statutoryContainer}>
-                <StatutoryCard
-                  title="Provident Fund (EPF)"
-                  icon={IndianRupee}
-                  color="#3b82f6"
-                  config={policy.statutory?.pf}
-                  onToggle={(enabled) => toggleStatutory('pf', enabled)}
-                  onUpdate={(field, value) => updateStatutory('pf', field, value)}
-                  type="pf"
-                />
-
-                <StatutoryCard
-                  title="State Insurance (ESI)"
-                  icon={Briefcase}
-                  color="#ef4444"
-                  config={policy.statutory?.esi}
-                  onToggle={(enabled) => toggleStatutory('esi', enabled)}
-                  onUpdate={(field, value) => updateStatutory('esi', field, value)}
-                  type="esi"
-                />
-              </View>
-            )}
-
-            {activeTab === 'attendance' && (
-              <View style={styles.attendanceContainer}>
-                <View style={styles.attendanceCard}>
-                  <View style={styles.attendanceHeader}>
-                    <View style={styles.attendanceIcon}>
-                      <Clock size={24} color="#6b7280" />
-                    </View>
-                    <Text style={styles.attendanceTitle}>Attendance Policy</Text>
-                  </View>
-
-                  <View style={styles.attendanceField}>
-                    <View>
-                      <Text style={styles.attendanceFieldLabel}>Standard Working Days</Text>
-                      <Text style={styles.attendanceFieldHint}>Used for per-day calculation basis</Text>
-                    </View>
-                    <TextInput
-                      style={styles.attendanceFieldInput}
-                      value={String(policy.attendance?.workingDaysPerMonth || 26)}
-                      onChangeText={(text) => updateAttendance('workingDaysPerMonth', parseInt(text) || 0)}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.switchField}>
-                    <View>
-                      <Text style={styles.switchFieldLabel}>Salary Proration</Text>
-                      <Text style={styles.switchFieldHint}>Adjust components based on attendance</Text>
-                    </View>
-                    <Switch
-                      value={policy.attendance?.prorateSalary || false}
-                      onValueChange={(value) => updateAttendance('prorateSalary', value)}
-                      trackColor={{ false: '#d1d5db', true: '#6366f1' }}
-                      thumbColor="#ffffff"
-                    />
-                  </View>
                 </View>
 
-                <View style={styles.attendanceCard}>
-                  <View style={styles.attendanceHeader}>
-                    <View style={styles.attendanceIcon}>
-                      <TrendingUp size={24} color="#8b5cf6" />
-                    </View>
-                    <Text style={styles.attendanceTitle}>Overtime Config</Text>
-                  </View>
-
-                  <View style={styles.switchField}>
-                    <View>
-                      <Text style={styles.switchFieldLabel}>Overtime Calculations</Text>
-                      <Text style={styles.switchFieldHint}>Enable OT for this policy cycle</Text>
-                    </View>
-                    <Switch
-                      value={policy.overtime?.enabled || false}
-                      onValueChange={(value) => updateOvertime('enabled', value)}
-                      trackColor={{ false: '#d1d5db', true: '#8b5cf6' }}
-                      thumbColor="#ffffff"
-                    />
-                  </View>
-
-                  {policy.overtime?.enabled && (
-                    <View style={styles.attendanceField}>
-                      <View>
-                        <Text style={styles.attendanceFieldLabel}>Overtime Multiplier</Text>
-                        <Text style={styles.attendanceFieldHint}>Rate for extratime above standard hours</Text>
+                {policy?.statutory?.pf?.enabled && (
+                  <View style={styles.cardBody}>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>EMPLOYEE %</Text>
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={String(policy?.statutory?.pf?.employeePercent || 0)}
+                            onChangeText={(val) => 
+                              setPolicy({
+                                ...policy,
+                                statutory: {
+                                  ...policy.statutory,
+                                  pf: { ...policy.statutory.pf, employeePercent: parseFloat(val) || 0 }
+                                }
+                              })
+                            }
+                          />
+                          <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
+                        </View>
                       </View>
-                      <TextInput
-                        style={styles.attendanceFieldInput}
-                        value={String(policy.overtime?.multiplier || 1.5)}
-                        onChangeText={(text) => updateOvertime('multiplier', parseFloat(text) || 0)}
-                        keyboardType="numeric"
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>EMPLOYER %</Text>
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={String(policy?.statutory?.pf?.employerPercent || 0)}
+                            onChangeText={(val) => 
+                              setPolicy({
+                                ...policy,
+                                statutory: {
+                                  ...policy.statutory,
+                                  pf: { ...policy.statutory.pf, employerPercent: parseFloat(val) || 0 }
+                                }
+                              })
+                            }
+                          />
+                          <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.checkboxRow}>
+                      <Text style={styles.checkboxLabel}>Restrict to Wage Ceiling (₹15,000)</Text>
+                      <Switch
+                        value={policy?.statutory?.pf?.restrictToCeiling}
+                        onValueChange={(val) => 
+                          setPolicy({
+                            ...policy,
+                            statutory: {
+                              ...policy.statutory,
+                              pf: { ...policy.statutory.pf, restrictToCeiling: val }
+                            }
+                          })
+                        }
+                        trackColor={{ false: "#e2e8f0", true: "#6366f1" }}
+                        style={{ transform: [{ scale: 0.8 }] }}
                       />
                     </View>
-                  )}
+                  </View>
+                )}
+              </View>
+
+              {/* ESI Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#ecfdf5' }]}>
+                      <Briefcase size={20} color="#10b981" />
+                    </View>
+                    <View>
+                      <Text style={styles.cardTitle}>State Insurance (ESI)</Text>
+                      <Text style={styles.cardSubtitle}>MEDICAL COMPLIANCE</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={policy?.statutory?.esi?.enabled}
+                    onValueChange={(val) => 
+                      setPolicy({
+                        ...policy,
+                        statutory: {
+                          ...policy.statutory,
+                          esi: { ...policy.statutory.esi, enabled: val }
+                        }
+                      })
+                    }
+                    trackColor={{ false: "#e2e8f0", true: "#10b981" }}
+                  />
+                </View>
+
+                {policy?.statutory?.esi?.enabled && (
+                  <View style={styles.cardBody}>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>EMPLOYEE %</Text>
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={String(policy?.statutory?.esi?.employeePercent || 0)}
+                            onChangeText={(val) => 
+                              setPolicy({
+                                ...policy,
+                                statutory: {
+                                  ...policy.statutory,
+                                  esi: { ...policy.statutory.esi, employeePercent: parseFloat(val) || 0 }
+                                }
+                              })
+                            }
+                          />
+                          <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
+                        </View>
+                      </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>THRESHOLD LIMIT</Text>
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={String(policy?.statutory?.esi?.threshold || 0)}
+                            onChangeText={(val) => 
+                              setPolicy({
+                                ...policy,
+                                statutory: {
+                                  ...policy.statutory,
+                                  esi: { ...policy.statutory.esi, threshold: parseFloat(val) || 0 }
+                                }
+                              })
+                            }
+                          />
+                          <IndianRupee size={14} color="#94a3b8" style={styles.inputIcon} />
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* PT Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#fef3c7' }]}>
+                      <Globe size={20} color="#f59e0b" />
+                    </View>
+                    <View>
+                      <Text style={styles.cardTitle}>Professional Tax (PT)</Text>
+                      <Text style={styles.cardSubtitle}>STATE WISE COMPLIANCE</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={policy?.statutory?.pt?.enabled}
+                    onValueChange={(val) => 
+                      setPolicy({
+                        ...policy,
+                        statutory: {
+                          ...policy.statutory,
+                          pt: { ...policy.statutory.pt, enabled: val }
+                        }
+                      })
+                    }
+                    trackColor={{ false: "#e2e8f0", true: "#f59e0b" }}
+                  />
+                </View>
+
+                {policy?.statutory?.pt?.enabled && (
+                  <View style={styles.cardBody}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>WORK STATE</Text>
+                      <TouchableOpacity 
+                        style={styles.selector}
+                        onPress={() => {
+                          // Simple state picker logic
+                          const states = Object.keys(PT_STATE_CONFIGS);
+                          Alert.alert(
+                            "Select State",
+                            "Choose the applicable work state",
+                            states.map(s => ({
+                              text: PT_STATE_CONFIGS[s].name,
+                              onPress: () => handlePTStateChange(s)
+                            })) as any
+                          );
+                        }}
+                      >
+                        <Text style={styles.selectorText}>
+                          {PT_STATE_CONFIGS[policy?.statutory?.pt?.state]?.name || "Select State"}
+                        </Text>
+                        <RefreshCcw size={14} color="#6366f1" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Slabs List */}
+                    <View style={styles.slabsHeader}>
+                      <Text style={styles.inputLabel}>GOVERNMENT SLAB RULES</Text>
+                      <TouchableOpacity style={styles.addButton} onPress={() => {
+                        const newSlabs = [...(policy.statutory.pt.slabs || []), { min: 0, max: 999999, amount: 0 }];
+                        setPolicy({...policy, statutory: {...policy.statutory, pt: {...policy.statutory.pt, slabs: newSlabs}}});
+                      }}>
+                        <Plus size={14} color="#6366f1" />
+                        <Text style={styles.addButtonText}>Add Rule</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {(policy?.statutory?.pt?.slabs || []).map((slab: any, idx: number) => (
+                      <View key={idx} style={styles.slabRow}>
+                        <View style={styles.slabInputGroup}>
+                          <TextInput
+                            style={styles.slabInput}
+                            keyboardType="numeric"
+                            value={String(slab.min)}
+                            onChangeText={(val) => {
+                              const newSlabs = [...policy.statutory.pt.slabs];
+                              newSlabs[idx].min = parseFloat(val) || 0;
+                              setPolicy({...policy, statutory: {...policy.statutory, pt: {...policy.statutory.pt, slabs: newSlabs}}});
+                            }}
+                          />
+                        </View>
+                        <Text style={styles.slabSeparator}>-</Text>
+                        <View style={styles.slabInputGroup}>
+                          <TextInput
+                            style={styles.slabInput}
+                            keyboardType="numeric"
+                            value={String(slab.max)}
+                            onChangeText={(val) => {
+                              const newSlabs = [...policy.statutory.pt.slabs];
+                              newSlabs[idx].max = parseFloat(val) || 0;
+                              setPolicy({...policy, statutory: {...policy.statutory, pt: {...policy.statutory.pt, slabs: newSlabs}}});
+                            }}
+                          />
+                        </View>
+                        <View style={[styles.slabInputGroup, { flex: 0.8 }]}>
+                          <TextInput
+                            style={[styles.slabInput, styles.slabAmountInput]}
+                            keyboardType="numeric"
+                            value={String(slab.amount)}
+                            onChangeText={(val) => {
+                              const newSlabs = [...policy.statutory.pt.slabs];
+                              newSlabs[idx].amount = parseFloat(val) || 0;
+                              setPolicy({...policy, statutory: {...policy.statutory, pt: {...policy.statutory.pt, slabs: newSlabs}}});
+                            }}
+                          />
+                        </View>
+                        <TouchableOpacity onPress={() => {
+                          const newSlabs = policy.statutory.pt.slabs.filter((_: any, i: number) => i !== idx);
+                          setPolicy({...policy, statutory: {...policy.statutory, pt: {...policy.statutory.pt, slabs: newSlabs}}});
+                        }}>
+                          <Trash2 size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Simulation Box */}
+              <View style={styles.sandbox}>
+                <View style={styles.sandboxHeader}>
+                  <Calculator size={20} color="#6366f1" />
+                  <Text style={styles.sandboxTitle}>Compliance Sandbox</Text>
+                </View>
+                <View style={styles.sandboxInputGroup}>
+                  <Text style={styles.sandboxLabel}>Monthly Gross Salary</Text>
+                  <View style={styles.sandboxInputWrapper}>
+                    <IndianRupee size={16} color="#94a3b8" />
+                    <TextInput
+                      style={styles.sandboxInput}
+                      keyboardType="numeric"
+                      value={String(simulationSalary)}
+                      onChangeText={(val) => setSimulationSalary(parseFloat(val) || 0)}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.previewGrid}>
+                  {/* PF Preview */}
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewLabel}>PF Impact</Text>
+                    {(() => {
+                      const res = complianceEngine.calculatePF(simulationSalary * 0.4, simulationSalary * 0.1, {...policy?.statutory?.pf, enabled: true});
+                      return (
+                        <View>
+                          <Text style={styles.previewValue}>₹{res.employeePF.toLocaleString()}</Text>
+                          <Text style={styles.previewSubtext}>Deduction</Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                  {/* ESI Preview */}
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewLabel}>ESI Impact</Text>
+                    {(() => {
+                      const res = complianceEngine.calculateESI(simulationSalary, {...policy?.statutory?.esi, enabled: true});
+                      return (
+                        <View>
+                          <Text style={styles.previewValue}>₹{res.employeeESI.toLocaleString()}</Text>
+                          <Text style={styles.previewSubtext}>Deduction</Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                  {/* PT Preview */}
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewLabel}>PT Impact</Text>
+                    {(() => {
+                      const res = complianceEngine.calculatePT(simulationSalary, {...policy?.statutory?.pt, enabled: true});
+                      return (
+                        <View>
+                          <Text style={styles.previewValue}>₹{res.toLocaleString()}</Text>
+                          <Text style={styles.previewSubtext}>Monthly Tax</Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
                 </View>
               </View>
-            )}
+            </View>
+          )}
 
-            {activeTab === 'rounding' && (
-              <View style={styles.roundingContainer}>
-                <View style={styles.roundingCard}>
-                  <View style={styles.roundingHeader}>
-                    <View style={styles.roundingIcon}>
-                      <Settings2 size={24} color="#6b7280" />
+          {activeTab === "attendance" && (
+            <View style={styles.section}>
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#f1f5f9' }]}>
+                      <Clock size={20} color="#64748b" />
                     </View>
-                    <Text style={styles.roundingTitle}>Engine Configuration</Text>
+                    <Text style={styles.cardTitle}>Attendance Policy</Text>
                   </View>
-
-                  <View style={styles.roundingField}>
-                    <Text style={styles.roundingLabel}>Rounding Strategy</Text>
-                    <View style={styles.roundingOptions}>
-                      {[
-                        { value: 'ROUND_OFF', label: 'Standard Round Off' },
-                        { value: 'ROUND_UP', label: 'Ceiling (Always Up)' },
-                        { value: 'ROUND_DOWN', label: 'Floor (Always Down)' },
-                      ].map((option) => (
-                        <TouchableOpacity
-                          key={option.value}
-                          style={[
-                            styles.roundingOption,
-                            policy.rounding?.rule === option.value && styles.roundingOptionActive,
-                          ]}
-                          onPress={() => updateRounding('rule', option.value)}
-                        >
-                          <Text
-                            style={[
-                              styles.roundingOptionText,
-                              policy.rounding?.rule === option.value && styles.roundingOptionTextActive,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                </View>
+                <View style={styles.cardBody}>
+                  <View style={styles.settingItem}>
+                    <View>
+                      <Text style={styles.settingLabel}>Standard Working Days</Text>
+                      <Text style={styles.settingDesc}>Used for daily rate calculation</Text>
                     </View>
-                  </View>
-
-                  <View style={styles.roundingField}>
-                    <Text style={styles.roundingLabel}>Decimal Precision</Text>
                     <TextInput
-                      style={styles.roundingInput}
-                      value={String(policy.rounding?.decimals || 2)}
-                      onChangeText={(text) => updateRounding('decimals', parseInt(text) || 0)}
+                      style={styles.smallInput}
                       keyboardType="numeric"
+                      value={String(policy?.attendance?.workingDaysPerMonth)}
+                      onChangeText={(val) => setPolicy({...policy, attendance: {...policy.attendance, workingDaysPerMonth: parseInt(val) || 0}})}
+                    />
+                  </View>
+                  <View style={styles.settingItem}>
+                    <View>
+                      <Text style={styles.settingLabel}>Salary Proration</Text>
+                      <Text style={styles.settingDesc}>Adjust pay based on LOPs</Text>
+                    </View>
+                    <Switch
+                      value={policy?.attendance?.prorateSalary}
+                      onValueChange={(val) => setPolicy({...policy, attendance: {...policy.attendance, prorateSalary: val}})}
+                      trackColor={{ false: "#e2e8f0", true: "#6366f1" }}
                     />
                   </View>
                 </View>
               </View>
-            )}
-          </View>
 
-          {/* Right Column - Preview */}
-          <View style={styles.rightColumn}>
-            <View style={styles.previewCard}>
-              <LinearGradient
-                colors={['#1f2937', '#111827']}
-                style={styles.previewGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <View style={styles.previewHeader}>
-                  <View style={styles.previewHeaderLeft}>
-                    <View style={styles.previewIcon}>
-                      <Calculator size={20} color="#8b5cf6" />
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#f3e8ff' }]}>
+                      <Plus size={20} color="#a855f7" />
                     </View>
-                    <Text style={styles.previewTitle}>Payroll Calculator</Text>
+                    <Text style={styles.cardTitle}>Overtime Config</Text>
                   </View>
-                  <TouchableOpacity onPress={triggerPreview} style={styles.previewRefresh}>
-                    <RefreshCcw size={20} color="#8b5cf6" />
-                  </TouchableOpacity>
                 </View>
-
-                {previewLoading ? (
-                  <View style={styles.previewLoading}>
-                    <ActivityIndicator size="large" color="#8b5cf6" />
-                    <Text style={styles.previewLoadingText}>Aggregating Policy Data...</Text>
+                <View style={styles.cardBody}>
+                  <View style={styles.settingItem}>
+                    <View>
+                      <Text style={styles.settingLabel}>Enable Overtime</Text>
+                      <Text style={styles.settingDesc}>Calculate OT in payroll cycles</Text>
+                    </View>
+                    <Switch
+                      value={policy?.overtime?.enabled}
+                      onValueChange={(val) => setPolicy({...policy, overtime: {...policy.overtime, enabled: val}})}
+                      trackColor={{ false: "#e2e8f0", true: "#a855f7" }}
+                    />
                   </View>
-                ) : preview ? (
-                  <View style={styles.previewContent}>
-                    <View style={styles.previewStats}>
-                      <View style={styles.previewStat}>
-                        <Text style={styles.previewStatLabel}>Monthly CTC Base</Text>
-                        <Text style={styles.previewStatValue}>
-                          ₹{preview.ctc?.toLocaleString()}
-                        </Text>
-                      </View>
-                      <View style={styles.previewDivider} />
-                      <View style={styles.previewStat}>
-                        <Text style={styles.previewStatLabel}>Sample Employee</Text>
-                        <Text style={styles.previewStatValue}>{preview.sampleEmployee}</Text>
-                      </View>
+                  <View style={styles.settingItem}>
+                    <View>
+                      <Text style={styles.settingLabel}>OT Multiplier</Text>
+                      <Text style={styles.settingDesc}>Standard OT rate factor</Text>
                     </View>
-
-                    <View style={styles.previewBreakdown}>
-                      <Text style={styles.previewBreakdownTitle}>Calculated Breakdown</Text>
-
-                      <View style={styles.previewEarnings}>
-                        <Text style={styles.previewEarningsTitle}>Earnings</Text>
-                        {preview.breakdown?.earnings?.components?.map((comp, idx) => (
-                          <View key={idx} style={styles.previewRow}>
-                            <Text style={styles.previewRowLabel}>{comp.name}</Text>
-                            <Text style={styles.previewRowValueEarning}>+{comp.value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-                          </View>
-                        ))}
-                      </View>
-
-                      <View style={styles.previewDeductions}>
-                        <Text style={styles.previewDeductionsTitle}>Deductions</Text>
-                        {preview.breakdown?.deductions?.components?.map((comp, idx) => (
-                          <View key={idx} style={styles.previewRow}>
-                            <Text style={styles.previewRowLabel}>{comp.name}</Text>
-                            <Text style={styles.previewRowValueDeduction}>-{comp.value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-
-                    <View style={styles.previewNetPay}>
-                      <Text style={styles.previewNetPayLabel}>Approx. Net Payout</Text>
-                      <View style={styles.previewNetPayValue}>
-                        <IndianRupee size={24} color="#10b981" />
-                        <Text style={styles.previewNetPayAmount}>
-                          {preview.breakdown?.netPay?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </Text>
-                      </View>
-                    </View>
+                    <TextInput
+                      style={styles.smallInput}
+                      keyboardType="numeric"
+                      value={String(policy?.overtime?.multiplier)}
+                      onChangeText={(val) => setPolicy({...policy, overtime: {...policy.overtime, multiplier: parseFloat(val) || 1}})}
+                    />
                   </View>
-                ) : (
-                  <View style={styles.previewEmpty}>
-                    <Briefcase size={48} color="#374151" />
-                    <Text style={styles.previewEmptyText}>No preview data available</Text>
-                    <TouchableOpacity onPress={triggerPreview}>
-                      <Text style={styles.previewEmptyLink}>Generate Preview</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {activeTab === "rounding" && (
+            <View style={styles.section}>
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#f1f5f9' }]}>
+                      <Settings2 size={20} color="#64748b" />
+                    </View>
+                    <Text style={styles.cardTitle}>Engine Configuration</Text>
+                  </View>
+                </View>
+                <View style={styles.cardBody}>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>ROUNDING STRATEGY</Text>
+                    <TouchableOpacity 
+                      style={styles.selector}
+                      onPress={() => {
+                        Alert.alert("Rounding Strategy", "Choose strategy", [
+                          { text: "Standard Round Off", onPress: () => setPolicy({...policy, rounding: {...policy.rounding, rule: 'ROUND_OFF'}}) },
+                          { text: "Ceiling (Always Up)", onPress: () => setPolicy({...policy, rounding: {...policy.rounding, rule: 'ROUND_UP'}}) },
+                          { text: "Floor (Always Down)", onPress: () => setPolicy({...policy, rounding: {...policy.rounding, rule: 'ROUND_DOWN'}}) },
+                        ]);
+                      }}
+                    >
+                      <Text style={styles.selectorText}>{policy?.rounding?.rule?.replace('_', ' ') || "Select Strategy"}</Text>
+                      <ChevronDown size={14} color="#64748b" />
                     </TouchableOpacity>
                   </View>
-                )}
-              </LinearGradient>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>DECIMAL PRECISION</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={styles.input}
+                        keyboardType="numeric"
+                        value={String(policy?.rounding?.decimals)}
+                        onChangeText={(val) => setPolicy({...policy, rounding: {...policy.rounding, decimals: parseInt(val) || 0}})}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
             </View>
-          </View>
-         </View>
+          )}
+        </View>
 
-         {/* Bottom Save Button */}
-         <TouchableOpacity
-           style={styles.bottomSaveButton}
-           onPress={() => handleSave(false)}
-           disabled={saving}
-         >
-           <LinearGradient
-             colors={['#6366f1', '#8b5cf6']}
-             style={styles.bottomSaveButtonGradient}
-             start={{ x: 0, y: 0 }}
-             end={{ x: 1, y: 0 }}
-           >
-             {saving ? (
-               <ActivityIndicator color="white" />
-             ) : (
-               <View style={styles.saveButtonContent}>
-                 <Save size={20} color="white" />
-                 <Text style={styles.bottomSaveButtonText}>Synchronize Standards</Text>
-               </View>
-             )}
-           </LinearGradient>
-         </TouchableOpacity>
-       </ScrollView>
-     </KeyboardAvoidingView>
+        {/* Save Button */}
+        <TouchableOpacity 
+          style={[styles.saveButton, saving && styles.disabledButton]} 
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Save size={18} color="#fff" />
+              <Text style={styles.saveButtonText}>SAVE CHANGES</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        
+        <View style={{ height: 40 }} />
+      </View>
     </Layout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    gap: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  emptyMessage: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginBottom: 20,
-  },
-  versionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#eef2ff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
-  },
-  versionButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6366f1',
-  },
-  saveButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  saveButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  saveButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  bottomSaveButton: {
-    marginTop: 24,
-    marginBottom: 40,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  bottomSaveButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 10,
-  },
-  bottomSaveButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  saveButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  mainContent: {
-    flexDirection: 'column',
-    gap: 20,
-    alignItems: 'stretch',
-  },
-  leftColumn: {
-    width: '100%',
-  },
-  rightColumn: {
-    width: '100%',
-    marginTop: 10,
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    backgroundColor: '#f1f5f9',
-    borderRadius: 16,
-    padding: 4,
-    marginBottom: 20,
-    gap: 4,
-  },
-  tabButton: {
-    flex: 1,
-    minWidth: '45%', // Allow 2 tabs per row on very small screens if needed
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  tabButtonActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  tabButtonText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  tabButtonTextActive: {
-    color: '#6366f1',
-    fontWeight: '600',
-  },
-  componentsContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  componentsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-    backgroundColor: '#fafafa',
-  },
-  componentsHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  componentsIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#eef2ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  componentsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#ecfdf5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  componentItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-    position: 'relative',
-  },
-  componentRemoveButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    zIndex: 10,
-    padding: 8,
-  },
-  componentRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 12,
-  },
-  componentField: {
-    flex: 1,
-    minWidth: 140, // Ensure fields don't get too narrow
-    marginBottom: 8,
-  },
-  componentLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  componentInput: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
-  flex1: {
-    flex: 1,
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  typeOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-  },
-  typeOptionActive: {
-    backgroundColor: '#eef2ff',
-    borderColor: '#6366f1',
-  },
-  typeOptionText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  typeOptionTextActive: {
-    color: '#6366f1',
-  },
-  calculationSelector: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  calcOption: {
-    flex: 1,
-    paddingVertical: 8,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  calcOptionActive: {
-    backgroundColor: '#eef2ff',
-    borderColor: '#6366f1',
-  },
-  calcOptionText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  calcOptionTextActive: {
-    color: '#6366f1',
-  },
-  valueInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  valueIcon: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#f3f4f6',
-    borderRightWidth: 1,
-    borderRightColor: '#e5e7eb',
-  },
-  valueInput: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
-  formulaInput: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#6366f1',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  emptyComponents: {
-    padding: 48,
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyComponentsText: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
-  emptyComponentsLink: {
-    fontSize: 13,
-    color: '#6366f1',
-    fontWeight: '600',
-  },
-  statutoryContainer: {
-    gap: 16,
-  },
-  statutoryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  statutoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  statutoryHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  statutoryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statutoryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  statutorySubtitle: {
-    fontSize: 11,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  statutoryContent: {
-    padding: 16,
-    gap: 16,
-  },
-  statutoryRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  statutoryField: {
-    marginBottom: 0,
-  },
-  statutoryFieldLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  statutoryInput: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
-  wageLimitInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  wageLimitField: {
-    flex: 1,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
-  infoBox: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 12,
-    backgroundColor: '#fffbeb',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-  },
-  infoBoxText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#92400e',
-    lineHeight: 16,
-  },
-  attendanceContainer: {
-    gap: 16,
-  },
-  attendanceCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  attendanceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  attendanceIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attendanceTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  attendanceField: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  attendanceFieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  attendanceFieldHint: {
-    fontSize: 11,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  attendanceFieldInput: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#6366f1',
-    minWidth: 60,
-    textAlign: 'right',
-  },
-  switchField: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  switchFieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  switchFieldHint: {
-    fontSize: 11,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  roundingContainer: {
-    gap: 16,
-  },
-  roundingCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-    padding: 16,
-  },
-  roundingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-  },
-  roundingIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roundingTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  roundingField: {
-    marginBottom: 20,
-  },
-  roundingLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  roundingOptions: {
-    gap: 8,
-  },
-  roundingOption: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-  },
-  roundingOptionActive: {
-    backgroundColor: '#eef2ff',
-    borderColor: '#6366f1',
-  },
-  roundingOptionText: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  roundingOptionTextActive: {
-    color: '#6366f1',
-    fontWeight: '600',
-  },
-  roundingInput: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
-  previewCard: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  previewGradient: {
-    padding: 20,
-  },
-  previewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  previewHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  previewIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  previewRefresh: {
-    padding: 8,
-  },
-  previewLoading: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 12,
-  },
-  previewLoadingText: {
-    fontSize: 13,
-    color: '#9ca3af',
-  },
-  previewContent: {
-    gap: 20,
-  },
-  previewStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-    marginBottom: 16,
-  },
-  previewStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  previewStatLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  previewStatValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  previewDivider: {
-    width: 1,
-    backgroundColor: '#374151',
-    marginHorizontal: 10,
-  },
-  previewBreakdown: {
-    gap: 12,
-  },
-  previewBreakdownTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  previewEarnings: {
-    gap: 8,
-  },
-  previewEarningsTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#10b981',
-  },
-  previewDeductions: {
-    gap: 8,
-  },
-  previewDeductionsTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ef4444',
-  },
-  previewRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  previewRowLabel: {
-    fontSize: 12,
-    color: '#d1d5db',
-  },
-  previewRowValueEarning: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#10b981',
-  },
-  previewRowValueDeduction: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ef4444',
-  },
-  previewNetPay: {
-    marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
-    alignItems: 'center',
-  },
-  previewNetPayLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  previewNetPayValue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  previewNetPayAmount: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#10b981',
-  },
-  previewEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 12,
-  },
-  previewEmptyText: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  previewEmptyLink: {
-    fontSize: 13,
-    color: '#8b5cf6',
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  confirmModal: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    width: SCREEN_WIDTH - 48,
-    maxWidth: 320,
-  },
-  confirmTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  confirmMessage: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 20,
-  },
-  confirmButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  confirmButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  confirmButtonCancel: {
-    backgroundColor: '#f3f4f6',
-  },
-  confirmButtonDelete: {
-    backgroundColor: '#fee2e2',
-  },
-  confirmButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  confirmButtonDeleteText: {
-    color: '#ef4444',
-  },
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  errorText: { fontSize: 16, color: '#64748b', marginVertical: 12 },
+  retryButton: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#6366f1', borderRadius: 8 },
+  retryButtonText: { color: '#fff', fontWeight: 'bold' },
+  tabContainer: { flexDirection: 'row', padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  tabButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, gap: 6, borderRadius: 8 },
+  activeTabButton: { backgroundColor: '#f5f3ff' },
+  tabText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  activeTabText: { color: '#6366f1' },
+  content: { padding: 16 },
+  section: { gap: 16 },
+  card: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  cardTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconBox: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
+  cardSubtitle: { fontSize: 9, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 },
+  cardBody: { padding: 16, gap: 16 },
+  inputRow: { flexDirection: 'row', gap: 12 },
+  inputGroup: { flex: 1, gap: 6 },
+  inputLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12 },
+  input: { flex: 1, height: 40, fontSize: 14, fontWeight: '600', color: '#1e293b' },
+  inputIcon: { marginLeft: 8 },
+  checkboxRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f5f3ff', padding: 10, borderRadius: 12 },
+  checkboxLabel: { fontSize: 12, fontWeight: '600', color: '#6366f1' },
+  selector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 40 },
+  selectorText: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
+  slabsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  addButtonText: { fontSize: 11, fontWeight: '700', color: '#6366f1' },
+  slabRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc', padding: 8, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  slabInputGroup: { flex: 1 },
+  slabInput: { height: 32, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 8, fontSize: 12, fontWeight: '600', color: '#1e293b' },
+  slabSeparator: { color: '#94a3b8' },
+  slabAmountInput: { backgroundColor: '#f5f3ff', borderColor: '#ddd6fe', color: '#6366f1' },
+  sandbox: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#e2e8f0', marginTop: 8 },
+  sandboxHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  sandboxTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
+  sandboxInputGroup: { gap: 8, marginBottom: 20 },
+  sandboxLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
+  sandboxInputWrapper: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  sandboxInput: { flex: 1, height: 48, fontSize: 20, fontWeight: '800', color: '#1e293b' },
+  previewGrid: { flexDirection: 'row', gap: 10 },
+  previewCard: { flex: 1, backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+  previewLabel: { fontSize: 9, fontWeight: '700', color: '#94a3b8', marginBottom: 6 },
+  previewValue: { fontSize: 14, fontWeight: '800', color: '#1e293b' },
+  previewSubtext: { fontSize: 8, color: '#64748b', marginTop: 2 },
+  settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  settingLabel: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
+  settingDesc: { fontSize: 11, color: '#64748b' },
+  smallInput: { width: 60, height: 36, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', textAlign: 'center', fontSize: 16, fontWeight: '800', color: '#6366f1' },
+  saveButton: { margin: 16, height: 52, backgroundColor: '#1e293b', borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  disabledButton: { opacity: 0.6 },
+  saveButtonText: { color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
 });
