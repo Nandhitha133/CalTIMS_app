@@ -98,8 +98,8 @@ interface StatsData {
 interface FilterOptions {
   years: string[];
   weeks: string[];
-  employees: Array<{ id: string; name: string; employeeId: string }>;
-  projects: Array<{ id: string; name: string; code: string }>;
+  employees: Array<{ id: string; _id?: string; name: string; employeeId: string }>;
+  projects: Array<{ id: string; _id?: string; name: string; code: string }>;
   locations?: string[];
   divisions?: string[];
 }
@@ -277,8 +277,8 @@ const FilterModal = ({
                 options={[
                   { label: 'All Employees', value: '' },
                   ...(filterOptions?.employees?.map(emp => ({
-                    label: `${emp.employeeId} — ${emp.name}`,
-                    value: emp.id
+                    label: emp.name,
+                    value: String(emp.id || emp._id || '')
                   })) || [])
                 ]}
                 selectedValue={tempFilters.userId}
@@ -715,30 +715,77 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
   const fetchFilterOptions = async () => {
     try {
       const options = await timesheetService.getAdminFilters();
+      
+      // If we got options but employees are empty, it might be an issue with the specific filters endpoint
+      // Let's try to populate them if they are empty
+      if (!options.employees || options.employees.length === 0) {
+        const usersRes = await userAPI.getAll({ limit: 1000, isActive: true });
+        const users = (usersRes as any)?.data || (usersRes as any)?.users || usersRes || [];
+        options.employees = Array.isArray(users) ? users : (users.data || []);
+      }
+
+      if (!options.projects || options.projects.length === 0) {
+        const projectsRes = await projectAPI.getAll({ limit: 1000, isActive: true });
+        const projects = (projectsRes as any)?.data || (projectsRes as any)?.projects || projectsRes || [];
+        options.projects = Array.isArray(projects) ? projects : (projects.data || []);
+      }
+
+      // Ensure we have some years and weeks
+      if (!options.years || options.years.length === 0) {
+        options.years = [new Date().getFullYear().toString()];
+      }
+      
+      if (!options.weeks || options.weeks.length === 0) {
+        const weeks: string[] = [];
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        const currentMonday = new Date(today.setDate(diff));
+        currentMonday.setHours(0, 0, 0, 0);
+        for (let i = 0; i < 12; i++) {
+          const d = new Date(currentMonday);
+          d.setDate(d.getDate() - (i * 7));
+          weeks.push(d.toISOString());
+        }
+        options.weeks = weeks;
+      }
+
       setFilterOptions(options);
     } catch (error) {
-      console.log('Admin filters endpoint not available, generating fallbacks...', error);
+      console.log('Admin filters fetch failed, generating fallbacks...', error);
       try {
         const [projectsRes, usersRes] = await Promise.all([
-          projectAPI.getAll(),
-          userAPI.getAll()
+          projectAPI.getAll({ limit: 1000, isActive: true }),
+          userAPI.getAll({ limit: 1000, isActive: true })
         ]);
 
-        const projects = (projectsRes as any)?.data || projectsRes || [];
-        const users = (usersRes as any)?.data || usersRes || [];
+        const projectsData = (projectsRes as any)?.data || (projectsRes as any)?.projects || projectsRes || [];
+        const usersData = (usersRes as any)?.data || (usersRes as any)?.users || usersRes || [];
 
         const currentYear = new Date().getFullYear();
+        const weeks: string[] = [];
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        const currentMonday = new Date(today.setDate(diff));
+        currentMonday.setHours(0, 0, 0, 0);
+
+        for (let i = 0; i < 12; i++) {
+          const d = new Date(currentMonday);
+          d.setDate(d.getDate() - (i * 7));
+          weeks.push(d.toISOString());
+        }
+
         setFilterOptions({
-          projects: Array.isArray(projects) ? projects : [],
-          employees: Array.isArray(users) ? users : [],
+          projects: Array.isArray(projectsData) ? projectsData : (projectsData.data || []),
+          employees: Array.isArray(usersData) ? usersData : (usersData.data || []),
           locations: [],
           divisions: [],
-          years: [currentYear.toString(), (currentYear - 1).toString()],
-          weeks: []
+          years: [currentYear.toString()],
+          weeks: weeks
         });
       } catch (fallbackError) {
-        console.log('Fallback also failed, resetting filter options', fallbackError);
-        setFilterOptions({ projects: [], employees: [], locations: [], divisions: [], years: [], weeks: [] });
+        console.log('Fallback also failed', fallbackError);
       }
     }
   };
@@ -852,6 +899,7 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
   useFocusEffect(
     useCallback(() => {
       fetchStats();
+      fetchFilterOptions();
       // Initial fetch if page is 1
       if (pagination.page === 1) {
         fetchTimesheets(1);
