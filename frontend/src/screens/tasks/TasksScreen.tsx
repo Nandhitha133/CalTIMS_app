@@ -93,8 +93,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  searchContainer: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
+  searchContainer: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  searchBox: { flex: 1, minWidth: 200, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
   filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
@@ -138,11 +138,11 @@ const styles = StyleSheet.create({
 
   resultsCount: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginBottom: 12, letterSpacing: 1 },
 
-  card: { 
-    backgroundColor: 'white', 
-    borderRadius: 16, 
-    marginBottom: 12, 
-    borderWidth: 1, 
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
     overflow: 'hidden',
     shadowColor: '#000',
@@ -151,24 +151,24 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  cardHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 16, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#f1f5f9' 
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9'
   },
   taskInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  taskIcon: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: '#eef2ff', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    borderWidth: 1, 
-    borderColor: '#c7d2fe' 
+  taskIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#c7d2fe'
   },
   avatarText: { fontSize: 16, fontWeight: 'bold', color: '#4f46e5' },
   taskName: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
@@ -179,14 +179,14 @@ const styles = StyleSheet.create({
   taskDescription: { fontSize: 13, color: '#475569', marginBottom: 4, lineHeight: 18 },
   dueDateContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dueDateText: { fontSize: 12, color: '#64748b' },
-  cardFooter: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 12, 
-    borderTopWidth: 1, 
-    borderTopColor: '#f1f5f9', 
-    backgroundColor: '#fafafa' 
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: '#fafafa'
   },
   footerLeft: { flex: 1 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
@@ -718,8 +718,35 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
   useFocusEffect(useCallback(() => {
     loadUserData();
     fetchProjects();
-    fetchTasks();
-  }, [page, searchQuery, projectFilter, statusFilter]));
+    if (page === 1) {
+      fetchTasks(1);
+    }
+  }, [user?.id, user?._id]));
+
+  // Use a debounced effect for search and filters to fetch data
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = setTimeout(() => {
+      // Fetch if search is empty or has at least 2 chars, or if filters are active
+      if (searchQuery.trim().length >= 2 || searchQuery.trim().length === 0 || projectFilter || statusFilter) {
+        if (page === 1) {
+          fetchTasks(1);
+        } else {
+          setPage(1);
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, projectFilter, statusFilter, user?.id, user?._id]);
+
+  // Handle page change separately
+  useEffect(() => {
+    if (user && page !== 1) {
+      fetchTasks(page);
+    }
+  }, [page]);
 
   const loadUserData = async () => {
     try {
@@ -749,11 +776,12 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
     }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (pageNumber?: number) => {
     try {
       setLoading(true);
-      const params: any = { page, limit };
-      if (searchQuery.length >= 2) params.search = searchQuery;
+      const targetPage = pageNumber ?? page;
+      const params: any = { page: targetPage, limit };
+      if (searchQuery.trim().length >= 2) params.search = searchQuery.trim();
       if (projectFilter) params.projectId = projectFilter;
       if (statusFilter) params.status = statusFilter;
 
@@ -1020,138 +1048,131 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
         refreshing={refreshing}
         onRefresh={onRefresh}
       >
-        {loading && !refreshing && tasks.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={{ marginTop: 12, color: '#64748b', fontSize: 13 }}>Loading tasks...</Text>
+        <View style={styles.content}>
+
+          {/* Stats Row */}
+          <View style={styles.statsContainer}>
+            <StatCard title="Total" value={stats.total} icon={ListTodo} color="#3b82f6" bgColor="#eff6ff" />
+            <StatCard title="Pending" value={stats.pending} icon={BarChart} color="#f59e0b" bgColor="#fffbeb" />
+            <StatCard title="In Progress" value={stats.inProgress} icon={BarChart} color="#3b82f6" bgColor="#eff6ff" />
+            <StatCard title="Completed" value={stats.completed} icon={BarChart} color="#10b981" bgColor="#ecfdf5" />
           </View>
-        ) : (
-          <View style={styles.content}>
-            <PageHeader
-              title="Tasks"
-              subtitle="Manage your team's tasks and priorities"
-              icon={ListTodo}
-              iconColor="#3b82f6"
-              iconBgColor="#eff6ff"
-            />
-            {/* Stats Row */}
-            <View style={styles.statsContainer}>
-              <StatCard title="Total" value={stats.total} icon={ListTodo} color="#3b82f6" bgColor="#eff6ff" />
-              <StatCard title="Pending" value={stats.pending} icon={BarChart} color="#f59e0b" bgColor="#fffbeb" />
-              <StatCard title="In Progress" value={stats.inProgress} icon={BarChart} color="#3b82f6" bgColor="#eff6ff" />
-              <StatCard title="Completed" value={stats.completed} icon={BarChart} color="#10b981" bgColor="#ecfdf5" />
-            </View>
 
-            {/* Search and Filter */}
-            <View style={styles.searchContainer}>
-              <View style={styles.searchBox}>
-                <Search size={16} color="#94a3b8" />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search tasks..."
-                  placeholderTextColor="#94a3b8"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  onSubmitEditing={fetchTasks}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.filterButton, (showFilters || activeFilterCount > 0) && styles.filterButtonActive]}
-                onPress={() => setShowFilters(!showFilters)}
-              >
-                <Filter size={16} color={showFilters || activeFilterCount > 0 ? '#3b82f6' : '#64748b'} />
+          {/* Search and Filter */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBox}>
+              <Search size={16} color="#94a3b8" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search tasks..."
+                placeholderTextColor="#94a3b8"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={() => fetchTasks(1)}
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.filterButton, (showFilters || activeFilterCount > 0) && styles.filterButtonActive]}
+              onPress={() => setShowFilters(!showFilters)}
+            >
+              <Filter size={16} color={showFilters || activeFilterCount > 0 ? '#3b82f6' : '#64748b'} />
+              {activeFilterCount > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.exportButton}
+              onPress={() => setShowExportModal(true)}
+            >
+              <Download size={16} color="#3b82f6" />
+              <Text style={styles.exportButtonText}>Export</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bulkButton}
+              onPress={() => {
+                setBulkProjectId('');
+                setBulkNames('');
+                setShowBulkModal(true);
+              }}
+            >
+              <ListTodo size={16} color="#3b82f6" />
+              <Text style={styles.bulkButtonText}>Bulk</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
+              <Plus size={16} color="white" />
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Filter Panel */}
+          {showFilters && (
+            <View style={styles.filterPanel}>
+              <View style={styles.filterHeader}>
+                <Text style={styles.filterTitle}>Filter By</Text>
                 {activeFilterCount > 0 && (
-                  <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.exportButton}
-                onPress={() => setShowExportModal(true)}
-              >
-                <Download size={16} color="#3b82f6" />
-                <Text style={styles.exportButtonText}>Export</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.bulkButton} 
-                onPress={() => {
-                  setBulkProjectId('');
-                  setBulkNames('');
-                  setShowBulkModal(true);
-                }}
-              >
-                <ListTodo size={16} color="#3b82f6" />
-                <Text style={styles.bulkButtonText}>Bulk</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
-                <Plus size={16} color="white" />
-                <Text style={styles.addButtonText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Filter Panel */}
-            {showFilters && (
-              <View style={styles.filterPanel}>
-                <View style={styles.filterHeader}>
-                  <Text style={styles.filterTitle}>Filter By</Text>
-                  {activeFilterCount > 0 && (
-                    <TouchableOpacity onPress={() => {
-                      setTempFilters({ projectId: '', status: '' });
-                      setProjectFilter('');
-                      setStatusFilter('');
-                    }}>
-                      <Text style={styles.filterResetText}>Reset All</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <View style={styles.filterField}>
-                  <Text style={styles.filterLabel}>Project</Text>
-                  <TouchableOpacity style={styles.filterSelectButton} onPress={() => openDropdown('filter', 'project')}>
-                    <Text style={[styles.filterSelectText, !tempFilters.projectId && styles.filterPlaceholderText]}>
-                      {tempFilters.projectId ? projects.find(p => (p._id || p.id) === tempFilters.projectId)?.name || 'All Projects' : 'All Projects'}
-                    </Text>
-                    <ChevronDown size={14} color="#64748b" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.filterField}>
-                  <Text style={styles.filterLabel}>Status</Text>
-                  <TouchableOpacity style={styles.filterSelectButton} onPress={() => openDropdown('filter', 'status')}>
-                    <Text style={[styles.filterSelectText, !tempFilters.status && styles.filterPlaceholderText]}>
-                      {tempFilters.status ? statusOptions.find(s => s.value === tempFilters.status)?.label || 'All Statuses' : 'All Statuses'}
-                    </Text>
-                    <ChevronDown size={14} color="#64748b" />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.filterActions}>
-                  <TouchableOpacity style={styles.filterClear} onPress={() => setTempFilters({ projectId: '', status: '' })}>
-                    <Text style={styles.filterClearText}>Clear</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.filterApply} onPress={() => {
-                    setProjectFilter(tempFilters.projectId);
-                    setStatusFilter(tempFilters.status);
-                    setShowFilters(false);
-                    setPage(1);
+                  <TouchableOpacity onPress={() => {
+                    setTempFilters({ projectId: '', status: '' });
+                    setProjectFilter('');
+                    setStatusFilter('');
                   }}>
-                    <Text style={styles.filterApplyText}>Apply Filters</Text>
+                    <Text style={styles.filterResetText}>Reset All</Text>
                   </TouchableOpacity>
-                </View>
+                )}
               </View>
-            )}
-
-            {/* Results Count */}
-            <Text style={styles.resultsCount}>{totalResults} TASKS</Text>
-
-            {/* Tasks List */}
-            {tasks.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <ListTodo size={48} color="#cbd5e1" />
-                <Text style={styles.emptyTitle}>No tasks found</Text>
-                <Text style={styles.emptyText}>Try adjusting your filters or create a new task</Text>
+              <View style={styles.filterField}>
+                <Text style={styles.filterLabel}>Project</Text>
+                <TouchableOpacity style={styles.filterSelectButton} onPress={() => openDropdown('filter', 'project')}>
+                  <Text style={[styles.filterSelectText, !tempFilters.projectId && styles.filterPlaceholderText]}>
+                    {tempFilters.projectId ? projects.find(p => (p._id || p.id) === tempFilters.projectId)?.name || 'All Projects' : 'All Projects'}
+                  </Text>
+                  <ChevronDown size={14} color="#64748b" />
+                </TouchableOpacity>
               </View>
-            ) : (
-              <>
-                {tasks.map(task => (
+              <View style={styles.filterField}>
+                <Text style={styles.filterLabel}>Status</Text>
+                <TouchableOpacity style={styles.filterSelectButton} onPress={() => openDropdown('filter', 'status')}>
+                  <Text style={[styles.filterSelectText, !tempFilters.status && styles.filterPlaceholderText]}>
+                    {tempFilters.status ? statusOptions.find(s => s.value === tempFilters.status)?.label || 'All Statuses' : 'All Statuses'}
+                  </Text>
+                  <ChevronDown size={14} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.filterActions}>
+                <TouchableOpacity style={styles.filterClear} onPress={() => setTempFilters({ projectId: '', status: '' })}>
+                  <Text style={styles.filterClearText}>Clear</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.filterApply} onPress={() => {
+                  setProjectFilter(tempFilters.projectId);
+                  setStatusFilter(tempFilters.status);
+                  setShowFilters(false);
+                  setPage(1);
+                }}>
+                  <Text style={styles.filterApplyText}>Apply Filters</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Results Count */}
+          <Text style={styles.resultsCount}>{totalResults} TASKS</Text>
+
+          {/* Tasks List */}
+          {loading && !refreshing ? (
+            <View style={[styles.loadingContainer, { backgroundColor: 'transparent', paddingVertical: 48 }]}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+              <Text style={{ marginTop: 12, color: '#64748b', fontSize: 13 }}>Loading tasks...</Text>
+            </View>
+          ) : tasks.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <ListTodo size={48} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>No tasks found</Text>
+              <Text style={styles.emptyText}>Try adjusting your filters or create a new task</Text>
+            </View>
+          ) : (
+            <>
+              {tasks.map(task => (
                   <TaskCard
                     key={task._id || task.id}
                     task={task}
@@ -1193,7 +1214,6 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
               </>
             )}
           </View>
-        )}
       </Layout>
 
       <ExportModal

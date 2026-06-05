@@ -41,8 +41,9 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
 import { exportFile, convertToCSV } from '../../utils/exportHelper';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const COLORS = {
   primary: '#6366f1',
@@ -179,6 +180,7 @@ const EmployeeRow = ({ employee, onPress, currencySymbol }: {
 );
 
 export const PayrollHistory = ({ navigation }: { navigation: any }) => {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -192,6 +194,8 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
   const [settings, setSettings] = useState<any>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
+
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.organization?.currency || 'INR');
 
   const loadUserData = async () => {
     try {
@@ -394,8 +398,6 @@ export const PayrollHistory = ({ navigation }: { navigation: any }) => {
       setLoading(false);
     }
   };
-
-  const currencySymbol = settings?.payroll?.currencySymbol || '₹';
 
   if (loading && !refreshing) {
     return (

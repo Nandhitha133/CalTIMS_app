@@ -30,23 +30,19 @@ import {
   TrendingUp,
   Landmark,
   ChevronDown,
-  Calculator,
   Shield,
-  CreditCard,
-  Building,
   Plus,
-  Save,
   ArrowRight,
   ArrowLeft,
-  DollarSign,
-  Activity,
 } from 'lucide-react-native';
 import { userAPI as employeeAPI, payrollAPI, policyAPI, settingsAPI } from '../../services/endpoints';
 import CommonHeader from '../../components/common/Header';
 import CommonFooter from '../../components/common/Footer';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropdownModal from '../../components/common/DropdownModal';
 import { useAuthStore } from '../../store/authStore';
+import { useSocketEvent } from '../../services/socket';
+import { useSettingsStore } from '../../store/settingsStore';
+import { getCurrencySymbol, formatCurrency } from './payrollFormatters';
 
 const COLORS = {
   primary: '#0A0F2C',
@@ -147,9 +143,9 @@ interface Employee {
   employeeId: string;
   name: string;
   email: string;
-  department: string;
-  designation: string;
-  role: string;
+  department?: string;
+  designation?: string;
+  role?: string;
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
@@ -167,6 +163,14 @@ interface Employee {
   payrollData?: any;
   empId?: string;
   employeeType?: string;
+  annualCTC?: number;
+  monthlyCTC?: number;
+  ctc?: number;
+  salary?: number;
+  ctcAmount?: number;
+  payrollType?: string;
+  isActive?: boolean;
+  status?: string;
 }
 
 interface SalaryBreakdown {
@@ -260,7 +264,8 @@ const getSafeId = (id: any): string => {
     if (id.$oid) finalId = String(id.$oid);
     else if (id._id) return getSafeId(id._id);
     else if (id.id) return getSafeId(id.id);
-    else finalId = String(id);
+    else if (typeof id.toString === 'function' && id.toString() !== '[object Object]') finalId = id.toString();
+    else finalId = JSON.stringify(id);
   } else {
     finalId = String(id);
   }
@@ -268,7 +273,15 @@ const getSafeId = (id: any): string => {
   // Normalize: trim and lowercase for reliable matching
   finalId = finalId.trim().toLowerCase();
 
-  // BANK-GRADE: Strip virtual prefix if present before sending to backend
+  // Strip common MongoDB-style wrappers if they leaked through
+  if (finalId.includes(':')) {
+    try {
+      const parts = finalId.split(':');
+      if (parts.length > 1) finalId = parts[parts.length - 1].replace(/["'}]/g, '').trim();
+    } catch (err) {}
+  }
+
+  // Strip virtual prefix if present before matching
   if (finalId.startsWith('v-')) {
     return finalId.substring(2);
   }
@@ -277,6 +290,7 @@ const getSafeId = (id: any): string => {
 };
 
 export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
+  const { organization: orgSettings } = useSettingsStore();
   const incomingEmployeeId = route?.params?.employeeId;
 
   // List View States
@@ -289,7 +303,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const [deptFilter, setDeptFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const itemsPerPage = 10;
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeptDropdown, setShowDeptDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -301,8 +315,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<string | null>(null);
   const [globalPolicy, setGlobalPolicy] = useState<GlobalPolicy | null>(null);
-  const [currencySymbol, setCurrencySymbol] = useState('₹');
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [currencySymbol, setCurrencySymbol] = useState(getCurrencySymbol(orgSettings?.currency || 'INR'));
 
   // Wizard States
   const [showWizard, setShowWizard] = useState(false);
@@ -312,7 +325,6 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const [ctcType, setCtcType] = useState<'annual' | 'monthly'>('annual');
   const [ctcValue, setCtcValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [wizardError, setWizardError] = useState<string | null>(null);
   const [structure, setStructure] = useState({
     name: 'Payroll Profile',
     earnings: [...ROLE_TEMPLATES.employee.earnings],
@@ -339,6 +351,11 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const [departments, setDepartments] = useState<string[]>(['All']);
   const [showEmployeePicker, setShowEmployeePicker] = useState(false);
 
+  // Update currency symbol when settings change
+  useEffect(() => {
+    setCurrencySymbol(getCurrencySymbol(orgSettings?.currency || 'INR'));
+  }, [orgSettings?.currency]);
+
   // Load initial data
   useEffect(() => {
     loadInitialData();
@@ -355,7 +372,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   // Handle incoming employee ID from navigation
   useEffect(() => {
     if (incomingEmployeeId && employees.length > 0) {
-      const targetEmp = employees.find(e => getSafeId(e._id) === incomingEmployeeId || e.employeeId === incomingEmployeeId);
+      const targetEmp = employees.find((e: Employee) => getSafeId(e._id) === incomingEmployeeId || e.employeeId === incomingEmployeeId);
       if (targetEmp) {
         setSearchTerm(targetEmp.employeeId || targetEmp.name);
         // If they have a profile, view it, otherwise edit/setup
@@ -376,12 +393,11 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   }, [editingEmployee, showWizard, profiles]);
 
   const loadInitialData = async () => {
-    setIsLoading(true);
+    if (!refreshing) setIsLoading(true);
     try {
       // Load settings for currency
       const settingsRes = (await settingsAPI.getSettings()) as any;
       const settingsData = settingsRes?.data?.data || settingsRes?.data || settingsRes;
-      setSettings(settingsData);
       if (settingsData?.organization?.currency) {
         setCurrencySymbol(getCurrencySymbol(settingsData.organization.currency));
       } else if (settingsData?.payroll?.currencySymbol) {
@@ -436,7 +452,6 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
           _id: getSafeId(emp._id || emp.id || (emp.user && (emp.user._id || emp.user.id)))
         };
       });
-      setEmployees(employeesList);
 
       // Normalize profile list extraction
       let profilesList: any[] = [];
@@ -450,14 +465,17 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       } else if (pRes?.profiles && Array.isArray(pRes.profiles)) {
         profilesList = pRes.profiles;
       } else if (pRes?.data && typeof pRes.data === 'object') {
-        // Handle case where profiles might be an object with IDs as keys
-        profilesList = Object.values(pRes.data).filter(v => v && typeof v === 'object');
+        const potentialArray = pRes.data.profiles || pRes.data.data || Object.values(pRes.data);
+        if (Array.isArray(potentialArray)) {
+          profilesList = potentialArray;
+        } else {
+          profilesList = Object.values(pRes.data).filter(v => v && typeof v === 'object');
+        }
       }
 
       // Secondary profile discovery: aggressively merge profiles from employee response if available
-      const secondaryProfiles = eRes?.profiles || eRes?.data?.profiles || eRes?.data?.data?.profiles || [];
+      const secondaryProfiles = eRes?.profiles || eRes?.data?.profiles || eRes?.data?.data?.profiles || eRes?.secondaryProfiles || [];
       if (Array.isArray(secondaryProfiles) && secondaryProfiles.length > 0) {
-        // Merge without duplicates based on _id
         const existingIds = new Set(profilesList.map(p => getSafeId(p._id || p.id)));
         secondaryProfiles.forEach(p => {
           const id = getSafeId(p._id || p.id);
@@ -471,26 +489,156 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       // Tertiary discovery: Check if any employee objects themselves contain profile data
       employeesList.forEach((emp: any) => {
         const potentialProfile = emp.profile || emp.payrollProfile || emp.payroll || emp.salaryDetails || emp.payrollData || emp.salaryInfo;
+        
         if (potentialProfile && typeof potentialProfile === 'object') {
           const id = getSafeId(potentialProfile._id || potentialProfile.id || '');
           const existingIds = new Set(profilesList.map(p => getSafeId(p._id || p.id)));
           if (id && id !== 'undefined' && !existingIds.has(id)) {
             profilesList.push(potentialProfile);
           } else if (!id) {
-            // If no ID but has CTC data, it's a virtual profile we should keep
             const hasData = potentialProfile.annualCTC || potentialProfile.monthlyCTC || potentialProfile.ctc || potentialProfile.salary || potentialProfile.ctcAmount;
             if (hasData) {
               profilesList.push({ ...potentialProfile, _id: `v-${emp._id}`, userId: emp._id, employeeId: emp.employeeId });
             }
           }
+        } 
+        else if (emp.annualCTC || emp.monthlyCTC || emp.ctc || emp.salary || emp.ctcAmount) {
+          const existingIds = new Set(profilesList.map(p => getSafeId(p.userId || (typeof p.user === 'object' ? p.user?._id || p.user?.id : p.user) || '')));
+          if (!existingIds.has(emp._id)) {
+            profilesList.push({ ...emp, _id: `v-${emp._id}`, userId: emp._id, employeeId: emp.employeeId });
+          }
         }
       });
+
+      // 4. Aggressive Merging: Create the final employee list with profiles attached
+      const finalEmployees = employeesList.map((emp: any) => {
+        const eId = getSafeId(emp._id);
+        const eEmpId = String(emp.employeeId || emp.empId || '').trim().toLowerCase();
+        const eEmail = String(emp.email || '').trim().toLowerCase();
+        const eName = String(emp.name || '').trim().toLowerCase();
+
+        // Find profile in profilesList with multi-key matching
+        let foundProfile = profilesList.find((p: any) => {
+          // A. Match by User ID
+          const pUserId = getSafeId(p.userId || (p.user && (typeof p.user === 'object' ? p.user._id || p.user.id : p.user)));
+          if (eId && pUserId && eId === pUserId) return true;
+
+          // B. Match by Employee ID
+          const pEmpId = String(p.employeeId || p.empId || (p.user && typeof p.user === 'object' ? p.user.employeeId : '') || '').trim().toLowerCase();
+          if (eEmpId && pEmpId && eEmpId === pEmpId) return true;
+
+          // C. Match by Email (Fallback)
+          const pEmail = String(p.email || (p.user && typeof p.user === 'object' ? p.user.email : '') || '').trim().toLowerCase();
+          if (eEmail && pEmail && eEmail === pEmail) return true;
+
+          // D. Match by Name (Last Resort)
+          const pName = String(p.name || (p.user && typeof p.user === 'object' ? p.user.name : '') || '').trim().toLowerCase();
+          if (eName && pName && eName === pName) return true;
+
+          return false;
+        });
+
+        // Fallback to nested profiles if not found in the main list
+        if (!foundProfile) {
+          foundProfile = emp.profile || emp.payrollProfile || emp.payroll || emp.salaryDetails || emp.payrollData || emp.salaryInfo || emp.salary;
+        }
+
+        // Final normalization of the profile object
+        let profile = foundProfile;
+        if (foundProfile && typeof foundProfile === 'object') {
+          // If the found object is actually the employee itself, or has a nested profile
+          if (foundProfile.profile && typeof foundProfile.profile === 'object') {
+            profile = foundProfile.profile;
+          } else if (foundProfile.payrollProfile && typeof foundProfile.payrollProfile === 'object') {
+            profile = foundProfile.payrollProfile;
+          } else if (foundProfile.salaryBreakdown && typeof foundProfile.salaryBreakdown === 'object') {
+            profile = foundProfile.salaryBreakdown;
+          }
+        }
+
+        // Deep Earnings Discovery: Ensure we find the components array
+        if (profile && typeof profile === 'object') {
+          if (!profile.earnings || !profile.earnings.length) {
+            const potentialEarnings = 
+              profile.earnings || 
+              profile.salaryComponents || 
+              profile.components || 
+              profile.breakdown || 
+              profile.structure || 
+              (foundProfile && (foundProfile.earnings || foundProfile.salaryComponents || foundProfile.components));
+            
+            if (Array.isArray(potentialEarnings) && potentialEarnings.length > 0) {
+              profile.earnings = potentialEarnings;
+            }
+          }
+          
+          // Same for deductions
+          if (!profile.deductions || !profile.deductions.length) {
+            const potentialDeductions = 
+              profile.deductions || 
+              profile.salaryDeductions || 
+              (foundProfile && (foundProfile.deductions || foundProfile.salaryDeductions));
+            
+            if (Array.isArray(potentialDeductions) && potentialDeductions.length > 0) {
+              profile.deductions = potentialDeductions;
+            }
+          }
+        }
+
+        // Determine status and CTC for the employee object directly
+        let payrollStatus = 'Not Configured';
+        let hasProfile = false;
+
+        // Initial status from employee object
+        const empRawStatus = String(emp.payrollStatus || emp.status || '').toUpperCase();
+        if (['ACTIVE', 'CONFIGURED', 'COMPLETED', 'VERIFIED', 'SUCCESS'].includes(empRawStatus)) {
+          payrollStatus = 'Active';
+        }
+
+        if (profile) {
+          const mCTC = Number(
+            profile.monthlyCTC || 
+            (profile.annualCTC ? profile.annualCTC / 12 : 0) || 
+            (profile.ctc ? profile.ctc / 12 : 0) || 
+            (profile.salary ? profile.salary / 12 : 0) || 
+            (profile.ctcAmount ? profile.ctcAmount / 12 : 0) || 
+            (profile.totalSalary ? profile.totalSalary / 12 : 0) || 
+            0
+          );
+          
+          const rawStatus = String(
+            profile.status || 
+            profile.payrollStatus || 
+            (profile.isActive === true ? 'Active' : '') || 
+            (mCTC > 0 ? 'Active' : '') ||
+            payrollStatus
+          ).toUpperCase();
+          
+          if (['ACTIVE', 'CONFIGURED', 'SET', 'TRUE', 'COMPLETED', 'VERIFIED', 'PROCESSED', 'SUCCESS'].includes(rawStatus)) {
+            payrollStatus = 'Active';
+          } else if (mCTC > 0) {
+            payrollStatus = 'Active';
+          }
+
+          hasProfile = mCTC > 0 || (profile.earnings && profile.earnings.length > 0) || payrollStatus === 'Active';
+        }
+
+        return {
+          ...emp,
+          profile: profile || null,
+          hasProfile,
+          payrollStatus,
+          bankStatus: (emp.bankName && emp.accountNumber && emp.ifscCode) ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing'),
+        };
+      });
+      console.log(`[Profiles] Discovery complete. Processed ${finalEmployees.length} employees. Configured: ${finalEmployees.filter((e: Employee) => e.hasProfile).length}`);
       
+      setEmployees(finalEmployees);
       setProfiles(profilesList);
 
       // Extract unique departments
       const deptSet = new Set(['All']);
-      employeesList.forEach((emp: Employee) => {
+      finalEmployees.forEach((emp: Employee) => {
         if (emp.department) deptSet.add(emp.department);
       });
       setDepartments(Array.from(deptSet));
@@ -540,10 +688,11 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       );
     });
     if (existingProfile) {
+      const defaultTemplate = JSON.parse(JSON.stringify(ROLE_TEMPLATES.employee));
       setStructure({
         name: 'Payroll Profile',
-        earnings: existingProfile.earnings || ROLE_TEMPLATES.employee.earnings,
-        deductions: existingProfile.deductions || ROLE_TEMPLATES.employee.deductions,
+        earnings: existingProfile.earnings || defaultTemplate.earnings,
+        deductions: existingProfile.deductions || defaultTemplate.deductions,
       });
       setCtcValue(existingProfile.annualCTC ? existingProfile.annualCTC.toString() : 
                   existingProfile.monthlyCTC ? (existingProfile.monthlyCTC * 12).toString() : '');
@@ -558,13 +707,6 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       });
       setCtcValue('');
     }
-  };
-
-  const getCurrencySymbol = (currency: string): string => {
-    const symbols: Record<string, string> = {
-      USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥', AUD: 'A$', CAD: 'C$',
-    };
-    return symbols[currency] || '₹';
   };
 
   const getAppliedTemplate = (role: string) => {
@@ -583,86 +725,24 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   };
 
   const filterEmployees = () => {
-    let filtered = employees.map(emp => {
-      const eId = getSafeId(emp._id);
-      const eEmpId = String(emp.employeeId || emp.empId || '').trim().toLowerCase();
-      
-      // Exhaustive search for a matching profile in the profiles list
-      let profile = profiles.find(p => {
-        const pUserId = getSafeId(p.userId || (p.user && (typeof p.user === 'object' ? p.user._id || p.user.id : p.user)));
-        const pEmpId = String(p.employeeId || p.empId || (p.user && typeof p.user === 'object' ? p.user.employeeId : '') || '').trim().toLowerCase();
-        
-        // Match by User ID or Employee ID
-        const idMatch = (eId && pUserId && eId === pUserId);
-        const empIdMatch = (eEmpId && pEmpId && eEmpId === pEmpId);
-        
-        return idMatch || empIdMatch;
-      });
-
-      // Discovery: check if the profile is nested within the employee object
-      if (!profile) {
-        profile = emp.profile || (emp as any).payrollProfile || (emp as any).payroll || (emp as any).salaryDetails || (emp as any).salaryInfo;
-      }
-
-      // Check all properties of emp for an object that looks like a profile
-      if (!profile) {
-        for (const key in emp) {
-          const val = (emp as any)[key];
-          if (val && typeof val === 'object' && !Array.isArray(val) && (val.annualCTC || val.monthlyCTC || val.earnings || val.ctc || val.salary)) {
-            profile = val;
-            break;
-          }
-        }
-      }
-
-      // Final normalization of the profile object
-      let finalProfile = profile ? (profile.annualCTC || profile.monthlyCTC || profile.ctc || profile.salary ? profile : 
-                         (profile.profile || profile.payrollProfile || profile.payroll || profile.salaryDetails || profile.salaryInfo || profile)) : null;
-
-      // Status determination
-      let payrollStatus = 'Not Configured';
-      if (finalProfile) {
-        const statusStr = String(
-          finalProfile.status || 
-          finalProfile.payrollStatus || 
-          (finalProfile.isActive === true ? 'Active' : '') || 
-          (finalProfile.monthlyCTC > 0 || finalProfile.annualCTC > 0 ? 'Active' : '') ||
-          'Active'
-        ).toUpperCase();
-        
-        if (['ACTIVE', 'CONFIGURED', 'SET', 'TRUE', 'COMPLETED', 'VERIFIED'].includes(statusStr)) {
-          payrollStatus = 'Active';
-        } else if (['INACTIVE', 'DISABLED', 'FALSE', 'PENDING'].includes(statusStr)) {
-          // If it has CTC but is marked pending, it's still "Active" in our summary view usually
-          payrollStatus = (finalProfile.monthlyCTC > 0 || finalProfile.annualCTC > 0) ? 'Active' : 'Inactive';
-        } else {
-          payrollStatus = finalProfile.status || 'Active';
-        }
-      }
-
-      return {
-        ...emp,
-        profile: finalProfile,
-        hasProfile: !!finalProfile,
-        payrollStatus,
-        bankStatus: (emp.bankName && emp.accountNumber && emp.ifscCode) ? 'Verified' : (emp.bankName || emp.accountNumber ? 'Pending' : 'Missing'),
-      };
-    });
+    console.log(`[Profiles] Filtering ${employees.length} employees...`);
+    
+    let filtered = [...employees];
 
     if (searchTerm) {
       const lowerTerm = searchTerm.toLowerCase();
-      filtered = filtered.filter(emp =>
+      filtered = filtered.filter((emp: Employee) =>
         (emp.name && emp.name.toLowerCase().includes(lowerTerm)) ||
         (emp.employeeId && emp.employeeId.toLowerCase().includes(lowerTerm))
       );
     }
 
     if (deptFilter !== 'All') {
-      filtered = filtered.filter(emp => emp.department === deptFilter);
+      filtered = filtered.filter((emp: Employee) => emp.department === deptFilter);
     }
 
     if (statusFilter !== 'All') {
-      filtered = filtered.filter(emp => emp.payrollStatus === statusFilter);
+      filtered = filtered.filter((emp: Employee) => emp.payrollStatus === statusFilter);
     }
 
     setFilteredEmployees(filtered);
@@ -671,21 +751,17 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadInitialData();
-  }, []);
-
-  const formatCurrency = (amount: any): string => {
-    if (amount === null || amount === undefined) return `${currencySymbol}0.00`;
-    const num = typeof amount === 'number' ? amount : parseFloat(String(amount).replace(/[^0-9.-]/g, '')) || 0;
-    return `${currencySymbol}${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  }, [loadInitialData]);
 
   const calculateSalaryBreakdown = (profile: PayrollProfile): SalaryBreakdown => {
     const monthlyCTC = profile.monthlyCTC || (profile.annualCTC ? profile.annualCTC / 12 : 0);
     let grossPay = 0;
     const context: Record<string, number> = {};
 
-    const earningsWithValues: EarningComponent[] = (profile.earnings || []).map(e => {
+    const earningsWithValues: EarningComponent[] = (profile.earnings || []).map((e: EarningComponent) => {
       let calculatedValue = 0;
+      const val = Number(e.value || (e as any).amount || (e as any).calculatedValue || 0);
+      
       if (e.calculationType === 'Percentage') {
         let base = monthlyCTC;
         if (e.basedOn === 'Basic Salary' && context['Basic Salary']) {
@@ -693,18 +769,20 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         } else if (e.basedOn === 'Basic Salary') {
           base = monthlyCTC * 0.4;
         }
-        calculatedValue = (base * e.value) / 100;
+        calculatedValue = (base * val) / 100;
       } else {
-        calculatedValue = e.value;
+        calculatedValue = val;
       }
       context[e.name] = calculatedValue;
       grossPay += calculatedValue;
-      return { ...e, calculatedValue };
+      return { ...e, value: val, calculatedValue };
     });
 
     let totalDeductions = 0;
-    const deductionsWithValues: DeductionComponent[] = (profile.deductions || []).map(d => {
+    const deductionsWithValues: DeductionComponent[] = (profile.deductions || []).map((d: DeductionComponent) => {
       let calculatedValue = 0;
+      const val = Number(d.value || (d as any).amount || (d as any).calculatedValue || 0);
+
       if (d.calculationType === 'Percentage') {
         let base = monthlyCTC;
         if (d.basedOn === 'Basic Salary' && context['Basic Salary']) {
@@ -712,12 +790,12 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         } else if (d.basedOn === 'Gross') {
           base = grossPay;
         }
-        calculatedValue = (base * d.value) / 100;
+        calculatedValue = (base * val) / 100;
       } else {
-        calculatedValue = d.value;
+        calculatedValue = val;
       }
       totalDeductions += calculatedValue;
-      return { ...d, calculatedValue };
+      return { ...d, value: val, calculatedValue };
     });
 
     const netSalary = grossPay - totalDeductions;
@@ -804,7 +882,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     let grossPay = 0;
     const context: Record<string, number> = {};
 
-    const earningsWithValues = structure.earnings.map(e => {
+    const earningsWithValues = structure.earnings.map((e: EarningComponent) => {
       let calculatedValue = 0;
       if (e.calculationType === 'Percentage') {
         let base = monthlyCTC;
@@ -823,7 +901,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     });
 
     let totalDeductions = 0;
-    const deductionsWithValues = structure.deductions.map(d => {
+    const deductionsWithValues = structure.deductions.map((d: DeductionComponent) => {
       let calculatedValue = 0;
       if (d.calculationType === 'Percentage') {
         let base = monthlyCTC;
@@ -850,17 +928,6 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       deductions: deductionsWithValues,
       workingDays: attendanceConfig.mode === 'CUSTOM' ? attendanceConfig.workingDays : 26,
     };
-  })();
-
-  const isBankComplete = (() => {
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-    return (
-      bankDetails.bankName.length > 2 &&
-      bankDetails.accountNumber.length >= 8 &&
-      ifscRegex.test(bankDetails.ifscCode) &&
-      panRegex.test(bankDetails.pan)
-    );
   })();
 
   const handleApplyTemplate = (role: string) => {
@@ -891,10 +958,21 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     let newValue = value;
 
     if (field === 'value') {
-      const numVal = parseFloat(value);
+      const numVal = parseFloat(value) || 0;
       if (numVal < 0) newValue = '0';
       if (updated[index].calculationType === 'Percentage' && numVal > 100) {
         newValue = '100';
+        (updated[index] as any)._forceRender = Math.random().toString();
+      }
+    }
+    
+    if (field === 'calculationType') {
+      if (value === 'Percentage') {
+        const currentVal = parseFloat(updated[index].value as any) || 0;
+        if (currentVal > 100) {
+          updated[index].value = 100;
+          (updated[index] as any)._forceRender = Math.random().toString();
+        }
       }
     }
 
@@ -914,7 +992,6 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
   };
 
   const handleNext = () => {
-    setWizardError(null);
     if (currentStep === 1) {
       if (structure.earnings.length === 0) {
         Alert.alert('Error', 'At least 1 earning component is required');
@@ -965,7 +1042,6 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const handleFinalSubmit = async () => {
     setIsSaving(true);
-    setWizardError(null);
     
     // 1. Get Organization Context
     const currentAuth = useAuthStore.getState();
@@ -977,23 +1053,33 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     const monthlyCTC = annualCTC / 12;
 
     // 3. Sanitizer for salary components
-    const mapComponent = (comp: any) => ({
-      name: String(comp.name || 'Unnamed Component'),
-      value: Number(comp.value) || 0,
-      calculationType: ['Fixed', 'Percentage', 'Formula'].includes(comp.calculationType) ? comp.calculationType : 'Fixed',
-      basedOn: comp.basedOn || 'CTC',
-      formula: comp.formula || null,
-      organizationId: orgId
-    });
+    const mapComponent = (comp: any) => {
+      const calculationType = ['Fixed', 'Percentage', 'Formula'].includes(comp.calculationType) ? comp.calculationType : 'Fixed';
+      const basedOn = comp.basedOn || 'CTC';
+      
+      return {
+        name: String(comp.name || 'Unnamed Component'),
+        value: Number(comp.value) || 0,
+        calculationType,
+        basedOn,
+        // BANK-GRADE: If percentage, we must set formula to the base component name for backend engine
+        formula: calculationType === 'Percentage' ? basedOn : (comp.formula || null),
+        organizationId: orgId || currentAuth.user?.organizationId
+      };
+    };
 
-    const cleanedDeductions = structure.deductions.filter(d => {
+    const cleanedDeductions = (structure.deductions || []).filter((d: DeductionComponent) => {
+      if (!d) return false;
       const name = (d.name || '').toLowerCase();
       const isPF = name.includes('provident fund') || name === 'pf';
       const isESI = name.includes('esi') || name.includes('state insurance');
       const isPT = name.includes('professional tax') || name === 'pt';
+      
+      // Safety: only filter out if global policy explicitly has them enabled
       const isStatutoryCandidate = (isPF && globalPolicy?.statutory?.pf?.enabled) ||
         (isESI && globalPolicy?.statutory?.esi?.enabled) ||
         (isPT && globalPolicy?.statutory?.pt?.enabled);
+        
       return !isStatutoryCandidate;
     });
 
@@ -1002,25 +1088,32 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
       const rawId = editingEmployee?._id || editingEmployee?.id || (editingEmployee as any).user?._id || (editingEmployee as any).user?.id;
       let targetUserId = getSafeId(rawId);
       
+      if (!targetUserId) {
+        throw new Error('Could not resolve a valid User ID for this employee.');
+      }
+
       const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(targetUserId) || /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(targetUserId);
       if (!isValidObjectId) {
-        throw new Error(`The Employee ID (${targetUserId}) is not a valid format.`);
+        throw new Error(`The Employee ID (${targetUserId}) is not a valid format. Please contact support.`);
       }
 
       // 5. Construct Payload
+      const finalAnnualCTC = isNaN(annualCTC) ? 0 : Number(annualCTC.toFixed(2));
+      const finalMonthlyCTC = isNaN(monthlyCTC) ? 0 : Number(monthlyCTC.toFixed(2));
+
       const payload: any = {
         user: targetUserId,
         userId: targetUserId,
-        organizationId: orgId,
-        employeeId: editingEmployee?.employeeId,
-        employeeName: editingEmployee?.name,
-        payrollType: 'Monthly',
+        organizationId: orgId || currentAuth.user?.organizationId,
+        employeeId: editingEmployee?.employeeId || '',
+        employeeName: editingEmployee?.name || '',
+        payrollType: (editingEmployee as any).payrollType || 'Monthly',
         employeeType: (editingEmployee as any).employeeType || 'Permanent',
         salaryMode: 'Employee-Based',
-        annualCTC: Number(annualCTC.toFixed(2)),
-        monthlyCTC: Number(monthlyCTC.toFixed(2)),
-        ctc: Number(annualCTC.toFixed(2)),
-        ctcAmount: Number(annualCTC.toFixed(2)),
+        annualCTC: finalAnnualCTC,
+        monthlyCTC: finalMonthlyCTC,
+        ctc: finalAnnualCTC,
+        ctcAmount: finalAnnualCTC,
         earnings: (structure.earnings || []).map(mapComponent),
         deductions: (cleanedDeductions || []).map(mapComponent),
         bankDetails: {
@@ -1038,10 +1131,19 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
       console.log('--- ENTERPRISE PAYROLL SAVE ---');
       console.log('Target User:', targetUserId);
-      console.log('Payload:', JSON.stringify(payload));
+      console.log('Payload Summary:', { 
+        earnings: payload.earnings.length, 
+        deductions: payload.deductions.length,
+        ctc: payload.annualCTC 
+      });
 
       // Use the setup endpoint which handles both creation and updates on the backend
-      await payrollAPI.setupFullProfile(payload, { timeout: 45000 } as any);
+      const response: any = await payrollAPI.setupFullProfile(payload, { timeout: 45000 } as any);
+      
+      if (response?.data?.success === false) {
+        throw new Error(response.data.message || 'Server rejected the profile update');
+      }
+
       
       Alert.alert('Success', 'Payroll profile saved successfully!');
       setShowWizard(false);
@@ -1059,27 +1161,12 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const getKPIs = () => {
     const totalEmployees = employees.length;
-    // CRITICAL: Calculate counts from the full processed list (employees with profiles merged)
-    const processedList = employees.map(emp => {
-      // Re-run the matching logic briefly for the KPI calculation to ensure accuracy
-      const eId = getSafeId(emp._id).toLowerCase();
-      const eEmpId = String(emp.employeeId || emp.empId || '').toLowerCase();
-      
-      const hasProfile = profiles.some(p => {
-        const pUserId = getSafeId(p.userId || (p.user && (typeof p.user === 'object' ? p.user._id || p.user.id : p.user))).toLowerCase();
-        const pEmpId = String(p.employeeId || p.empId || (p.user && typeof p.user === 'object' ? p.user.employeeId : '') || '').toLowerCase();
-        return (eId && pUserId && eId === pUserId) || (eEmpId && pEmpId && eEmpId === pEmpId);
-      }) || !!(emp.profile || (emp as any).payrollProfile || (emp as any).monthlyCTC || (emp as any).annualCTC);
-
-      return { ...emp, hasProfile };
-    });
-
-    const configuredProfiles = processedList.filter(e => e.hasProfile).length;
-    const pendingSetup = totalEmployees - configuredProfiles;
+    const configuredProfiles = employees.filter((e: Employee) => e.hasProfile).length;
+    const pendingSetup = Math.max(0, totalEmployees - configuredProfiles);
     
-    // Errors based on bank details or specific warning status
-    const sourceList = filteredEmployees.length > 0 ? filteredEmployees : processedList;
-    const criticalErrors = sourceList.filter(e => (e as any).payrollStatus === 'Warning' || (e as any).bankStatus === 'Missing').length;
+    // Use filtered list for errors if filters are active, otherwise full list
+    const sourceList = filteredEmployees.length > 0 ? filteredEmployees : employees;
+    const criticalErrors = sourceList.filter((e: Employee) => (e as any).payrollStatus === 'Warning' || (e as any).bankStatus === 'Missing').length;
 
     return [
       { label: 'Total Employees', value: totalEmployees, icon: Users, color: COLORS.blue, bg: COLORS.blueLight },
@@ -1096,11 +1183,12 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
   const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
 
-  const getStatusBadge = (status: string, bankStatus: string) => {
-    if (status === 'Active') {
+  const getStatusBadge = (status: string) => {
+    const s = String(status || '').toUpperCase();
+    if (s === 'ACTIVE' || s === 'COMPLETED' || s === 'VERIFIED') {
       return { label: 'Active', color: COLORS.emerald, bg: COLORS.greenLight, icon: CheckCircle };
     }
-    if (status === 'Warning') {
+    if (s === 'WARNING' || s === 'INCOMPLETE') {
       return { label: 'Incomplete Details', color: COLORS.amber, bg: COLORS.yellowLight, icon: AlertCircle };
     }
     return { label: 'Pending Setup', color: COLORS.slate, bg: COLORS.filterBg, icon: AlertCircle };
@@ -1115,6 +1203,20 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
     }
     return { label: 'Missing', color: COLORS.rose, bg: COLORS.redLight, icon: AlertTriangle };
   };
+
+  // Real-time synchronization
+  useSocketEvent('PAYROLL_PROFILE_UPDATED', (data) => {
+    const { user: authUser } = useAuthStore.getState();
+    console.log('[Profiles] Real-time profile update received:', data);
+    
+    // Refresh if organization matches OR if we can't determine organization (safety refresh)
+    const orgMatches = !data.organizationId || !authUser?.organizationId || String(data.organizationId) === String(authUser?.organizationId);
+    
+    if (orgMatches) {
+      console.log('[Profiles] Triggering refresh due to WebSocket event');
+      loadInitialData();
+    }
+  });
 
   // Render List View
   const renderKPI = (kpi: any, index: number) => {
@@ -1200,7 +1302,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
             </View>
 
             {data.map((emp, index) => {
-              const statusBadge = getStatusBadge(emp.payrollStatus || '', emp.bankStatus || '');
+              const statusBadge = getStatusBadge(emp.payrollStatus || '');
               const bankBadge = getBankStatusBadge(emp.bankStatus || '');
               const StatusIcon = statusBadge.icon;
               const BankIcon = bankBadge.icon;
@@ -1458,11 +1560,11 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
         onClose={() => setShowEmployeePicker(false)}
         title="Select Employee"
         options={employees
-          .filter(emp => !emp.hasProfile)
-          .map(emp => ({ label: `${emp.name} (${emp.employeeId})`, value: emp._id }))}
+          .filter((emp: Employee) => !emp.hasProfile)
+          .map((emp: Employee) => ({ label: `${emp.name} (${emp.employeeId})`, value: emp._id }))}
         selectedValue={editingEmployee?._id || ''}
         onSelect={(val) => {
-          const emp = employees.find(e => e._id === val);
+          const emp = employees.find((e: Employee) => e._id === val);
           if (emp) {
             setEditingEmployee(emp);
             loadEmployeeDataForWizard();
@@ -1532,7 +1634,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
               <Text style={styles.wizardSectionTitle}>Role Template</Text>
               <View style={styles.wizardRoleButtons}>
-                {['intern', 'employee', 'manager'].map(role => (
+                {['intern', 'employee', 'manager'].map((role: string) => (
                   <TouchableOpacity
                     key={role}
                     onPress={() => handleApplyTemplate(role)}
@@ -1582,7 +1684,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
                   <Plus size={16} color={COLORS.indigo} />
                 </TouchableOpacity>
               </View>
-              {structure.earnings.filter(e => !e.hidden).map((e, idx) => (
+              {structure.earnings.filter((e: EarningComponent) => !e.hidden).map((e: EarningComponent, idx: number) => (
                 <View key={idx} style={styles.wizardComponentRow}>
                   <TextInput
                     style={styles.wizardComponentNameInput}
@@ -1607,6 +1709,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
                   </View>
                   <View style={styles.wizardComponentValueContainer}>
                     <TextInput
+                      key={`earn-${idx}-${(e as any)._forceRender || '0'}`}
                       style={styles.wizardComponentValueInput}
                       value={String(e.value)}
                       onChangeText={(val) => updateComponent('earnings', idx, 'value', val)}
@@ -1637,7 +1740,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
                   <Plus size={16} color={COLORS.indigo} />
                 </TouchableOpacity>
               </View>
-              {structure.deductions.filter(d => !d.hidden).map((d, idx) => (
+              {structure.deductions.filter((d: DeductionComponent) => !d.hidden).map((d: DeductionComponent, idx: number) => (
                 <View key={idx} style={styles.wizardComponentRow}>
                   <TextInput
                     style={styles.wizardComponentNameInput}
@@ -1662,6 +1765,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
                   </View>
                   <View style={styles.wizardComponentValueContainer}>
                     <TextInput
+                      key={`ded-${idx}-${(d as any)._forceRender || '0'}`}
                       style={styles.wizardComponentValueInput}
                       value={String(d.value)}
                       onChangeText={(val) => updateComponent('deductions', idx, 'value', val)}
@@ -1751,7 +1855,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
               <Text style={styles.wizardSectionTitle}>Compliance Overrides</Text>
               <View style={styles.wizardComplianceCard}>
-                {['pf', 'esi', 'pt'].map(item => {
+                {['pf', 'esi', 'pt'].map((item: string) => {
                   const config = statutoryConfig[item as keyof StatutoryConfig];
                   const label = item === 'pf' ? 'Provident Fund' : item === 'esi' ? 'ESI Coverage' : 'Professional Tax';
                   return (
@@ -1761,7 +1865,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
                         <Text style={styles.wizardComplianceLabel}>{label}</Text>
                       </View>
                       <View style={styles.wizardComplianceModeButtons}>
-                        {['default', 'enabled', 'disabled'].map(mode => (
+                        {['default', 'enabled', 'disabled'].map((mode: string) => (
                           <TouchableOpacity
                             key={mode}
                             onPress={() => setStatutoryConfig(prev => ({
@@ -1786,7 +1890,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
                 <View style={styles.wizardComplianceRow}>
                   <Text style={styles.wizardComplianceLabel}>Calculation Mode</Text>
                   <View style={styles.wizardComplianceModeButtons}>
-                    {['POLICY_DEFAULT', 'CUSTOM'].map(mode => (
+                    {['POLICY_DEFAULT', 'CUSTOM'].map((mode: string) => (
                       <TouchableOpacity
                         key={mode}
                         onPress={() => setAttendanceConfig({ ...attendanceConfig, mode })}
@@ -1870,7 +1974,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
                 <View style={styles.wizardSalarySummarySection}>
                   <Text style={styles.wizardSalarySectionTitle}>Earnings</Text>
-                  {breakdown.earnings.filter(e => !e.hidden).map((e, idx) => (
+                  {breakdown.earnings.filter((e: EarningComponent) => !e.hidden).map((e: EarningComponent, idx: number) => (
                     <View key={idx} style={styles.wizardSalaryRow}>
                       <Text style={styles.wizardSalaryLabel}>{e.name}</Text>
                       <Text style={styles.wizardSalaryAmount}>{formatCurrency(e.calculatedValue || 0)}</Text>
@@ -1882,7 +1986,7 @@ export const EmployeePayrollProfiles = ({ route }: { route?: any }) => {
 
                 <View style={styles.wizardSalarySummarySection}>
                   <Text style={styles.wizardSalarySectionTitle}>Deductions</Text>
-                  {breakdown.deductions.filter(d => !d.hidden).map((d, idx) => (
+                  {breakdown.deductions.filter((d: DeductionComponent) => !d.hidden).map((d: DeductionComponent, idx: number) => (
                     <View key={idx} style={styles.wizardSalaryRow}>
                       <Text style={styles.wizardSalaryLabel}>{d.name}</Text>
                       <Text style={[styles.wizardSalaryAmount, { color: COLORS.rose }]}>

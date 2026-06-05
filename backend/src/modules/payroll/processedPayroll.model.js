@@ -5,15 +5,14 @@ const mongoose = require('mongoose');
 const processedPayrollSchema = new mongoose.Schema(
   {
     organizationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Organization',
+      type: mongoose.Schema.Types.Mixed,
       required: true,
       index: true
     },
     user: {
       type: mongoose.Schema.Types.Mixed,
-      ref: 'User',
       required: true,
+      index: true
     },
     month: {
       type: Number, // 1-12
@@ -159,6 +158,6 @@ processedPayrollSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], asyn
     next();
 });
 
-const ProcessedPayroll = mongoose.model('ProcessedPayroll', processedPayrollSchema);
+const ProcessedPayroll = mongoose.model('ProcessedPayroll', processedPayrollSchema, 'ProcessedPayroll');
 
 module.exports = ProcessedPayroll;

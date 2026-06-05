@@ -117,6 +117,6 @@ payrollProfileSchema.pre('save', function(next) {
 // One payroll profile per user per organization
 payrollProfileSchema.index({ organizationId: 1, user: 1 }, { unique: true });
 
-const PayrollProfile = mongoose.model('PayrollProfile', payrollProfileSchema);
+const PayrollProfile = mongoose.model('PayrollProfile', payrollProfileSchema, 'PayrollProfile');
 
 module.exports = PayrollProfile;

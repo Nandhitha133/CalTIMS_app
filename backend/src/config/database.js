@@ -1,7 +1,10 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const { PrismaClient } = require('@prisma/client');
 const logger = require('../shared/utils/logger');
+
+const prisma = new PrismaClient();
 
 const connectDB = async () => {
   try {
@@ -25,4 +28,4 @@ mongoose.connection.on('reconnected', () => {
   logger.info('MongoDB reconnected');
 });
 
-module.exports = { connectDB };
+module.exports = { connectDB, prisma };

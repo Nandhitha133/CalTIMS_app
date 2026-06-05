@@ -700,13 +700,15 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
     if (!user) return;
 
     const timer = setTimeout(() => {
-      // If we are on page 1, just fetch. If not, resetting page to 1 will trigger the pagination effect
-      if (pagination.page === 1) {
-        fetchTimesheets(1);
-      } else {
-        setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: 1 }));
+      // Fetch if search is empty or has at least 2 chars, or if filters are active
+      if (search.trim().length >= 2 || search.trim().length === 0 || filters.year !== 'All Years' || filters.month !== 'All Months' || filters.status !== 'All Status') {
+        if (pagination.page === 1) {
+          fetchTimesheets(1);
+        } else {
+          setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: 1 }));
+        }
       }
-    }, 500); // 500ms debounce for smoother typing
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [search, filters]);
@@ -718,32 +720,6 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
     }
   }, [pagination.page]);
 
-  // Frontend-side filtering for instant results and matching displayed text
-  const filteredTimesheets = useMemo(() => {
-    if (!search.trim() || search.trim().length < 2) return timesheets;
-    const term = search.trim().toLowerCase();
-    
-    return timesheets.filter(item => {
-      // 1. Project Names
-      const projectsMatch = item.projects?.some(project => 
-        (project || '').toLowerCase().includes(term)
-      );
-
-      // 2. Status
-      const statusMatch = item.statuses?.some(status => 
-        (status || '').toLowerCase().includes(term)
-      );
-
-      // 3. Date Strings
-      const weekStart = new Date(item.weekStartDate);
-      const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000);
-      const dateMatch = format(weekStart, 'MMM d').toLowerCase().includes(term) ||
-                       format(weekEnd, 'MMM d, yyyy').toLowerCase().includes(term) ||
-                       format(new Date(item.lastUpdated), 'MMM d, yyyy').toLowerCase().includes(term);
-
-      return projectsMatch || statusMatch || dateMatch;
-    });
-  }, [timesheets, search]);
 
   // Fetch timesheets
   const fetchTimesheets = useCallback(async (pageNumber?: number) => {
@@ -754,7 +730,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
       const params: any = {
         page: targetPage,
         limit: 10,
-        search: search.trim(),
+        search: search.trim().length >= 2 ? search.trim() : undefined,
         year: filters.year !== 'All Years' ? filters.year : undefined,
         month: filters.month !== 'All Months' ? filters.month : undefined,
         status: filters.status !== 'All Status' ? filters.status : undefined,
@@ -945,13 +921,10 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
             <Search size={18} color="#64748b" />
             <TextInput
               style={[styles.searchInput, { color: theme === 'dark' ? '#ffffff' : '#1e293b' }]}
-              placeholder="Search by project, category, or status..."
+              placeholder="Search (min. 2 characters)..."
               placeholderTextColor="#64748b"
               value={search}
-              onChangeText={(text) => {
-                setSearch(text);
-                setPagination(prev => ({ ...(prev || { page: 1, totalPages: 1, total: 0 }), page: 1 }));
-              }}
+              onChangeText={setSearch}
             />
           </View>
           <TouchableOpacity
@@ -1004,9 +977,8 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
         {loading && timesheets.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#6366f1" />
-            <Text style={styles.loadingText}>Searching timesheets...</Text>
           </View>
-        ) : filteredTimesheets.length === 0 ? (
+        ) : !loading && timesheets.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Search size={48} color="#94a3b8" />
             <Text style={styles.emptyTitle}>No timesheets found</Text>
@@ -1021,7 +993,7 @@ export default function TimesheetHistoryScreen({ navigation }: { navigation: any
           </View>
         ) : (
           <View style={styles.timesheetList}>
-            {filteredTimesheets.map((item) => (
+            {timesheets.map((item) => (
               <TimesheetCard
                 key={item.id || item._id}
                 item={item}

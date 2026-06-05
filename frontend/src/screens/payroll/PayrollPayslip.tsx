@@ -30,9 +30,12 @@ import {
   X
 } from 'lucide-react-native';
 import { payrollAPI } from '../../services/endpoints';
+import { useSocketEvent } from '../../services/socket';
 import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSettingsStore } from '../../store/settingsStore';
+import { getCurrencySymbol, formatCurrency } from './payrollFormatters';
 
 // Helper to extract data from API response
 const extractData = (response: any, defaultValue: any = null): any => {
@@ -78,6 +81,7 @@ const COLORS = {
 
 interface PayslipData {
   _id: string;
+  payslipId?: string;
   employeeId: string;
   employeeName: string;
   designation: string;
@@ -112,6 +116,7 @@ interface StatsData {
 }
 
 export const PayrollPayslip = () => {
+  const { organization: orgSettings } = useSettingsStore();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
@@ -134,6 +139,8 @@ export const PayrollPayslip = () => {
     sent: 0,
   });
   const [selectedPayslipIds, setSelectedPayslipIds] = useState<string[]>([]);
+
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || 'INR');
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -171,11 +178,20 @@ export const PayrollPayslip = () => {
         return itemMonth === selectedMonth && itemYear === selectedYear;
       });
 
-      // Transform data - Fix: Prioritize employeeInfo and user objects
-      const transformedData: PayslipData[] = filteredData.map((item: any, index: number) => ({
-        _id: item._id || `payslip_${index}`,
-        employeeId: item.employeeInfo?.employeeId || item.user?.employeeId || item.employeeId || 'Unknown',
-        employeeName: item.employeeInfo?.name || item.user?.name || item.employeeName || 'Employee',
+      // Transform data - Fix: Prioritize database IDs (_id or id)
+      const transformedData: PayslipData[] = filteredData.map((item: any, index: number) => {
+        // Robust ID extraction for MongoDB records
+        const recordId = item._id || item.id || (item.user && (item.user._id || item.user.id));
+        const finalId = typeof recordId === 'object' && recordId?.$oid ? recordId.$oid : String(recordId || `payslip_${index}`);
+        
+        // Extract Payslip ID if available (needed for email/PDF actions)
+        const payslipId = item.payslip?.id || item.payslip?._id || (item.payslip && typeof item.payslip === 'string' ? item.payslip : undefined);
+
+        return {
+          _id: finalId,
+          payslipId,
+          employeeId: item.employeeInfo?.employeeId || item.user?.employeeId || item.employeeId || 'Unknown',
+          employeeName: item.employeeInfo?.name || item.user?.name || item.employeeName || 'Employee',
         designation: item.employeeInfo?.designation || item.user?.designation || item.designation || 'Staff',
         department: item.employeeInfo?.department || item.user?.department || item.department || 'General',
         month: selectedMonth,
@@ -198,7 +214,8 @@ export const PayrollPayslip = () => {
         ifscCode: item.bankDetails?.ifscCode || item.user?.ifscCode || 'Not Set',
         pan: item.bankDetails?.pan || item.user?.pan || 'Not Set',
         uan: item.bankDetails?.uan || item.user?.uan || 'Not Set',
-      }));
+        };
+      });
 
       setPayslips(transformedData);
       
@@ -216,8 +233,11 @@ export const PayrollPayslip = () => {
       
     } catch (error) {
       console.error('Error fetching payslips:', error);
-      // Load mock data for demo
-      loadMockData();
+      // Only load mock data if we are absolutely unable to reach the server 
+      // and we don't have any existing data to show
+      if (payslips.length === 0) {
+        loadMockData();
+      }
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -283,8 +303,16 @@ export const PayrollPayslip = () => {
     fetchPayslips();
   }, [selectedMonth, selectedYear]);
 
-  const formatCurrency = (amount: number): string => {
-    return `₹${amount.toLocaleString('en-IN')}`;
+  // Real-time synchronization
+  useSocketEvent('PAYROLL_UPDATED', (data) => {
+    console.log('[Payslips] Real-time update received:', data);
+    if (data.organizationId === user?.organizationId) {
+      onRefresh();
+    }
+  });
+
+  const formatCurrencyLocal = (amount: number): string => {
+    return `${currencySymbol}${amount.toLocaleString('en-IN')}`;
   };
 
   const getStatusBadge = (status: string, isEmailSent: boolean) => {
@@ -346,28 +374,35 @@ export const PayrollPayslip = () => {
   const handleMarkAsPaid = async () => {
     if (!payslipToMark) return;
     
+    setIsLoading(true);
     try {
-      // Call API to mark as paid
-      await payrollAPI.markPaid({
+      // Call API to mark as paid directly on the live link
+      const response: any = await payrollAPI.markPaid({
         ids: [payslipToMark._id],
         paymentDate: new Date().toISOString(),
         paymentMethod: 'Bank Transfer'
       });
       
-      // Update local state
-      setPayslips(prev => prev.map(p => 
-        p._id === payslipToMark._id 
-          ? { ...p, status: 'PAID', paidAt: new Date().toISOString() }
-          : p
-      ));
-      
-      Alert.alert('Success', `Payslip marked as paid for ${payslipToMark.employeeName}`);
-      fetchPayslips();
+      if (response?.success || response?.data?.success) {
+        // Update local state immediately for better UX
+        setPayslips(prev => prev.map(p => 
+          p._id === payslipToMark._id 
+            ? { ...p, status: 'PAID', paidAt: new Date().toISOString() }
+            : p
+        ));
+        
+        Alert.alert('Success', `Salary marked as PAID for ${payslipToMark.employeeName}. The live ledger has been updated.`);
+        // Refresh full list to sync with server
+        await fetchPayslips();
+      } else {
+        throw new Error(response?.message || 'Server rejected the payment update');
+      }
     } catch (error: any) {
       console.error('Error marking as paid:', error);
-      const errorMsg = error.data?.message || error.message || 'Failed to mark as paid';
-      Alert.alert('Error', errorMsg);
+      const errorMsg = error.data?.message || error.message || 'Connection Error: Could not update live ledger. Please check your network.';
+      Alert.alert('Live Update Failed', errorMsg);
     } finally {
+      setIsLoading(false);
       setShowMarkPaidConfirm(false);
       setPayslipToMark(null);
     }
@@ -375,8 +410,9 @@ export const PayrollPayslip = () => {
 
   const handleSendEmail = async (payslip: PayslipData) => {
     try {
+      const targetId = payslip.payslipId || payslip._id;
       // Call API to send email
-      await payrollAPI.sendPayslipEmail(payslip._id);
+      await payrollAPI.sendPayslipEmail(targetId);
       
       // Update local state
       setPayslips(prev => prev.map(p => 
@@ -416,7 +452,7 @@ export const PayrollPayslip = () => {
                 throw new Error('Bulk send feature is not yet available. Please check your network or app version.');
               }
 
-              const ids = payslipsToSend.map(p => p._id);
+              const ids = payslipsToSend.map(p => p.payslipId || p._id);
               await payrollAPI.bulkSendPayslipEmails(ids);
               
               // Update local state
@@ -634,15 +670,13 @@ export const PayrollPayslip = () => {
         </View>
 
         <View style={styles.amountColumn}>
-          <Text style={styles.amountText}>{formatCurrency(item.grossAmount)}</Text>
+          <Text style={styles.amountText}>{formatCurrencyLocal(item.grossAmount)}</Text>
         </View>
-
         <View style={styles.amountColumn}>
-          <Text style={[styles.amountText, { color: COLORS.rose }]}>-{formatCurrency(item.totalDeductions)}</Text>
+          <Text style={[styles.amountText, { color: COLORS.rose }]}>-{formatCurrencyLocal(item.totalDeductions)}</Text>
         </View>
-
         <View style={styles.amountColumn}>
-          <Text style={[styles.amountText, { fontWeight: '700' }]}>{formatCurrency(item.netPay)}</Text>
+          <Text style={[styles.amountText, { fontWeight: '700' }]}>{formatCurrencyLocal(item.netPay)}</Text>
         </View>
 
         <View style={styles.statusColumn}>
@@ -775,38 +809,38 @@ export const PayrollPayslip = () => {
                   <View style={styles.tableColumn}>
                     <View style={styles.tableCell}>
                       <Text style={styles.cellLabel}>Basic Salary</Text>
-                      <Text style={styles.cellValue}>{formatCurrency(selectedPayslip.basicSalary || 0)}</Text>
+                      <Text style={styles.cellValue}>{formatCurrencyLocal(selectedPayslip.basicSalary || 0)}</Text>
                     </View>
                     <View style={styles.tableCell}>
                       <Text style={styles.cellLabel}>HRA</Text>
-                      <Text style={styles.cellValue}>{formatCurrency(selectedPayslip.hra || 0)}</Text>
+                      <Text style={styles.cellValue}>{formatCurrencyLocal(selectedPayslip.hra || 0)}</Text>
                     </View>
                     <View style={styles.tableCell}>
                       <Text style={styles.cellLabel}>Special Allowance</Text>
-                      <Text style={styles.cellValue}>{formatCurrency(selectedPayslip.specialAllowance || 0)}</Text>
+                      <Text style={styles.cellValue}>{formatCurrencyLocal(selectedPayslip.specialAllowance || 0)}</Text>
                     </View>
                     <View style={[styles.tableCell, styles.totalCell]}>
                       <Text style={styles.totalLabel}>Total Earnings</Text>
-                      <Text style={styles.totalValue}>{formatCurrency(selectedPayslip.grossAmount)}</Text>
+                      <Text style={styles.totalValue}>{formatCurrencyLocal(selectedPayslip.grossAmount)}</Text>
                     </View>
                   </View>
                   
                   <View style={styles.tableColumn}>
                     <View style={styles.tableCell}>
                       <Text style={styles.cellLabel}>Provident Fund</Text>
-                      <Text style={styles.cellValue}>{formatCurrency(selectedPayslip.pfDeduction || 0)}</Text>
+                      <Text style={styles.cellValue}>{formatCurrencyLocal(selectedPayslip.pfDeduction || 0)}</Text>
                     </View>
                     <View style={styles.tableCell}>
                       <Text style={styles.cellLabel}>Professional Tax</Text>
-                      <Text style={styles.cellValue}>{formatCurrency(selectedPayslip.professionalTax || 0)}</Text>
+                      <Text style={styles.cellValue}>{formatCurrencyLocal(selectedPayslip.professionalTax || 0)}</Text>
                     </View>
                     <View style={styles.tableCell}>
                       <Text style={styles.cellLabel}>TDS</Text>
-                      <Text style={styles.cellValue}>{formatCurrency(selectedPayslip.tds || 0)}</Text>
+                      <Text style={styles.cellValue}>{formatCurrencyLocal(selectedPayslip.tds || 0)}</Text>
                     </View>
                     <View style={[styles.tableCell, styles.totalCell]}>
                       <Text style={styles.totalLabel}>Total Deductions</Text>
-                      <Text style={[styles.totalValue, { color: COLORS.rose }]}>-{formatCurrency(selectedPayslip.totalDeductions)}</Text>
+                      <Text style={[styles.totalValue, { color: COLORS.rose }]}>-{formatCurrencyLocal(selectedPayslip.totalDeductions)}</Text>
                     </View>
                   </View>
                 </View>
@@ -816,7 +850,7 @@ export const PayrollPayslip = () => {
               <View style={styles.netSalaryCard}>
                 <View>
                   <Text style={styles.netSalaryLabel}>Net Salary Payable</Text>
-                  <Text style={styles.netSalaryValue}>{formatCurrency(selectedPayslip.netPay)}</Text>
+                  <Text style={styles.netSalaryValue}>{formatCurrencyLocal(selectedPayslip.netPay)}</Text>
                 </View>
               </View>
               

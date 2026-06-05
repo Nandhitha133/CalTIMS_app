@@ -234,6 +234,78 @@ const FreezeDaySlider = ({ value, onChange }: { value: number; onChange: (value:
   );
 };
 
+// Editable Badge Component for Sliders
+const EditableBadge = ({ 
+  value, 
+  onChange,
+  badgeStyle,
+  textStyle,
+  formatValue
+}: { 
+  value: number; 
+  onChange: (value: number) => void;
+  badgeStyle?: any;
+  textStyle?: any;
+  formatValue: (v: number) => string;
+}) => {
+  const [showModal, setShowModal] = useState(false);
+  const [tempValue, setTempValue] = useState(String(value));
+
+  const handleSave = () => {
+    const numValue = parseFloat(tempValue);
+    if (!isNaN(numValue)) {
+      onChange(numValue);
+    }
+    setShowModal(false);
+  };
+
+  return (
+    <>
+      <TouchableOpacity 
+        style={[styles.valueBadge, badgeStyle]} 
+        onPress={() => {
+          setTempValue(String(value));
+          setShowModal(true);
+        }}
+      >
+        <Text style={[styles.valueBadgeText, textStyle]}>
+          {formatValue(value)}
+        </Text>
+      </TouchableOpacity>
+      <Modal visible={showModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.valueModal}>
+            <Text style={styles.valueModalTitle}>Edit Value</Text>
+            <TextInput
+              style={styles.valueModalInput}
+              value={tempValue}
+              onChangeText={setTempValue}
+              keyboardType="numeric"
+              autoFocus
+            />
+            <View style={styles.valueModalButtons}>
+              <TouchableOpacity
+                style={[styles.valueModalButton, styles.valueModalButtonCancel]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.valueModalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.valueModalButton, styles.valueModalButtonConfirm]}
+                onPress={handleSave}
+              >
+                <Text style={[styles.valueModalButtonText, styles.valueModalButtonConfirmText]}>
+                  Set
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
 // Main Component
 export default function TimesheetPolicyTab() {
   const navigation = useNavigation();
@@ -471,9 +543,11 @@ export default function TimesheetPolicyTab() {
                 <Text style={styles.sliderTitle}>Per-Day Maximum</Text>
                 <Text style={styles.sliderSubtitle}>Cap on daily permission entries</Text>
               </View>
-              <View style={styles.valueBadge}>
-                <Text style={styles.valueBadgeText}>{policy.permissionMaxHoursPerDay} HRS</Text>
-              </View>
+              <EditableBadge
+                value={policy.permissionMaxHoursPerDay}
+                onChange={(val) => updatePolicy('permissionMaxHoursPerDay', val)}
+                formatValue={(v) => `${v} HRS`}
+              />
             </View>
             
             <Slider
@@ -506,11 +580,13 @@ export default function TimesheetPolicyTab() {
                 <Text style={styles.sliderTitle}>Weekly Limit</Text>
                 <Text style={styles.sliderSubtitle}>Max days / week</Text>
               </View>
-              <View style={[styles.valueBadge, styles.primaryBadge]}>
-                <Text style={styles.valueBadgeText}>
-                  {policy.permissionMaxDaysPerWeek === 0 ? '∞' : `${policy.permissionMaxDaysPerWeek}D`}
-                </Text>
-              </View>
+              <EditableBadge
+                value={policy.permissionMaxDaysPerWeek}
+                onChange={(val) => updatePolicy('permissionMaxDaysPerWeek', val)}
+                badgeStyle={styles.primaryBadge}
+                textStyle={{ color: '#6366f1' }}
+                formatValue={(v) => v === 0 ? '∞' : `${v}D`}
+              />
             </View>
             
             <Slider
@@ -544,11 +620,13 @@ export default function TimesheetPolicyTab() {
                 <Text style={styles.sliderTitle}>Monthly Limit</Text>
                 <Text style={styles.sliderSubtitle}>Max days / month</Text>
               </View>
-              <View style={[styles.valueBadge, styles.primaryBadge]}>
-                <Text style={styles.valueBadgeText}>
-                  {policy.permissionMaxDaysPerMonth === 0 ? '∞' : `${policy.permissionMaxDaysPerMonth}D`}
-                </Text>
-              </View>
+              <EditableBadge
+                value={policy.permissionMaxDaysPerMonth}
+                onChange={(val) => updatePolicy('permissionMaxDaysPerMonth', val)}
+                badgeStyle={styles.primaryBadge}
+                textStyle={{ color: '#6366f1' }}
+                formatValue={(v) => v === 0 ? '∞' : `${v}D`}
+              />
             </View>
             
             <Slider
@@ -725,99 +803,7 @@ export default function TimesheetPolicyTab() {
           </View>
         </SectionCard>
 
-        {/* Compliance Section */}
-        <SectionCard title="Compliance" subtitle="Legal and organizational standards" icon={ShieldAlert}>
-          {/* Allow Backdated Entries */}
-          <View style={styles.toggleContainer}>
-            <View style={styles.toggleHeader}>
-              <View>
-                <Text style={styles.toggleTitle}>Backdated Entries</Text>
-                <Text style={styles.toggleSubtitle}>Allow users to log time for past weeks</Text>
-              </View>
-              <Switch
-                value={policy.allowBackdatedEntries}
-                onValueChange={(value) => updatePolicy('allowBackdatedEntries', value)}
-                trackColor={{ false: '#e2e8f0', true: '#10b981' }}
-                thumbColor="#ffffff"
-              />
-            </View>
-          </View>
 
-          {/* Auto-Freeze Deadline */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Auto-Freeze Deadline</Text>
-            <TextInput
-              style={styles.input}
-              value={policy.autoFreezeTimesheets}
-              onChangeText={(text) => updatePolicy('autoFreezeTimesheets', text)}
-              placeholder="Monday 18:00"
-              placeholderTextColor="#94a3b8"
-            />
-            <Text style={styles.inputHelper}>When timesheets become read-only for employees</Text>
-          </View>
-
-          {/* Freeze Day of Month */}
-          <View style={{ marginTop: 20 }}>
-            <FreezeDaySlider
-              value={policy.timesheetFreezeDay}
-              onChange={(value) => updatePolicy('timesheetFreezeDay', value)}
-            />
-          </View>
-        </SectionCard>
-
-        {/* Data Integrity Section */}
-        <SectionCard title="Data Integrity" subtitle="Audit trails and accuracy controls" icon={Database}>
-          {/* Require Reason for Late Submission */}
-          <View style={styles.toggleContainer}>
-            <View style={styles.toggleHeader}>
-              <View>
-                <Text style={styles.toggleTitle}>Late Justification</Text>
-                <Text style={styles.toggleSubtitle}>Require reason for submissions after deadline</Text>
-              </View>
-              <Switch
-                value={policy.requireReasonForLate}
-                onValueChange={(value) => updatePolicy('requireReasonForLate', value)}
-                trackColor={{ false: '#e2e8f0', true: '#6366f1' }}
-                thumbColor="#ffffff"
-              />
-            </View>
-          </View>
-
-          {/* Audit Log Retention */}
-          <View style={styles.sliderCard}>
-            <View style={styles.sliderHeader}>
-              <View>
-                <Text style={styles.sliderTitle}>Audit Retention</Text>
-                <Text style={styles.sliderSubtitle}>Days to keep detailed change logs</Text>
-              </View>
-              <View style={[styles.valueBadge, styles.primaryBadge]}>
-                <Text style={styles.valueBadgeText}>{policy.auditLogRetentionDays} DAYS</Text>
-              </View>
-            </View>
-            
-            <Slider
-              style={styles.slider}
-              minimumValue={30}
-              maximumValue={730}
-              step={30}
-              value={policy.auditLogRetentionDays}
-              onValueChange={(value) => updatePolicy('auditLogRetentionDays', value)}
-              onSlidingStart={() => setScrollEnabled(false)}
-              onSlidingComplete={() => setScrollEnabled(true)}
-              minimumTrackTintColor="#6366f1"
-              maximumTrackTintColor="#e2e8f0"
-              thumbTintColor="#6366f1"
-            />
-            
-            <View style={styles.sliderLabels}>
-              <Text style={styles.sliderLabel}>30D</Text>
-              <Text style={styles.sliderLabel}>180D</Text>
-              <Text style={styles.sliderLabel}>365D</Text>
-              <Text style={styles.sliderLabel}>540D</Text>
-              <Text style={styles.sliderLabel}>730D</Text>
-            </View>
-          </View>
-        </SectionCard>
 
           {/* Save Button */}
           <TouchableOpacity

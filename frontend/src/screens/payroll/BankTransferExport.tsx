@@ -21,7 +21,8 @@ import { payrollAPI, settingsAPI, userAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
+import { useSettingsStore } from '../../store/settingsStore';
 import { exportFile } from '../../utils/exportHelper';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
@@ -201,6 +202,7 @@ const getPreviewCellStyle = (index: number) => {
 };
 
 export function BankTransferExport({ navigation }: { navigation: any }) {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -385,7 +387,7 @@ export function BankTransferExport({ navigation }: { navigation: any }) {
     }
   };
 
-  const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.payroll?.currencySymbol || 'INR');
 
   if (loading && !refreshing) {
     return (

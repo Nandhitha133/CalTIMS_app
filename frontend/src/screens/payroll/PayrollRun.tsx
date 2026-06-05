@@ -44,7 +44,9 @@ import {
   ShieldCheck,
 } from 'lucide-react-native';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
+import { useSocketEvent } from '../../services/socket';
+import { useSettingsStore } from '../../store/settingsStore';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
@@ -73,13 +75,6 @@ const months = [
   "July", "August", "September", "October", "November", "December"
 ];
 const years = [2024, 2025, 2026];
-
-const getCurrencySymbol = (currency: string) => {
-  const symbols: Record<string, string> = {
-    USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥', AUD: '$', CAD: '$'
-  };
-  return symbols[currency] || '₹';
-};
 
 // Helper to extract data from API response
 const extractData = (response: any, defaultValue: any = null): any => {
@@ -150,10 +145,14 @@ const ReadinessCard = ({ title, value, icon: Icon, color, bgColor, description }
 );
 
 // Employee Row Component
-const EmployeeRow = ({ employee, currencySymbol, index }: any) => {
+const EmployeeRow = ({ employee, currencySymbol, index, onPress }: any) => {
   const isError = employee.status === 'ERROR';
   return (
-    <View style={[styles.employeeRow, isError && styles.employeeRowError]}>
+    <TouchableOpacity 
+      style={[styles.employeeRow, isError && styles.employeeRowError]}
+      onPress={onPress}
+      disabled={isError}
+    >
       <View style={styles.employeeInfo}>
         <View style={[styles.employeeAvatar, isError && styles.employeeAvatarError]}>
           <Text style={[styles.employeeInitial, isError && styles.employeeInitialError]}>
@@ -174,30 +173,20 @@ const EmployeeRow = ({ employee, currencySymbol, index }: any) => {
       ) : (
         <View style={styles.employeeStats}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Days</Text>
-            <Text style={styles.statValue}>{employee.totalOrgWorkingDays || 0}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Present</Text>
-            <Text style={[styles.statValue, { color: COLORS.success }]}>{employee.present || 0}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Gross</Text>
-            <Text style={styles.statValue}>{currencySymbol}{formatCurrency(employee.adjustedGross || 0)}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Net</Text>
+            <Text style={styles.statLabel}>Net Pay</Text>
             <Text style={[styles.statValue, { color: COLORS.primary, fontWeight: 'bold' }]}>
               {currencySymbol}{formatCurrency(employee.net || 0)}
             </Text>
           </View>
+          <ChevronRight size={16} color={COLORS.gray} />
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
 export function PayrollRun({ navigation }: { navigation: any }) {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [step, setStep] = useState(1);
@@ -206,6 +195,7 @@ export function PayrollRun({ navigation }: { navigation: any }) {
   const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [overtimeEnabled, setOvertimeEnabled] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingPayslips, setIsGeneratingPayslips] = useState(false);
   const [readinessData, setReadinessData] = useState<any>(null);
   const [previewData, setPreviewData] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
@@ -213,12 +203,12 @@ export function PayrollRun({ navigation }: { navigation: any }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [simProgress, setSimProgress] = useState(0);
+  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'hr';
 
-  const currencySymbol = settings?.organization?.currency 
-    ? getCurrencySymbol(settings.organization.currency) 
-    : (settings?.payroll?.currencySymbol || '₹');
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.organization?.currency || 'INR');
 
   const fetchSettings = async () => {
     try {
@@ -237,9 +227,15 @@ export function PayrollRun({ navigation }: { navigation: any }) {
       const dashboardData = extractData(response);
       
       // Map dashboard compliance data to readiness state
+      // Use readyEmployees if available from backend, otherwise calculate locally
+      const activeCount = dashboardData.summary?.activeEmployees || 0;
+      const readyCount = dashboardData.summary?.readyEmployees !== undefined 
+        ? dashboardData.summary.readyEmployees 
+        : Math.max(0, activeCount - (dashboardData.compliance?.missingSalaryStructure || 0));
+
       setReadinessData({
         summary: {
-          readyCount: dashboardData.summary?.activeEmployees || 0,
+          readyCount: readyCount,
           missingProfileCount: dashboardData.compliance?.missingSalaryStructure || 0,
           missingBankCount: dashboardData.compliance?.missingBankDetails || 0
         }
@@ -255,14 +251,51 @@ export function PayrollRun({ navigation }: { navigation: any }) {
   const fetchPreview = async () => {
     setLoading(true);
     try {
-      const response = await payrollAPI.getPreview({ month, year, overtimeEnabled });
-      const simulations = extractData(response);
+      console.log('[PayrollRun] Fetching preview for:', { month, year, overtimeEnabled });
+      const response: any = await payrollAPI.getPreview({ month, year, overtimeEnabled });
       
-      if (Array.isArray(simulations)) {
-        // Aggregate simulation results
-        const totalGross = simulations.reduce((acc: number, s: any) => acc + (s.breakdown?.summary?.gross || 0), 0);
-        const totalDeductions = simulations.reduce((acc: number, s: any) => acc + (s.breakdown?.summary?.deductions || 0), 0);
-        const totalNetPay = simulations.reduce((acc: number, s: any) => acc + (s.breakdown?.summary?.net || 0), 0);
+      // Flexible extraction to handle different backend response shapes
+      let simulations = [];
+      if (Array.isArray(response)) {
+        simulations = response;
+      } else if (response?.data && Array.isArray(response.data)) {
+        simulations = response.data;
+      } else if (response?.data?.data && Array.isArray(response.data.data)) {
+        simulations = response.data.data;
+      } else if (response?.simulations && Array.isArray(response.simulations)) {
+        simulations = response.simulations;
+      }
+
+      if (simulations.length > 0) {
+        // Aggregate simulation results with safety checks for numeric values
+        const totalGross = simulations.reduce((acc: number, s: any) => {
+          const val = 
+            s.breakdown?.summary?.gross || 
+            s.breakdown?.grossEarnings || 
+            s.breakdown?.totalEarnings || 
+            s.breakdown?.grossPay || 
+            s.grossYield || 
+            s.totalEarnings || 
+            s.breakdown?.earnings?.grossEarnings ||
+            0;
+          return acc + (Number(val) || 0);
+        }, 0);
+
+        const totalDeductions = simulations.reduce((acc: number, s: any) => {
+          const val = 
+            s.breakdown?.summary?.deductions || 
+            s.breakdown?.totalDeductions || 
+            s.breakdown?.deductions?.totalDeductions || 
+            s.liability || 
+            s.totalDeductions || 
+            0;
+          return acc + (Number(val) || 0);
+        }, 0);
+
+        const totalNetPay = simulations.reduce((acc: number, s: any) => {
+          const val = s.breakdown?.summary?.net || s.breakdown?.netPay || s.breakdown?.netPayout || s.netPay || 0;
+          return acc + (Number(val) || 0);
+        }, 0);
         
         const aggregatedData = {
           summary: {
@@ -272,23 +305,32 @@ export function PayrollRun({ navigation }: { navigation: any }) {
             totalNetPay
           },
           breakdown: simulations.map((s: any) => ({
-            name: s.user?.name,
-            employeeId: s.user?.employeeId,
+            name: s.user?.name || 'Unknown Employee',
+            employeeId: s.user?.employeeId || 'N/A',
             present: s.attendance?.workedDays || 0,
-            totalOrgWorkingDays: s.attendance?.workingDays || 0,
-            adjustedGross: s.breakdown?.summary?.gross || 0,
-            net: s.breakdown?.summary?.net || 0,
+            totalOrgWorkingDays: s.attendance?.workingDays || s.attendance?.payableDays || 0,
+            adjustedGross: s.breakdown?.summary?.gross || s.breakdown?.grossEarnings || s.breakdown?.grossPay || s.grossYield || 0,
+            net: s.breakdown?.summary?.net || s.breakdown?.netPay || s.breakdown?.netPayout || s.netPay || 0,
             status: s.error ? 'ERROR' : 'SUCCESS',
-            error: s.error
+            error: s.error,
+            // Keep full breakdown for detail view
+            earnings: s.breakdown?.earnings?.components || [],
+            deductions: s.breakdown?.deductions?.components || [],
+            attendance: s.attendance || {}
           }))
         };
+        console.log('[PayrollRun] Aggregated Preview:', aggregatedData.summary);
         setPreviewData(aggregatedData);
       } else {
-        setPreviewData(null);
+        console.warn('[PayrollRun] No simulations returned from backend');
+        setPreviewData({
+          summary: { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNetPay: 0 },
+          breakdown: []
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching preview:', error);
-      Alert.alert('Error', 'Failed to fetch preview data');
+      Alert.alert('Calculation Error', error?.message || 'Failed to aggregate payroll preview data. Please check employee profiles.');
     } finally {
       setLoading(false);
     }
@@ -319,6 +361,14 @@ export function PayrollRun({ navigation }: { navigation: any }) {
     if (step === 3) await fetchPreview();
     setRefreshing(false);
   };
+
+  // Real-time synchronization
+  useSocketEvent('PAYROLL_UPDATED', (data) => {
+    console.log('[PayrollRun] Real-time update received:', data);
+    if (data.organizationId === user?.organizationId) {
+      onRefresh();
+    }
+  });
 
   const handleNextStep = () => {
     if (step === 1) {
@@ -364,6 +414,16 @@ export function PayrollRun({ navigation }: { navigation: any }) {
     }
   };
 
+  const handleGeneratePayslips = async () => {
+    setIsGeneratingPayslips(true);
+    
+    // Simulate generation process as requested by workflow
+    setTimeout(() => {
+      setIsGeneratingPayslips(false);
+      navigation.navigate('PayrollPayslip');
+    }, 2000);
+  };
+
   const formatCurrencyValue = (value: number) => {
     return formatCurrency(value);
   };
@@ -397,24 +457,32 @@ export function PayrollRun({ navigation }: { navigation: any }) {
               </View>
             </View>
 
-            <Text style={styles.successTitle}>Payroll Executed!</Text>
+            <Text style={styles.successTitle}>Payroll Processed!</Text>
             <Text style={styles.successMessage}>
-              Workforce compensation for {months[month - 1]} {year} has been committed to the ledger successfully.
+              The payroll for {months[month - 1]} {year} has been calculated and processed successfully. You can now generate payslips for your employees.
             </Text>
 
             <View style={styles.successButtons}>
               <TouchableOpacity
                 style={styles.successButtonSecondary}
                 onPress={() => navigation.navigate('PayrollDashboard')}
+                disabled={isGeneratingPayslips}
               >
                 <Text style={styles.successButtonSecondaryText}>Dashboard</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.successButtonPrimary}
-                onPress={() => navigation.navigate('PayrollPayslip')}
+                style={[styles.successButtonPrimary, isGeneratingPayslips && { opacity: 0.8 }]}
+                onPress={handleGeneratePayslips}
+                disabled={isGeneratingPayslips}
               >
-                <Receipt size={16} color={COLORS.white} />
-                <Text style={styles.successButtonPrimaryText}>Generate Payslips</Text>
+                {isGeneratingPayslips ? (
+                  <ActivityIndicator size="small" color={COLORS.white} style={{ marginRight: 8 }} />
+                ) : (
+                  <Receipt size={16} color={COLORS.white} />
+                )}
+                <Text style={styles.successButtonPrimaryText}>
+                  {isGeneratingPayslips ? 'Generating...' : 'Generate Payslips'}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -649,6 +717,10 @@ export function PayrollRun({ navigation }: { navigation: any }) {
                           employee={emp}
                           currencySymbol={currencySymbol}
                           index={idx}
+                          onPress={() => {
+                            setSelectedEmployee(emp);
+                            setShowDetailModal(true);
+                          }}
                         />
                       ))}
                     </ScrollView>
@@ -709,6 +781,104 @@ export function PayrollRun({ navigation }: { navigation: any }) {
               </View>
             </View>
           )}
+
+          {/* Employee Detail Modal */}
+          <Modal
+            visible={showDetailModal}
+            animationType="slide"
+            transparent={true}
+            onRequestClose={() => setShowDetailModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={styles.modalTitle}>{selectedEmployee?.name}</Text>
+                    <Text style={styles.modalSubtitle}>{selectedEmployee?.employeeId}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setShowDetailModal(false)}>
+                    <X size={24} color={COLORS.dark} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.modalBody}>
+                  {/* Attendance Section */}
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Attendance & Period</Text>
+                    <View style={styles.detailGrid}>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Working Days</Text>
+                        <Text style={styles.detailValue}>{selectedEmployee?.totalOrgWorkingDays || 0}</Text>
+                      </View>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Payable Days</Text>
+                        <Text style={styles.detailValue}>{selectedEmployee?.present || 0}</Text>
+                      </View>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>LOP Days</Text>
+                        <Text style={[styles.detailValue, { color: COLORS.error }]}>
+                          {selectedEmployee?.attendance?.lopDays || 0}
+                        </Text>
+                      </View>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Overtime</Text>
+                        <Text style={styles.detailValue}>{selectedEmployee?.attendance?.overtimeHours || 0} hrs</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Earnings Section */}
+                  <View style={styles.detailSection}>
+                    <View style={styles.detailSectionHeader}>
+                      <Text style={styles.detailSectionTitle}>Earnings</Text>
+                      <Text style={[styles.detailTotal, { color: COLORS.success }]}>
+                        {currencySymbol}{formatCurrency(selectedEmployee?.adjustedGross || 0)}
+                      </Text>
+                    </View>
+                    {(selectedEmployee?.earnings || []).map((comp: any, idx: number) => (
+                      <View key={idx} style={styles.compRow}>
+                        <Text style={styles.compName}>{comp.name}</Text>
+                        <Text style={styles.compValue}>{currencySymbol}{formatCurrency(comp.value)}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Deductions Section */}
+                  <View style={styles.detailSection}>
+                    <View style={styles.detailSectionHeader}>
+                      <Text style={styles.detailSectionTitle}>Deductions</Text>
+                      <Text style={[styles.detailTotal, { color: COLORS.error }]}>
+                        -{currencySymbol}{formatCurrency((selectedEmployee?.adjustedGross || 0) - (selectedEmployee?.net || 0))}
+                      </Text>
+                    </View>
+                    {(selectedEmployee?.deductions || []).map((comp: any, idx: number) => (
+                      <View key={idx} style={styles.compRow}>
+                        <Text style={styles.compName}>{comp.name}</Text>
+                        <Text style={[styles.compValue, { color: COLORS.error }]}>
+                          -{currencySymbol}{formatCurrency(comp.value)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Net Pay */}
+                  <View style={[styles.detailSection, styles.netPaySection]}>
+                    <Text style={styles.netPayLabel}>Net Payout</Text>
+                    <Text style={styles.netPayValue}>
+                      {currencySymbol}{formatCurrency(selectedEmployee?.net || 0)}
+                    </Text>
+                  </View>
+                </ScrollView>
+
+                <TouchableOpacity 
+                  style={styles.closeModalButton}
+                  onPress={() => setShowDetailModal(false)}
+                >
+                  <Text style={styles.closeModalButtonText}>Close Details</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
         </View>
       </View>
     </Layout>
@@ -848,6 +1018,30 @@ const styles = StyleSheet.create({
   kpiIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   kpiValue: { fontSize: 16, fontWeight: 'bold' },
   kpiTitle: { fontSize: 10, color: COLORS.gray, marginTop: 2 },
+
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: COLORS.white, borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '80%', padding: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.dark },
+  modalSubtitle: { fontSize: 14, color: COLORS.gray, marginTop: 2 },
+  modalBody: { flex: 1 },
+  detailSection: { marginBottom: 24, backgroundColor: COLORS.light, padding: 16, borderRadius: 20 },
+  detailSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  detailSectionTitle: { fontSize: 12, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase' },
+  detailTotal: { fontSize: 16, fontWeight: 'bold' },
+  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  detailItem: { flex: 1, minWidth: '45%' },
+  detailLabel: { fontSize: 10, color: COLORS.gray, marginBottom: 4 },
+  detailValue: { fontSize: 14, fontWeight: 'bold', color: COLORS.dark },
+  compRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  compName: { fontSize: 13, color: COLORS.dark },
+  compValue: { fontSize: 13, fontWeight: 'bold', color: COLORS.dark },
+  netPaySection: { backgroundColor: `${COLORS.primary}10`, borderBottomWidth: 0 },
+  netPayLabel: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary, marginBottom: 4 },
+  netPayValue: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary },
+  closeModalButton: { backgroundColor: COLORS.dark, paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginTop: 16 },
+  closeModalButtonText: { color: COLORS.white, fontWeight: 'bold', fontSize: 14 },
 });
 
 // Helper component for ShieldAlert icon

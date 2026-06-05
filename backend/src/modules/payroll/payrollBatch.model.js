@@ -148,6 +148,6 @@ payrollBatchSchema.pre(['updateOne', 'findOneAndUpdate', 'updateMany'], async fu
     next();
 });
 
-const PayrollBatch = mongoose.model('PayrollBatch', payrollBatchSchema);
+const PayrollBatch = mongoose.model('PayrollBatch', payrollBatchSchema, 'PayrollBatch');
 
 module.exports = PayrollBatch;

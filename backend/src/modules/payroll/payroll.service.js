@@ -18,6 +18,7 @@ const { startOfMonth, endOfMonth, getDaysInMonth, format } = require('date-fns')
 const path = require('path');
 const logger = require('../../shared/utils/logger');
 const auditService = require('../audit/audit.service');
+const socketService = require('../../shared/services/socket.service');
 const AppError = require('../../shared/utils/AppError');
 
 /**
@@ -402,7 +403,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
   let salaryStructure = null;
   if (!profile?.earnings?.length && !profile?.deductions?.length) {
     if (profile?.salaryStructureId) {
-        const baseStructure = await RoleSalaryStructure.findById(profile.salaryStructureId).lean();
+        const baseStructure = await prisma.roleSalaryStructure.findUnique({ where: { id: profile.salaryStructureId } });
         if (baseStructure) {
             salaryStructure = await RoleSalaryStructure.findOne({
                 organizationId,
@@ -439,7 +440,7 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
   const totalDaysInMonth = getDaysInMonth(startDate);
 
   // 1. Calculate Attendance
-  const attendance = await calculateAttendance(user, month, year, policy, effectivePayrollType);
+  const attendance = await calculateAttendance(user, month, year, policy, effectivePayrollType, organizationId);
 
   // 2. Calculate Salary
   const contextData = {
@@ -680,13 +681,22 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
     if (isReplicaSet) await session.commitTransaction();
     logger.info(`[PAYROLL PIPELINE] Committed ${finalBatchStatus} for cycle ${month}/${year}`);
 
+    // Real-time synchronization: Notify all clients (Web & Mobile)
+    socketService.emit('PAYROLL_UPDATED', { 
+        organizationId, 
+        action: 'RUN_PAYROLL', 
+        month, 
+        year,
+        status: finalBatchStatus 
+    });
+
     return {
         success: batchErrors.length === 0,
         batchStatus: finalBatchStatus,
         totalEmployeesProcessed: saved.length,
         summaryStats,
         errors: batchErrors,
-        details: payrollResults
+        details: saved
     };
 
   } catch (err) {
@@ -714,7 +724,7 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
   }
 
   // Update or Create
-  return await ProcessedPayroll.findOneAndUpdate(
+  const result = await ProcessedPayroll.findOneAndUpdate(
     { user: userId, month: payrollData.month, year: payrollData.year, organizationId },
     { 
       ...updateContent, 
@@ -744,6 +754,17 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
     },
     { upsert: true, new: true }
   );
+
+  // Real-time synchronization
+  socketService.emit('PAYROLL_UPDATED', { 
+    organizationId, 
+    action: 'SAVE_PAYROLL', 
+    month: payrollData.month, 
+    year: payrollData.year,
+    userId 
+  });
+
+  return result;
 };
 
 
@@ -804,6 +825,39 @@ const getDepartmentCostAnalysis = async (month, year, organizationId) => {
 
   return Object.values(deptMap);
 };
+
+/**
+ * Formats a payroll profile for API response.
+ */
+const formatProfile = (profile) => {
+  if (!profile) return null;
+  
+  const formatted = {
+    ...profile,
+    _id: profile.id || profile._id,
+    id: profile.id || profile._id,
+  };
+
+  // If it's a Prisma object with included employee/user
+  if (profile.employee) {
+    formatted.employeeId = profile.employee.id || profile.employeeId;
+    formatted.userId = profile.employee.userId;
+    if (profile.employee.user) {
+      formatted.employeeName = profile.employee.user.name;
+    }
+  }
+
+  // Ensure earnings and deductions are arrays (Prisma Json field might need parsing or be already parsed)
+  if (typeof formatted.earnings === 'string') {
+    try { formatted.earnings = JSON.parse(formatted.earnings); } catch (e) { formatted.earnings = []; }
+  }
+  if (typeof formatted.deductions === 'string') {
+    try { formatted.deductions = JSON.parse(formatted.deductions); } catch (e) { formatted.deductions = []; }
+  }
+
+  return formatted;
+};
+
 /**
  * Unified Production-Grade Payroll Dashboard Data
  */
@@ -869,14 +923,39 @@ const getPayrollDashboard = async (month, year, organizationId) => {
 
   // 2. Optimized lookup for Counts & Compliance
   const activeEmployeesCount = await User.countDocuments({ isActive: true, organizationId });
-  const usersWithMissingBank = await User.countDocuments({ isActive: true, organizationId, $or: [{ accountNumber: { $exists: false } }, { accountNumber: "" }, { bankName: { $exists: false } }, { bankName: "" }] });
+  const usersWithMissingBank = await User.countDocuments({ 
+    isActive: true, 
+    organizationId, 
+    $or: [
+        { accountNumber: { $exists: false } }, 
+        { accountNumber: "" }, 
+        { bankName: { $exists: false } }, 
+        { bankName: "" }
+    ] 
+  });
   
-  // Efficiently find users who have active profiles with structures
+  // Efficiently find users who have active profiles
+  // A profile is considered valid if it has a salary structure OR defined earnings/CTC
   const validProfileUserIds = await PayrollProfile.distinct("user", { 
     organizationId,
-    salaryStructureId: { $ne: null } 
+    $or: [
+      { salaryStructureId: { $ne: null } },
+      { annualCTC: { $gt: 0 } },
+      { monthlyCTC: { $gt: 0 } },
+      { "earnings.0": { $exists: true } }
+    ]
   });
-  const usersWithMissingStructure = activeEmployeesCount - validProfileUserIds.length;
+  
+  const usersWithMissingStructure = Math.max(0, activeEmployeesCount - validProfileUserIds.length);
+
+  // Ready Employees: Active + Has Profile + Has Bank Details
+  const readyEmployeesCount = await User.countDocuments({
+    _id: { $in: validProfileUserIds },
+    isActive: true,
+    organizationId,
+    accountNumber: { $exists: true, $ne: "" },
+    bankName: { $exists: true, $ne: "" }
+  });
 
   // 3. Leave Aggregation
   const leaveStats = await Leave.aggregate([
@@ -923,6 +1002,7 @@ const getPayrollDashboard = async (month, year, organizationId) => {
       previousPayroll: prevStats.totalPayroll,
       growthPercentage: Math.round(growthPercentage * 10) / 10,
       activeEmployees: activeEmployeesCount,
+      readyEmployees: readyEmployeesCount,
       totalProcessed: currentStats.processedEmployees,
       totalPaid: currentStats.paidPayments,
       lastRunDate: batch?.processedAt || null,
@@ -1112,15 +1192,106 @@ const getPayrollBatches = async (organizationId) => {
 /**
  * Marks a payroll batch as PAID.
  */
-const markAsPaid = async ({ month, year, organizationId, processedBy, version }) => {
+const markAsPaid = async ({ month, year, ids, organizationId, processedBy, version, paymentMethod, paymentDate }) => {
+    // Scenario 1: Individual IDs provided (Mobile App Bulk/Single Action)
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+        console.log(`[PayrollService] Marking ${ids.length} records as paid for Org: ${organizationId}`);
+        
+        // 🛡️ Validate IDs are valid ObjectIds to prevent CastError
+        const validIds = ids.filter(id => id && mongoose.Types.ObjectId.isValid(id));
+        if (validIds.length === 0) {
+            throw new AppError('Invalid record IDs provided. Please refresh and try again.', 400);
+        }
+
+        const updateResult = await ProcessedPayroll.updateMany(
+            { 
+                _id: { $in: validIds }, 
+                organizationId, 
+                isPaid: false 
+            },
+            { 
+                $set: { 
+                    isPaid: true, 
+                    paidAt: paymentDate || new Date(),
+                    paidBy: processedBy,
+                    paymentMethod: paymentMethod || 'Bank Transfer'
+                } 
+            }
+        );
+
+        // 🔗 Attempt to find the batch for ledger reporting (wrap in try-catch to avoid 500)
+        try {
+            const sampleRecord = await prisma.processedPayroll.findUnique({ where: { id: validIds[0] } });
+            if (sampleRecord) {
+                const batch = await PayrollBatch.findOne({ 
+                    month: sampleRecord.month, 
+                    year: sampleRecord.year, 
+                    organizationId 
+                });
+
+                if (batch) {
+                    // Bank-Grade: Immutable Audit Ledger
+                    await PayrollLedger.create({
+                        organizationId,
+                        action: 'PAYROLL_MARK_PAID',
+                        batchId: batch._id,
+                        performedBy: processedBy || organizationId, // Fallback to prevent validation error
+                        metadata: { 
+                            type: 'INDIVIDUAL_RECORDS', 
+                            count: validIds.length, 
+                            ids: validIds,
+                            month: sampleRecord.month,
+                            year: sampleRecord.year
+                        }
+                    });
+                }
+            }
+        } catch (ledgerErr) {
+            console.error('[PayrollService] Ledger Creation Failed:', ledgerErr.message);
+            // Don't throw, let the main update succeed
+        }
+
+        // Audit Logging for Individual Marking
+        try {
+            await auditService.log(
+                processedBy, 
+                'MARK_RECORDS_PAID', 
+                'ProcessedPayroll', 
+                validIds[0], 
+                { count: validIds.length, ids: validIds }, 
+                'SUCCESS', 
+                null, 
+                organizationId
+            );
+        } catch (auditErr) {
+            console.error('[PayrollService] Audit Logging Failed:', auditErr.message);
+        }
+
+        // Real-time synchronization
+        socketService.emit('PAYROLL_UPDATED', { 
+            organizationId, 
+            action: 'MARK_PAID', 
+            count: validIds.length,
+            ids: validIds 
+        });
+
+        return { 
+            success: true, 
+            modifiedCount: updateResult.modifiedCount,
+            ids: validIds 
+        };
+    }
+
+    // Scenario 2: Batch-wide marking (Web App Action)
+    if (!month || !year) throw new AppError('Month and Year are required for batch-wide processing', 400);
+
     let checkBatch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!checkBatch) throw new Error('Payroll batch not found');
-    if (checkBatch.isPaid) throw new Error('Payroll batch is already paid');
+    if (!checkBatch) throw new AppError('Payroll batch not found for the selected period.', 404);
+    if (checkBatch.isPaid) throw new AppError('This payroll batch has already been marked as paid.', 400);
 
     // Bank-Grade: Optimistic Concurrency Control (OCC)
-    // If version is provided, we ensure we are updating the document the user saw.
     const query = { month, year, organizationId, isPaid: false };
-    if (typeof version !== 'undefined') {
+    if (typeof version !== 'undefined' && version !== null) {
         query.__v = version;
     }
 
@@ -1129,7 +1300,7 @@ const markAsPaid = async ({ month, year, organizationId, processedBy, version })
         { 
             $set: { 
                 isPaid: true,
-                paidAt: new Date(),
+                paidAt: paymentDate || new Date(),
                 paidBy: processedBy
             } 
         },
@@ -1137,7 +1308,7 @@ const markAsPaid = async ({ month, year, organizationId, processedBy, version })
     );
 
     if (!batch) {
-        throw new Error('Transaction Conflict: Payroll batch was modified by another process. Please refresh and try again.');
+        throw new AppError('Transaction Conflict: Payroll batch was modified by another process. Please refresh and try again.', 409);
     }
 
     await ProcessedPayroll.updateMany(
@@ -1145,8 +1316,9 @@ const markAsPaid = async ({ month, year, organizationId, processedBy, version })
         { 
             $set: { 
                 isPaid: true, 
-                paidAt: new Date(),
-                paidBy: processedBy
+                paidAt: paymentDate || new Date(),
+                paidBy: processedBy,
+                paymentMethod: paymentMethod || 'Bank Transfer'
             } 
         }
     );
@@ -1161,6 +1333,14 @@ const markAsPaid = async ({ month, year, organizationId, processedBy, version })
     });
 
     await auditService.log(processedBy, 'MARK_PAYROLL_PAID', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS', null, organizationId);
+
+    // Real-time synchronization
+    socketService.emit('PAYROLL_UPDATED', { 
+        organizationId, 
+        action: 'MARK_BATCH_PAID', 
+        month, 
+        year 
+    });
 
     return batch;
 };
@@ -1178,5 +1358,6 @@ module.exports = {
   runPayroll,
   getPayrollBatches,
   calculateAttendance,
-  calculateSalary
+  calculateSalary,
+  formatProfile
 };

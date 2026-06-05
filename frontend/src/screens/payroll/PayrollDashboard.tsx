@@ -37,7 +37,9 @@ import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
+import { useSocketEvent } from '../../services/socket';
+import { useSettingsStore } from '../../store/settingsStore';
 
 // Color palette
 const COLORS = {
@@ -157,6 +159,7 @@ const RecentBatchRow = ({ batch, onPress, currencySymbol }: RecentBatchRowProps)
 );
 
 export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -181,7 +184,8 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
   const fetchSettings = async () => {
     try {
       const response: any = await settingsAPI.getSettings();
-      setSettings(response.data?.data || response.data);
+      const data = response.data?.data || response.data;
+      setSettings(data);
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
@@ -190,7 +194,10 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
   const fetchDashboard = async () => {
     try {
       const response: any = await payrollAPI.getDashboard({ month: selectedMonth, year: selectedYear });
-      setDashboardData(response.data?.data || response.data);
+      const data = response.data?.data || response.data;
+      if (data) {
+        setDashboardData(data);
+      }
     } catch (error) {
       console.error('Error fetching dashboard:', error);
     }
@@ -209,7 +216,10 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
   const fetchAnalytics = async () => {
     try {
       const response: any = await payrollAPI.getAnalytics({ month: selectedMonth, year: selectedYear, department: 'All' });
-      setAnalyticsData(response.data?.data || response.data);
+      const data = response.data?.data || response.data;
+      if (data) {
+        setAnalyticsData(data);
+      }
     } catch (error) {
       console.error('Error fetching analytics:', error);
     }
@@ -232,6 +242,22 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
     setRefreshing(false);
   };
 
+  // Real-time synchronization: listen for payroll updates from web or mobile
+  useSocketEvent('PAYROLL_UPDATED', (data) => {
+    console.log('[Dashboard] Real-time payroll update received:', data);
+    // Only refresh if the update belongs to our organization
+    if (data.organizationId === user?.organizationId) {
+      fetchAllData();
+    }
+  });
+
+  useSocketEvent('PAYROLL_PROFILE_UPDATED', (data) => {
+    console.log('[Dashboard] Real-time profile update received:', data);
+    if (data.organizationId === user?.organizationId) {
+      fetchAllData();
+    }
+  });
+
   useFocusEffect(
     useCallback(() => {
       loadUserData();
@@ -239,19 +265,66 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
     }, [selectedMonth, selectedYear])
   );
 
-  const currencySymbol = settings?.payroll?.currencySymbol || '₹';
-  const kpis = dashboardData?.summary || {};
-  const deptData: any[] = dashboardData?.trends?.deptDistribution || analyticsData?.departmentDistribution || [];
-  const breakdownData: any[] = (analyticsData?.breakdown || []).sort((a: any, b: any) => b.value - a.value).slice(0, 5);
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.organization?.currency || 'INR');
+  
+  // Robustly extract KPI stats from the dashboard and analytics response
+  const getStats = () => {
+    const kpis = dashboardData?.summary || {};
+    const payroll = dashboardData?.payroll || {};
+    const analytics = analyticsData?.summary || {};
+    const batch = dashboardData?.batch || {};
+    
+    // Prioritize values from any of the available sources (Dashboard, Analytics, or Batch)
+    // We check every possible field name used in the backend models and services
+    const totalEarnings = 
+      kpis.totalGross || 
+      payroll.totalEarnings || 
+      analytics.totalCost || 
+      batch.totalGross || 
+      kpis.totalEarnings || 
+      analytics.totalGross ||
+      kpis.grossYield ||
+      0;
 
-  const stats = {
-    totalPayout: kpis.totalGross || 0,
-    netPay: kpis.totalPayroll || 0,
-    totalDeductions: kpis.totalDeductions || 0,
-    activeEmployees: kpis.activeEmployees || 0,
+    const netPay = 
+      kpis.totalPayroll || 
+      payroll.netPayout || 
+      analytics.totalNetPay || 
+      batch.totalNet || 
+      kpis.netPayout || 
+      analytics.totalNet ||
+      kpis.netPay ||
+      0;
+
+    const totalDeductions = 
+      kpis.totalDeductions || 
+      payroll.totalDeductions || 
+      analytics.totalDeductions || 
+      batch.totalDeductions || 
+      kpis.liability ||
+      0;
+
+    const activeEmployees = 
+      kpis.activeEmployees || 
+      analytics.employeeCount || 
+      batch.totalEmployees ||
+      0;
+
+    return {
+      totalPayout: totalEarnings, // Displayed as "Total Earnings"
+      netPay,
+      totalDeductions,
+      activeEmployees,
+    };
   };
 
-  const alerts = [
+  const stats = getStats();
+  const kpis = dashboardData?.summary || {};
+ 
+   const deptData: any[] = dashboardData?.trends?.deptDistribution || analyticsData?.departmentDistribution || [];
+   const breakdownData: any[] = (analyticsData?.breakdown || []).sort((a: any, b: any) => b.value - a.value).slice(0, 5);
+
+   const alerts = [
     { label: 'Missing Bank Details', count: dashboardData?.compliance?.missingBankDetails || 0, route: 'Employees' },
     { label: 'Pending Structures', count: dashboardData?.compliance?.missingSalaryStructure || 0, route: 'PayrollProfiles' },
     { label: 'Formula Errors', count: dashboardData?.summary?.failedEmployees || 0, route: 'PayrollProcessing' },
@@ -266,9 +339,9 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
     },
     {
       title: 'Growth',
-      message: `Payroll ${kpis.growthPercentage >= 0 ? 'increased' : 'decreased'} by ${Math.abs(kpis.growthPercentage || 0)}%`,
-      icon: kpis.growthPercentage >= 0 ? TrendingUp : TrendingDown,
-      color: kpis.growthPercentage >= 0 ? COLORS.success : COLORS.error,
+      message: `Payroll ${(kpis.growthPercentage || 0) >= 0 ? 'increased' : 'decreased'} by ${Math.abs(kpis.growthPercentage || 0)}%`,
+      icon: (kpis.growthPercentage || 0) >= 0 ? TrendingUp : TrendingDown,
+      color: (kpis.growthPercentage || 0) >= 0 ? COLORS.success : COLORS.error,
     },
   ];
 
@@ -345,7 +418,7 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
         {/* KPI Grid */}
         <View style={styles.kpiGrid}>
           <KPICard
-            label="Total Payout"
+            label="Total Earnings"
             value={`${currencySymbol}${formatCurrency(stats.totalPayout)}`}
             icon={Wallet}
             color={COLORS.primary}
@@ -438,7 +511,7 @@ export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
               <DepartmentItem
                 key={idx}
                 name={dept.name}
-                percentage={((dept.value / totalDeptValue) * 100).toFixed(1)}
+                percentage={totalDeptValue > 0 ? ((dept.value / totalDeptValue) * 100).toFixed(1) : '0'}
                 color={COLORS_PIE[idx % COLORS_PIE.length]}
               />
             ))}

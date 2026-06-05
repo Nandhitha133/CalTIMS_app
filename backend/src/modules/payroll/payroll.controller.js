@@ -1,388 +1,222 @@
 'use strict';
 
-const mongoose = require('mongoose');
-const User = require('../users/user.model');
-const PayrollProfile = require('./payrollProfile.model');
-const RoleSalaryStructure = require('./roleSalaryStructure.model');
-const ProcessedPayroll = require('./processedPayroll.model');
-const PayrollJob = require('./payrollJob.model');
-const Settings = require('../settings/settings.model');
-const PayrollBatch = require('./payrollBatch.model');
+const { prisma } = require('../../config/database');
 const payrollService = require('./payroll.service');
-const payslipService = require('./payslip.service');
 const pdfGeneratorService = require('../reports/pdfGenerator.service');
+const payslipService = require('./payslip.service');
 const emailService = require('../../shared/services/email.service');
 const auditService = require('../audit/audit.service');
 const logger = require('../../shared/utils/logger');
+const { AppError } = require('../../shared/utils/AppError');
 
 // ─── Settings & Config ────────────────────────────────────────────────────────
 exports.getConfig = async (req, res, next) => {
   try {
-    const settings = await Settings.findOne({ organizationId: req.organizationId });
-    res.status(200).json({
-      success: true,
-      data: settings?.payroll || {}
-    });
-  } catch (err) {
-    next(err);
-  }
+    const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId: req.organizationId } });
+    res.status(200).json({ success: true, data: orgSettings?.data?.payroll || {} });
+  } catch (err) { next(err); }
 };
 
 exports.updateConfig = async (req, res, next) => {
   try {
-    const settings = await Settings.findOne({ organizationId: req.organizationId });
-    if (!settings) return res.status(404).json({ success: false, message: 'Settings not found' });
-    
-    settings.payroll = { ...settings.payroll, ...req.body };
-    await settings.save();
-    
-    // Audit Log
-    await auditService.log(req.user?.id, 'POLICY_UPDATE', 'PayrollPolicy', settings._id, req.body, 'SUCCESS', req.ip);
-    
-    res.status(200).json({
-      success: true,
-      data: settings.payroll
+    const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId: req.organizationId } });
+    const current = orgSettings?.data || {};
+    const merged = { ...current, payroll: { ...(current.payroll || {}), ...req.body } };
+    await prisma.orgSettings.upsert({ 
+      where: { organizationId: req.organizationId }, 
+      update: { data: merged }, 
+      create: { organizationId: req.organizationId, data: merged } 
     });
-  } catch (err) {
-    next(err);
-  }
+    await auditService.log(req.user?.id, 'POLICY_UPDATE', 'OrgSettings', null, { 
+      before: current.payroll || {}, 
+      after: merged.payroll,
+      message: 'Updated payroll configuration settings'
+    }, 'SUCCESS', req.ip, req.organizationId);
+    res.status(200).json({ success: true, data: merged.payroll });
+  } catch (err) { next(err); }
 };
 
 // ─── Salary Structures (CRUD) ────────────────────────────────────────────────
 exports.getAllRoleStructures = async (req, res, next) => {
   try {
-    const structures = await RoleSalaryStructure.find({ organizationId: req.organizationId }).sort({ isActive: -1, createdAt: -1 });
+    const structures = await prisma.roleSalaryStructure.findMany({ 
+      where: { organizationId: req.organizationId, isDeleted: false }, 
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }] 
+    });
     res.status(200).json({ success: true, data: structures });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.getStructureById = async (req, res, next) => {
   try {
-    const structure = await RoleSalaryStructure.findOne({ _id: req.params.id, organizationId: req.organizationId });
+    const structure = await prisma.roleSalaryStructure.findFirst({ 
+      where: { id: req.params.id, organizationId: req.organizationId, isDeleted: false } 
+    });
     if (!structure) return res.status(404).json({ success: false, message: 'Structure not found' });
     res.status(200).json({ success: true, data: structure });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.createOrUpdateRoleStructure = async (req, res, next) => {
   try {
-    const { _id, __v, createdAt, updatedAt, ...structureData } = req.body;
+    const { id, createdAt, updatedAt, ...structureData } = req.body;
     const organizationId = req.organizationId;
     const now = new Date();
-    
-    // Clean up empty strings for component values
-    if (structureData.earnings) {
-        structureData.earnings = structureData.earnings.map(e => ({ ...e, value: e.value === '' ? 0 : e.value, organizationId }));
-    }
-    if (structureData.deductions) {
-        structureData.deductions = structureData.deductions.map(d => ({ ...d, value: d.value === '' ? 0 : d.value, organizationId }));
-    }
-    
     let structure;
-    if (_id) {
-       // BANK-GRADE: Implementation of Append-Only Salary Structures
-       // 1. Find and close the current structure
-       const current = await RoleSalaryStructure.findOne({ _id, organizationId });
-       if (!current) return res.status(404).json({ success: false, message: 'Structure not found' });
-       
-       // Detect if anything actually changed before versioning
-       // (Simplified check for now: always version on edit for ironclad history)
-       current.effectiveTo = now;
-       current.isActive = false; // The old version is "archived" from new profile assignments
-       await current.save();
-
-       // 2. Create the new version
-       structure = await RoleSalaryStructure.create({ 
-           ...structureData, 
-           organizationId,
-           effectiveFrom: now,
-           isActive: true 
-       });
-
-       await auditService.log(req.user?.id, 'STRUCTURE_VERSION_CREATED', 'SalaryStructure', structure._id, { parentId: _id }, 'SUCCESS', req.ip, req.organizationId);
+    if (id) {
+      await prisma.roleSalaryStructure.update({ where: { id }, data: { effectiveTo: now, isActive: false } });
+      structure = await prisma.roleSalaryStructure.create({ 
+        data: { ...structureData, organizationId, effectiveFrom: now, isActive: true } 
+      });
+      await auditService.log(req.user?.id, 'STRUCTURE_VERSION_CREATED', 'RoleSalaryStructure', structure.id, { parentId: id }, 'SUCCESS', req.ip, organizationId);
     } else {
-       // New record
-       structure = await RoleSalaryStructure.create({ 
-           ...structureData, 
-           organizationId,
-           effectiveFrom: now,
-           isActive: true 
-       });
-       await auditService.log(req.user?.id, 'STRUCTURE_CREATE', 'SalaryStructure', structure._id, structureData, 'SUCCESS', req.ip, req.organizationId);
+      structure = await prisma.roleSalaryStructure.create({ 
+        data: { ...structureData, organizationId, effectiveFrom: now, isActive: true } 
+      });
+      await auditService.log(req.user?.id, 'STRUCTURE_CREATE', 'RoleSalaryStructure', structure.id, structureData, 'SUCCESS', req.ip, organizationId);
     }
     res.status(200).json({ success: true, data: structure });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.toggleStructureStatus = async (req, res, next) => {
   try {
-    const structure = await RoleSalaryStructure.findOne({ _id: req.params.id, organizationId: req.organizationId });
-    if (!structure) return res.status(404).json({ success: false, message: 'Structure not found' });
-
-    // If we're deactivating, check if anyone is using it
-    if (structure.isActive) {
-      const assignedProfiles = await PayrollProfile.countDocuments({ salaryStructureId: req.params.id, organizationId: req.organizationId });
-      if (assignedProfiles > 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `This structure is currently assigned to ${assignedProfiles} employee(s). Please reassign them before deactivating.` 
-        });
-      }
-    }
-
-    structure.isActive = !structure.isActive;
-    await structure.save();
-
-    res.status(200).json({ 
-      success: true, 
-      message: `Structure ${structure.isActive ? 'activated' : 'deactivated'} successfully`,
-      data: structure
+    const structure = await prisma.roleSalaryStructure.findFirst({ 
+      where: { id: req.params.id, organizationId: req.organizationId } 
     });
-  } catch (err) {
-    next(err);
-  }
+    if (!structure) return res.status(404).json({ success: false, message: 'Structure not found' });
+    
+    if (structure.isActive) {
+      const count = await prisma.payrollProfile.count({ 
+        where: { salaryStructureId: req.params.id, organizationId: req.organizationId } 
+      });
+      if (count > 0) return res.status(400).json({ success: false, message: `This structure is assigned to ${count} employee(s). Please reassign before deactivating.` });
+    }
+    const updated = await prisma.roleSalaryStructure.update({ 
+      where: { id: req.params.id }, 
+      data: { isActive: !structure.isActive } 
+    });
+    res.status(200).json({ success: true, message: `Structure ${updated.isActive ? 'activated' : 'deactivated'}`, data: updated });
+  } catch (err) { next(err); }
 };
 
 exports.hardDeleteStructure = async (req, res, next) => {
   try {
-    const assignedProfiles = await PayrollProfile.countDocuments({ salaryStructureId: req.params.id });
-    if (assignedProfiles > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Critcal: This structure is assigned to ${assignedProfiles} employee(s). Permanently deleting it will break their historical data. Please reassign first.` 
-      });
-    }
-
-    await RoleSalaryStructure.findByIdAndDelete(req.params.id);
-    res.status(200).json({ success: true, message: 'Structure permanently deleted' });
-  } catch (err) {
-    next(err);
-  }
+    const count = await prisma.payrollProfile.count({ where: { salaryStructureId: req.params.id } });
+    if (count > 0) return res.status(400).json({ success: false, message: `Structure is assigned to ${count} employee(s). Please reassign first.` });
+    await prisma.roleSalaryStructure.update({ where: { id: req.params.id }, data: { isDeleted: true, deletedAt: new Date(), isActive: false } });
+    res.status(200).json({ success: true, message: 'Structure deleted successfully' });
+  } catch (err) { next(err); }
 };
 
 // ─── Employee Profiles ───────────────────────────────────────────────────────
 exports.getAllProfiles = async (req, res, next) => {
   try {
-    const profiles = await PayrollProfile.find({ organizationId: req.organizationId })
-      .populate('user', 'name employeeId department designation');
-    
-    const formattedProfiles = profiles.map(p => {
-      const pObj = p.toObject ? p.toObject() : JSON.parse(JSON.stringify(p));
-      if (pObj.user && typeof pObj.user === 'object') {
-        pObj.userId = pObj.user._id ? pObj.user._id.toString() : pObj.user.toString();
-        pObj.employeeId = pObj.user.employeeId || '';
-      } else if (pObj.user) {
-        pObj.userId = pObj.user.toString();
-      }
-      return pObj;
+    const profiles = await prisma.payrollProfile.findMany({ 
+      where: { organizationId: req.organizationId }, 
+      include: { 
+        employee: { 
+          include: { 
+            user: { select: { name: true } },
+            department: { select: { name: true } },
+            designation: { select: { name: true } }
+          } 
+        } 
+      } 
     });
-
-    res.status(200).json({ success: true, data: formattedProfiles });
-  } catch (err) {
-    next(err);
-  }
+    res.status(200).json({ success: true, data: profiles.map(p => payrollService.formatProfile(p)) });
+  } catch (err) { next(err); }
 };
 
 exports.getProfile = async (req, res, next) => {
   try {
-    const profile = await PayrollProfile.findOne({ user: req.params.userId, organizationId: req.organizationId })
-      .populate('user', 'name employeeId department designation');
-    
-    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+    const profile = await prisma.payrollProfile.findFirst({ 
+      where: { employee: { userId: req.params.userId }, organizationId: req.organizationId }, 
+      include: { 
+        employee: { 
+          include: { 
+            user: { select: { name: true } },
+            department: { select: { name: true } },
+            designation: { select: { name: true } }
+          } 
+        } 
+      } 
+    });
+    res.status(200).json({ success: true, data: payrollService.formatProfile(profile) });
+  } catch (err) { next(err); }
+};
 
-    const pObj = profile.toObject ? profile.toObject() : JSON.parse(JSON.stringify(profile));
-    if (pObj.user && typeof pObj.user === 'object') {
-      pObj.userId = pObj.user._id ? pObj.user._id.toString() : pObj.user.toString();
-      pObj.employeeId = pObj.user.employeeId || '';
-    } else if (pObj.user) {
-      pObj.userId = pObj.user.toString();
-    }
-
-    res.status(200).json({ success: true, data: pObj });
-  } catch (err) {
-    next(err);
-  }
+exports.getProfileByEmployeeId = async (req, res, next) => {
+  try {
+    const profile = await prisma.payrollProfile.findFirst({ 
+      where: { employeeId: req.params.employeeId, organizationId: req.organizationId }, 
+      include: { 
+        employee: { 
+          include: { 
+            user: true,
+            department: { select: { name: true } },
+            designation: { select: { name: true } }
+          } 
+        } 
+      } 
+    });
+    res.status(200).json({ success: true, data: payrollService.formatProfile(profile) });
+  } catch (err) { next(err); }
 };
 
 exports.createOrUpdateProfile = async (req, res, next) => {
   try {
-    const { user, userId, _id, __v, createdAt, updatedAt, ...bodyData } = req.body;
-    const targetUserId = user || userId || _id;
-    const organizationId = req.organizationId;
-
-    if (!targetUserId || !organizationId) {
-      return res.status(400).json({ success: false, message: 'User ID and Organization ID are mandatory' });
-    }
-
-    // Helper to normalize IDs for Mixed fields
-    const toMixedId = (id) => {
-      if (!id) return null;
-      const idStr = typeof id === 'object' ? (id._id || id.id || id.$oid || String(id)) : String(id);
-      // For Mixed fields, we prefer strings to avoid casting issues, 
-      // but we convert to ObjectId ONLY if we're sure it's a valid MongoDB ID hex
-      return mongoose.Types.isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : idStr;
-    };
-
-    const castUserId = toMixedId(targetUserId);
-    const castOrgId = toMixedId(organizationId);
-
-    console.log('--- PAYROLL PROFILE SAVE ATTEMPT ---');
-    console.log('Target User ID:', castUserId);
-    console.log('Organization ID:', castOrgId);
-
-    // Update User model with bank details if provided
-    if (bodyData.bankDetails) {
-      try {
-        if (mongoose.Types.isValidObjectId(castUserId)) {
-          await User.findOneAndUpdate(
-            { _id: castUserId },
-            {
-              $set: {
-                bankName: bodyData.bankDetails.bankName,
-                accountNumber: bodyData.bankDetails.accountNumber,
-                ifscCode: bodyData.bankDetails.ifscCode,
-                pan: bodyData.bankDetails.pan,
-                uan: bodyData.bankDetails.uan
-              }
-            }
-          );
-        }
-      } catch (userUpdateErr) {
-        console.warn('User bank update failed:', userUpdateErr.message);
-      }
-    }
-
-    // Clean up earnings/deductions to match schema
-    const sanitize = (comps) => (Array.isArray(comps) ? comps : []).map(c => {
-      const compOrgId = c.organizationId || castOrgId;
-      return {
-        name: String(c.name || 'Unnamed Component'),
-        value: Number(c.value) || 0,
-        calculationType: ['Fixed', 'Percentage', 'Formula'].includes(c.calculationType) ? c.calculationType : 'Fixed',
-        formula: c.formula || null,
-        config: c.config || {},
-        organizationId: toMixedId(compOrgId)
-      };
-    });
-
-    const earnings = sanitize(bodyData.earnings);
-    const deductions = sanitize(bodyData.deductions);
-
-    // Prepare clean profile data
-    const updatePayload = {
-      organizationId: castOrgId,
-      user: castUserId,
-      payrollType: bodyData.payrollType || 'Monthly',
-      employeeType: bodyData.employeeType || 'Permanent',
-      salaryMode: bodyData.salaryMode || 'Employee-Based',
-      earnings,
-      deductions,
-      salaryStructureId: toMixedId(bodyData.salaryStructureId),
-      weeklyRate: Number(bodyData.weeklyRate) || 0,
-      hourlyRate: Number(bodyData.hourlyRate) || 0,
-      dailyRate: Number(bodyData.dailyRate) || 0,
-      monthlyCTC: Number(bodyData.monthlyCTC) || 0,
-      annualCTC: Number(bodyData.annualCTC) || 0,
-      status: 'Active',
-      payrollStatus: 'Active',
-      isActive: true,
-      lastUpdatedAt: new Date()
-    };
-
-    let result;
-    try {
-      // Use a more flexible filter that works regardless of whether stored as string or ObjectId
-      const filter = { 
-        $or: [
-          { user: castUserId, organizationId: castOrgId },
-          { user: String(castUserId), organizationId: String(castOrgId) }
-        ]
-      };
-      
-      console.log('Searching/Upserting for profile with filter:', JSON.stringify(filter));
-      
-      // Atomic Upsert
-      result = await PayrollProfile.findOneAndUpdate(
-        filter,
-        { 
-          $set: { 
-            ...updatePayload, 
-            lastUpdatedAt: new Date(),
-            updatedAt: new Date()
-          },
-          $setOnInsert: { 
-            createdAt: new Date(),
-            profileVersion: 1 
-          }
-        },
-        { 
-          upsert: true, 
-          new: true, 
-          runValidators: false, 
-          setDefaultsOnInsert: true
-        }
-      ).lean();
-      
-      if (!result) {
-        throw new Error('Upsert failed to return a document');
-      }
-      
-      console.log('Payroll profile synced successfully:', result._id);
-    } catch (dbErr) {
-      console.error('DATABASE SYNC ERROR:', dbErr);
-      return res.status(500).json({ 
-        success: false, 
-        message: `Database Sync Error: ${dbErr.message || 'Unknown database error'}`
-      });
-    }
-
-    // Attempt to add user info manually to the response instead of using .populate()
-    // which can crash on non-standard ID formats
-    try {
-      if (result && result.user) {
-        const userData = await User.findById(result.user).select('name employeeId department designation').lean();
-        if (userData) {
-          result.user = userData;
-          result.userId = result.user._id;
-          result.employeeId = result.user.employeeId;
-        }
-      }
-    } catch (popErr) {
-      console.warn('Manual population failed, returning raw profile:', popErr.message);
-    }
+    const { employeeId, id, createdAt, updatedAt, ...updateData } = req.body;
+    if (!employeeId) return res.status(400).json({ success: false, message: 'Employee ID is required' });
     
-    return res.status(200).json({ success: true, data: result });
+    if (updateData.salaryStructureId === '') updateData.salaryStructureId = null;
+    ['monthlyCTC'].forEach(field => { if (updateData[field] === '') updateData[field] = 0; });
+    
+    const before = await prisma.payrollProfile.findUnique({ where: { employeeId } });
 
-  } catch (err) {
-    console.error('CRITICAL PAYROLL PROFILE ERROR:', err);
-    return res.status(500).json({ 
-      success: false, 
-      message: err.message || 'Internal Server Error',
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    const profile = await prisma.payrollProfile.upsert({
+      where: { employeeId },
+      update: updateData,
+      create: { employeeId, organizationId: req.organizationId, ...updateData },
     });
-  }
+
+    await auditService.log(
+      req.user?.id, 
+      'PAYROLL_PROFILE_UPDATE', 
+      'PayrollProfile', 
+      profile.id, 
+      { before, after: profile }, 
+      'SUCCESS', 
+      req.ip, 
+      req.organizationId
+    ).catch(() => {});
+
+    res.status(200).json({ success: true, data: profile });
+  } catch (err) { logger.error('Error in createOrUpdateProfile:', err.message); next(err); }
 };
 
 exports.deleteProfile = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    await PayrollProfile.findOneAndDelete({ _id: id, organizationId: req.organizationId });
+    await prisma.payrollProfile.delete({ where: { id: req.params.id } });
     res.status(200).json({ success: true, message: 'Profile deleted successfully' });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
+};
+
+exports.setupFullProfile = async (req, res, next) => {
+  try {
+    const result = await payrollService.upsertFullPayrollProfile(
+      req.body,
+      req.organizationId,
+      req.user?.id
+    );
+    res.status(200).json({ success: true, data: result, message: 'Payroll Profile successfully configured.' });
+  } catch (err) { next(err); }
 };
 
 // ─── Processing & Simulation ─────────────────────────────────────────────────
 exports.runPayrollExecution = async (req, res, next) => {
   try {
-    const { month, year, payslipTemplateId } = req.body;
+    const { month, year, payslipTemplateId, overtimeEnabled } = req.body;
     const organizationId = req.organizationId;
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are mandatory' });
 
@@ -391,14 +225,14 @@ exports.runPayrollExecution = async (req, res, next) => {
       year: parseInt(year), 
       organizationId,
       processedBy: req.user?.id,
-      payslipTemplateId
+      payslipTemplateId,
+      overtimeEnabled
     });
 
-    // Audit: track payroll executions
     auditService.log(
       req.user?.id,
       'RUN_PAYROLL',
-      'Payroll',
+      'PayrollBody',
       null,
       { month, year, successCount: executionStats.successCount, failedCount: executionStats.failedCount },
       executionStats.failedCount > 0 ? 'WARNING' : 'SUCCESS',
@@ -406,67 +240,50 @@ exports.runPayrollExecution = async (req, res, next) => {
       req.organizationId
     ).catch(() => {});
 
-    // HARD VALIDATION: Prevents false success responses
-    if (!executionStats.details || executionStats.details.length === 0) {
-      throw new Error("Payroll calculation failed - no records generated. Potential engine logic fault.");
-    }
-
-    // Standardized Enterprise Response Structure
     res.status(200).json({
       success: true,
       data: executionStats.details,
       status: executionStats.batchStatus,
       total: executionStats.details.length,
-      message: executionStats.batchStatus === 'Warning' 
-        ? `Payroll processed with warnings! Check execution logs.`
-        : `Payroll processed for ${executionStats.details.length} employees successfully!`
+      message: executionStats.batchStatus === 'ERROR' 
+        ? `Payroll processed with some failures. Check logs.`
+        : `Payroll processed successfully for ${executionStats.details.length} employees!`
     });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.simulatePayroll = async (req, res, next) => {
   try {
-    const { month, year, department, branch, designation, employeeId, bankName, location } = req.body;
+    const { month, year, departmentId, designationId, employeeId } = req.body;
     const organizationId = req.organizationId;
     
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are mandatory' });
 
-    let userQuery = { isActive: true };
-    if (department) userQuery.department = department;
-    if (branch) userQuery.branch = branch;
-    if (location) userQuery.branch = location; // alias
-    if (designation) userQuery.designation = designation;
-    if (employeeId) userQuery.employeeId = employeeId;
-    if (bankName) userQuery.bankName = bankName;
-    userQuery.isActive = true;
-    userQuery.organizationId = organizationId;
+    const where = { organizationId, status: 'ACTIVE', isDeleted: false };
+    if (departmentId) where.departmentId = departmentId;
+    if (designationId) where.designationId = designationId;
+    if (employeeId) where.id = employeeId;
 
-    const users = await User.find(userQuery).select('_id name email employeeId department designation branch role bankName accountNumber ifscCode uan pan aadhaar').lean();
+    const employees = await prisma.employee.findMany({ 
+        where,
+        include: { user: true, department: true, designation: true }
+    });
     
     const simulations = [];
-    const profiles = await PayrollProfile.find({ user: { $in: users.map(u => u._id) }, organizationId }).lean();
-    
-    for (const u of users) {
-      const profile = profiles.find(p => p.user.toString() === u._id.toString());
-      if (profile && profile.isActive === false) continue; // Skip disabled profiles
-
+    for (const emp of employees) {
       try {
-        const simulation = await payrollService.simulateUserPayroll(u._id, parseInt(month), parseInt(year), organizationId);
+        const simulation = await payrollService.simulateUserPayroll(emp.userId, parseInt(month), parseInt(year), organizationId);
         simulations.push(simulation);
       } catch (err) {
         simulations.push({ 
-          user: { id: u._id, name: u.name, employeeId: u.employeeId, department: u.department }, 
+          user: { id: emp.userId, name: emp.user.name, employeeId: emp.employeeCode, department: emp.department?.name }, 
           error: err.message 
         });
       }
     }
 
     res.status(200).json({ success: true, data: simulations });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.savePayroll = async (req, res, next) => {
@@ -480,7 +297,7 @@ exports.savePayroll = async (req, res, next) => {
     for (const p of payrolls) {
       try {
         const saved = await payrollService.saveProcessedPayroll(p, req.organizationId);
-        results.push(saved._id);
+        results.push(saved.id);
       } catch (err) {
         errors.push({ employeeId: p.user?.employeeId, error: err.message });
       }
@@ -492,417 +309,284 @@ exports.savePayroll = async (req, res, next) => {
       data: results,
       errors: errors.length > 0 ? errors : undefined
     });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
-
 
 exports.markAsPaid = async (req, res, next) => {
     try {
         const { month, year } = req.body;
         const organizationId = req.organizationId;
         
-        // 🛡️ RBAC: Check for 'disburse' permission
-        const settings = await Settings.findOne({ organizationId }).lean();
-        const userRole = settings?.roles?.find(r => r.name.toLowerCase() === req.user.role?.toLowerCase());
-        const hasDisbursePerm = userRole?.permissions?.['Payroll']?.['Payroll Engine']?.includes('disburse');
-        const isAdmin = ['admin', 'super_admin'].includes(req.user.role?.toLowerCase());
-
-        if (!isAdmin && !hasDisbursePerm) {
-            await auditService.log(req.user.id, 'UNAUTHORIZED_PAYMENT_ATTEMPT', 'Payroll', null, { month, year }, 'SECURITY_WARNING', req.ip, organizationId);
-            return res.status(403).json({ 
-                success: false, 
-                message: 'Access Denied: You do not have the required "disburse" authority to mark payroll as paid.' 
-            });
-        }
-
-        const result = await payrollService.markAsPaid({
-            month: parseInt(month),
-            year: parseInt(year),
-            organizationId,
-            processedBy: req.user.id,
-            version: req.body.version // Pass version for Bank-Grade OCC
+        const result = await payrollService.markAsPaid({ 
+             month: parseInt(month), 
+             year: parseInt(year), 
+             organizationId, 
+             processedBy: req.user.id 
         });
-
-        res.status(200).json({ 
-            success: true, 
-            message: `Payroll for ${month}/${year} marked as PAID.`,
-            data: result
-        });
-    } catch (err) {
-        next(err);
-    }
-};
-
-
-exports.processBulk = async (req, res, next) => {
-    // Enterprise Alias for savePayroll
-    return exports.savePayroll(req, res, next);
+        
+        res.status(200).json({ success: true, message: `Payroll for ${month}/${year} marked as PAID.`, data: result });
+    } catch (err) { next(err); }
 };
 
 exports.getPayrollHistory = async (req, res, next) => {
   try {
-    const { month, year, userId, department } = req.query;
-    let query = { organizationId: req.organizationId };
-    if (month) query.month = parseInt(month);
-    if (year) query.year = parseInt(year);
-    if (userId) query.user = userId;
+    const { month, year, employeeId } = req.query;
+    const where = { organizationId: req.organizationId, isDeleted: false };
+    if (month) where.month = parseInt(month);
+    if (year) where.year = parseInt(year);
+    if (employeeId) where.employeeId = employeeId;
+    
+    const history = await prisma.processedPayroll.findMany({ 
+        where, 
+        include: { 
+            employee: { 
+                include: { 
+                    user: { select: { name: true } }, 
+                    department: { select: { name: true } } 
+                } 
+            },
+            payslip: {
+                select: { id: true, status: true }
+            }
+        }, 
+        orderBy: { createdAt: 'desc' } 
+    });
+    res.status(200).json({ success: true, data: history.map(h => payrollService.formatProcessedPayroll(h)) });
+  } catch (err) { next(err); }
+};
 
-    let history = await ProcessedPayroll.find(query)
-      .populate('user', 'name employeeId department designation branch email joinDate isActive bankName accountNumber ifscCode uan pan aadhaar')
-      .sort({ createdAt: -1 });
+exports.generatePayslips = async (req, res, next) => {
+  try {
+    const { month, year } = req.body;
+    if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are required for generation.' });
+    
+    const results = await payrollService.generatePayslips(month, year, req.organizationId, req.user.id);
+    res.status(200).json({ success: true, message: `${results.length} payslips generated successfully.`, data: results });
+  } catch (err) { next(err); }
+};
 
-    if (department) {
-      history = history.filter(h => h.user?.department === department);
+exports.getGeneratedPayslips = async (req, res, next) => {
+  try {
+    const { month, year, employeeId } = req.query;
+    const filters = { month, year, employeeId, organizationId: req.organizationId };
+    const payslips = await payrollService.getGeneratedPayslips(filters);
+    res.status(200).json({ success: true, data: payslips });
+  } catch (err) { next(err); }
+};
+
+exports.markPayslipAsPaid = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updated = await payrollService.markPayslipAsPaid(id, req.organizationId, req.user.id);
+    res.status(200).json({ success: true, message: 'Payslip marked as PAID.', data: updated });
+  } catch (err) { next(err); }
+};
+
+exports.bulkMarkPayslipsAsPaid = async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'No payslip IDs provided.' });
     }
-      
-    res.status(200).json({ success: true, data: history });
-  } catch (err) {
-    next(err);
-  }
+    const results = await payrollService.bulkMarkPayslipsAsPaid(ids, req.organizationId, req.user.id);
+    res.status(200).json({
+      success: true,
+      message: `Marked ${results.success} payslip(s) as PAID.${results.failed > 0 ? ` ${results.failed} failed.` : ''}`,
+      data: results
+    });
+  } catch (err) { next(err); }
 };
 
 // ─── Payslips ────────────────────────────────────────────────────────────────
 exports.getMyPayslips = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    const organizationId = req.organizationId;
-    let query = { user: req.user.id, organizationId };
-    
-    if (month) query.month = parseInt(month);
-    if (year) query.year = parseInt(year);
-
-    const payslips = await ProcessedPayroll.find(query)
-      .populate('user', 'name employeeId department designation branch email bankName accountNumber ifscCode uan pan aadhaar')
-      .sort({ year: -1, month: -1 });
+    const payslips = await payrollService.getEmployeePayslips(req.user.id, req.organizationId, month, year);
     res.status(200).json({ success: true, data: payslips });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.getPayslip = async (req, res, next) => {
   try {
-    const query = { _id: req.params.id, organizationId: req.organizationId };
-    
-    // If not admin/owner role, only allow viewing own payslip
-    if (!['admin', 'super_admin', 'owner', 'finance'].includes((req.user.role || '').toLowerCase())) {
-        query.user = req.user.id;
-    }
-
-    const payslip = await ProcessedPayroll.findOne(query)
-       .populate('user', 'name employeeId department designation branch email bankName accountNumber ifscCode uan pan aadhaar');
-    
-    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip not found or access denied' });
-    res.status(200).json({ success: true, data: payslip });
-  } catch (err) {
-    next(err);
-  }
-};
-
-exports.getPayslipByUserId = async (req, res, next) => {
-    try {
-        const { employeeId } = req.params; // This matches both mongoId or employeeCode depending on front-end logic
-        const { month, year } = req.query;
-        const organizationId = req.organizationId;
-
-        let query = { user: employeeId, organizationId };
-        // If employeeId is NOT a mongoId, try matching by employeeCode via join
-        if (!mongoose.Types.isValidObjectId(employeeId)) {
-            const user = await User.findOne({ employeeId: employeeId, organizationId });
-            if (!user) return res.status(404).json({ success: false, message: 'Employee not found' });
-            query.user = user._id;
-        }
-
-        if (month) query.month = parseInt(month);
-        if (year) query.year = parseInt(year);
-
-        const payslip = await ProcessedPayroll.findOne(query).sort({ createdAt: -1 })
-            .populate('user', 'name employeeId department designation branch email bankName accountNumber ifscCode uan pan aadhaar');
-        
-        if (!payslip) return res.status(404).json({ success: false, message: 'Payslip not found for this employee/period' });
-        res.status(200).json({ success: true, data: payslip });
-    } catch (err) {
-        next(err);
-    }
+    const payslip = await prisma.payslip.findFirst({ 
+        where: { id: req.params.id, organizationId: req.organizationId }
+    });
+    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip not found' });
+    res.status(200).json({ success: true, data: payrollService.formatPayslip(payslip) });
+  } catch (err) { next(err); }
 };
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
 exports.exportBankFile = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    const history = await ProcessedPayroll.find({ 
-        month: parseInt(month), 
-        year: parseInt(year), 
-        organizationId: req.organizationId, 
-        isPaid: true 
-    }).populate('user');
-    
-    const exportData = history.map(p => ({
-      employeeId: p.user?.employeeId,
-      name: p.user?.name,
-      bankName: p.user?.bankName,
-      accountNumber: p.user?.accountNumber,
-      ifsc: p.user?.ifscCode,
-      netPay: p.breakdown?.netPay || p.netPay
-    }));
+    const history = await prisma.processedPayroll.findMany({ 
+        where: { month: parseInt(month), year: parseInt(year), organizationId: req.organizationId, isPaid: true }
+    });
 
+    const exportData = history.map(p => ({ 
+        employeeId: p.employeeInfo?.employeeId || '-', 
+        name: p.employeeInfo?.name || '-', 
+        bankName: p.bankDetails?.bankName || '-', 
+        accountNumber: p.bankDetails?.accountNumber || '', 
+        ifsc: p.bankDetails?.ifscCode || '', 
+        netPay: p.netPay 
+    }));
     res.status(200).json({ success: true, data: exportData });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 // ─── Reporting ───────────────────────────────────────────────────────────────
 exports.getPayrollSummaryReport = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    const organizationId = req.organizationId;
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are required' });
-    const summary = await payrollService.getPayrollSummary(parseInt(month), parseInt(year), organizationId);
+    const summary = await payrollService.getPayrollSummary(parseInt(month), parseInt(year), req.organizationId);
     res.status(200).json({ success: true, data: summary });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.getDepartmentAnalysisReport = async (req, res, next) => {
   try {
     const { month, year } = req.query;
-    const organizationId = req.organizationId;
     if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are required' });
-    const analysis = await payrollService.getDepartmentCostAnalysis(parseInt(month), parseInt(year), organizationId);
-    res.status(200).json({ success: true, data: analysis });
-  } catch (err) {
-    next(err);
-  }
+    const data = await payrollService.getDepartmentCostAnalysis(parseInt(month), parseInt(year), req.organizationId);
+    res.status(200).json({ success: true, data });
+  } catch (err) { next(err); }
+};
+
+exports.getPayslipByUserId = async (req, res, next) => {
+    try {
+        const { employeeId } = req.params;
+        const { month, year } = req.query;
+        const organizationId = req.organizationId;
+        
+        const employee = await prisma.employee.findFirst({ 
+            where: { OR: [{ id: employeeId }, { employeeCode: employeeId }], organizationId } 
+        });
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+        
+        const payroll = await prisma.processedPayroll.findFirst({
+            where: { 
+                employeeId,
+                month: parseInt(month),
+                year: parseInt(year),
+                organizationId
+            }
+        });
+
+        if (!payroll) {
+            return res.status(404).json({ success: false, message: 'Payroll record not found for this period.' });
+        }
+
+        res.status(200).json({ success: true, data: payrollService.formatProcessedPayroll(payroll) });
+    } catch (err) { next(err); }
 };
 
 exports.downloadPayslipPDF = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const organizationId = req.organizationId;
+    let payslip = await prisma.payslip.findFirst({ 
+        where: { id, organizationId: req.organizationId }
+    });
+    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
     
-    const query = { _id: id, organizationId };
-    // Ownership check for non-admins
-    if (!['admin', 'super_admin', 'owner', 'finance'].includes((req.user.role || '').toLowerCase())) {
-        query.user = req.user.id;
-    }
-
-    const payroll = await ProcessedPayroll.findOne(query).populate('user');
+    payslip = payrollService.formatPayslip(payslip);
     
-    if (!payroll) {
-        return res.status(404).json({ success: false, message: 'Payslip record not found or access denied' });
-    }
-
-    const settings = await Settings.findOne({ organizationId });
+    // Use the optimized payslip service which handles template rendering and PDF generation
+    const pdfBuffer = await payslipService.generatePayslipPdf(payslip.processedPayrollId, req.organizationId);
     
-    if (!settings) {
-        return res.status(404).json({ success: false, message: 'Organization settings not found' });
-    }
-    
-    const mappedData = _mapPayrollToReportData(payroll, settings);
-    const pdfBuffer = await pdfGeneratorService.generatePayslipBuffer(mappedData, settings);
-
-    const empId = payroll.employeeInfo?.employeeId || payroll.user?.employeeId || 'NA';
+    const empId = payslip.employeeInfo?.employeeId || 'NA';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Payslip-${empId}-${payroll.month}-${payroll.year}.pdf"`);
-    res.send(pdfBuffer);
-    
-  } catch (err) {
-    next(err);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="Payslip-${empId}-${payslip.month}-${payslip.year}.pdf"`);
+    res.end(pdfBuffer, 'binary');
+  } catch (err) { 
+    logger.error(`[Payroll] downloadPayslipPDF failed: ${err.message}`);
+    next(err); 
   }
 };
 
 exports.sendPayslipEmail = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const organizationId = req.organizationId;
+    let payslip = await prisma.payslip.findFirst({ 
+        where: { id, organizationId: req.organizationId }
+    });
+    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
     
-    const query = { _id: id, organizationId };
-    // Ownership check for non-admins
-    if (!['admin', 'super_admin', 'owner', 'finance'].includes((req.user.role || '').toLowerCase())) {
-        query.user = req.user.id;
-    }
-
-    const payroll = await ProcessedPayroll.findOne(query).populate('user');
+    payslip = payrollService.formatPayslip(payslip);
     
-    if (!payroll) return res.status(404).json({ success: false, message: 'Payslip record not found or access denied' });
+    const email = payslip.employeeInfo?.email;
+    if (!email) return res.status(400).json({ success: false, message: 'Employee email address is missing from snapshot.' });
     
-    const email = payroll.user?.email || payroll.employeeInfo?.email;
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Employee email address is missing. Please update employee profile.' });
-    }
-
-    const settings = await Settings.findOne({ organizationId });
-    if (!settings) return res.status(404).json({ success: false, message: 'Organization settings not found' });
+    const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId: req.organizationId } });
+    const companyName = orgSettings?.data?.organization?.companyName || 'CALTIMS';
     
-    const mappedData = _mapPayrollToReportData(payroll, settings);
-
-    // Call internal email service
-    await emailService.sendPayslipEmail(email, mappedData);
+    // Pass raw payslip and organizationId to service
+    await emailService.sendPayslipEmail(email, payslip, req.organizationId, companyName);
     
-    // Update model to reflect success
-    payroll.isEmailSent = true;
-    payroll.lastEmailSentAt = new Date();
-    await payroll.save();
-    
+    await prisma.payslip.update({ where: { id }, data: { isEmailSent: true, status: 'SENT', lastEmailSentAt: new Date() } });
     res.status(200).json({ success: true, message: 'Payslip emailed successfully' });
-  } catch (err) {
-    logger.error(`[PayrollController] Single payslip dispatch failed for ${req.params.id}: ${err.message}`, { stack: err.stack });
-    next(err);
-  }
+  } catch (err) { logger.error(`[Payroll] sendPayslipEmail failed: ${err.message}`); next(err); }
 };
 
 exports.bulkSendPayslipEmails = async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!ids || !ids.length) return res.status(400).json({ success: false, message: 'No payslips selected' });
-
-    const organizationId = req.organizationId;
     
-    // BANK-GRADE: Instead of blocking the request for a long email loop,
-    // we queue the job for background fault-tolerant processing.
-    const job = await PayrollJob.create({
-        organizationId,
-        requestedBy: req.user?.id,
-        type: 'SEND_PAYSLIP_EMAILS',
-        status: 'PENDING',
-        totalItems: ids.length,
-        payload: { ids, organizationId },
-        priority: 10
+    const job = await prisma.payrollJob.create({ 
+        data: { 
+            organizationId: req.organizationId, 
+            type: 'SEND_PAYSLIP_EMAILS', 
+            payload: { ids, organizationId: req.organizationId }, 
+            priority: 10 
+        } 
     });
-    
-    // Start background processing
-    _processBulkEmails(job._id, organizationId);
-
-    res.status(200).json({ 
-        success: true, 
-        message: 'Your request to email payslips has been queued for background processing.',
-        data: { jobId: job._id }
-    });
-  } catch (err) {
-    logger.error(`[PayrollController] Background job creation failed: ${err.message}`, { stack: err.stack });
-    next(err);
-  }
+    res.status(200).json({ success: true, message: 'Payslip email dispatch queued.', data: { jobId: job.id } });
+  } catch (err) { logger.error(`[Payroll] bulkSendPayslipEmails failed: ${err.message}`); next(err); }
 };
 
-/**
- * Helper to process bulk emails in "background"
- */
-const _processBulkEmails = async (jobId, organizationId) => {
-  try {
-    const job = await PayrollJob.findById(jobId);
-    if (!job) return;
-
-    job.status = 'PROCESSING';
-    await job.save();
-
-    const settings = await Settings.findOne({ organizationId });
-    const payrolls = await ProcessedPayroll.find({
-      _id: { $in: job.payload.ids },
-      organizationId
-    }).populate('user');
-
-    let successCount = 0;
-    let failCount = 0;
-    const errors = [];
-
-    for (const payroll of payrolls) {
-      try {
-        const email = payroll.user?.email || payroll.employeeInfo?.email;
-        if (!email) {
-          throw new Error(`Employee ${payroll.user?.employeeId || 'N/A'} has no email address`);
-        }
-
-        const mappedData = _mapPayrollToReportData(payroll, settings);
-        await emailService.sendPayslipEmail(email, mappedData);
-
-        successCount++;
-        payroll.isEmailSent = true;
-        payroll.lastEmailSentAt = new Date();
-        await payroll.save();
-      } catch (e) {
-        failCount++;
-        errors.push({ id: payroll._id, error: e.message });
-      }
-      
-      // Update progress
-      job.processedItems = successCount + failCount;
-      await job.save();
-    }
-
-    job.status = failCount === 0 ? 'COMPLETED' : 'COMPLETED_WITH_ERRORS';
-    job.completedAt = new Date();
-    job.result = { successCount, failCount, errors };
-    await job.save();
-
-  } catch (err) {
-    console.error(`[PayrollController] Bulk email background job failed: ${err.message}`);
-    await PayrollJob.findByIdAndUpdate(jobId, { 
-      status: 'FAILED', 
-      error: err.message,
-      completedAt: new Date()
-    });
-  }
-};
-
-/**
- * Internal: Map DB record to the structure expected by PDF/Email services
- */
 function _mapPayrollToReportData(payroll, settings) {
     const breakdown = payroll.breakdown || {};
+    const employeeInfo = payroll.employeeInfo || {};
+    const bankDetails = payroll.bankDetails || {};
+
     return {
-        user: payroll.user,
+        user: { id: payroll.userId, name: employeeInfo.name }, 
         month: payroll.month,
         year: payroll.year,
-        breakdown: {
-            ...breakdown,
-            earnings: {
-                components: breakdown.earnings?.components || [],
-                grossEarnings: breakdown.earnings?.grossEarnings || payroll.grossYield || 0
-            },
-            deductions: {
-                components: breakdown.deductions?.components || [],
-                totalDeductions: breakdown.deductions?.totalDeductions || payroll.liability || 0
-            },
-            netPay: breakdown.netPay || payroll.netPay || 0,
-            lopDeduction: breakdown.lopDeduction || 0
-        },
-        attendance: {
-            workingDays: payroll.attendance?.workingDays || 30,
-            workedDays: payroll.attendance?.workedDays || 0,
-            lopDays: payroll.attendance?.lopDays || 0,
-            overtimeHours: payroll.attendance?.overtimeHours || 0
-        },
+        breakdown,
+        attendance: payroll.attendance || {},
         currencySymbol: settings?.payroll?.currencySymbol || '₹',
+        organizationId: payroll.organizationId,
+        companyId: payroll.organizationId,
         employeeInfo: {
-            name: payroll.user?.name || payroll.employeeInfo?.name || 'Unknown',
-            employeeId: payroll.user?.employeeId || payroll.employeeInfo?.employeeId || 'N/A',
-            department: payroll.user?.department || payroll.employeeInfo?.department || 'N/A',
-            designation: payroll.user?.designation || payroll.employeeInfo?.designation || 'N/A'
+            name: employeeInfo.name || 'Unknown',
+            employeeId: employeeInfo.employeeId || 'N/A',
+            department: employeeInfo.department || 'N/A',
+            designation: employeeInfo.designation || 'N/A',
+            branch: employeeInfo.branch || 'N/A'
         },
         bankDetails: {
-            bankName: payroll.user?.bankName || payroll.bankDetails?.bankName,
-            accountNumber: payroll.user?.accountNumber || payroll.bankDetails?.accountNumber,
-            ifsc: payroll.user?.ifscCode || payroll.bankDetails?.ifsc,
-            pan: payroll.user?.pan || payroll.bankDetails?.pan,
-            uan: payroll.user?.uan || payroll.bankDetails?.uan
+            bankName: bankDetails.bankName,
+            accountNumber: bankDetails.accountNumber,
+            ifsc: bankDetails.ifscCode || bankDetails.ifsc,
+            pan: bankDetails.pan,
+            uan: bankDetails.uan,
+            aadhaar: bankDetails.aadhaar
         }
     };
 }
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
 exports.getDashboardData = async (req, res, next) => {
   try {
     const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
     const year = parseInt(req.query.year) || new Date().getFullYear();
     const data = await payrollService.getPayrollDashboard(month, year, req.organizationId);
     res.status(200).json({ success: true, data });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
 exports.getAnalytics = async (req, res, next) => {
@@ -915,21 +599,32 @@ exports.getAnalytics = async (req, res, next) => {
     };
     const data = await payrollService.getPayrollAnalytics(filters);
     res.status(200).json({ success: true, data });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
-/**
- * GET /payroll/batches
- * Returns all PayrollBatch documents (one per payroll run), newest first.
- * Replaces the client-side grouping approach in PayrollHistory.jsx.
- */
 exports.getPayrollBatchHistory = async (req, res, next) => {
   try {
     const batches = await payrollService.getPayrollBatches(req.organizationId);
     res.status(200).json({ success: true, data: batches });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
+};
+
+exports.getReadinessCheck = async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+    if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are required' });
+    
+    const data = await payrollService.getReadinessCheck(req.organizationId, month, year);
+    res.status(200).json({ success: true, data });
+  } catch (err) { next(err); }
+};
+
+exports.getPreview = async (req, res, next) => {
+  try {
+    const { month, year, overtimeEnabled } = req.query;
+    if (!month || !year) return res.status(400).json({ success: false, message: 'Month and Year are mandatory' });
+    
+    const data = await payrollService.getPayrollPreview(req.organizationId, month, year, overtimeEnabled === 'true' || overtimeEnabled === true);
+    res.status(200).json({ success: true, data });
+  } catch (err) { next(err); }
 };

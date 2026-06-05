@@ -1352,14 +1352,6 @@ export default function ProjectsScreen() {
 
   const activeFilterCount = (statusFilter ? 1 : 0) + (managerFilter ? 1 : 0) + (projectCodeFilter ? 1 : 0);
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
-
   return (
     <Layout
       title="Projects"
@@ -1490,7 +1482,11 @@ export default function ProjectsScreen() {
           )}
 
           {/* Projects Grid */}
-          {projects.length === 0 ? (
+          {loading && !refreshing ? (
+            <View style={[styles.loadingContainer, { backgroundColor: 'transparent', paddingVertical: 48 }]}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+            </View>
+          ) : projects.length === 0 ? (
             <View style={styles.emptyContainer}>
               <FolderOpen size={48} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>No projects found</Text>

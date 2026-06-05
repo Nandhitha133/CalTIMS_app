@@ -40,10 +40,10 @@ const checkPermission = (module, submodule, action) => {
     }
 
     try {
-      // Fetch settings (singleton)
-      const settings = await Settings.findOne().lean();
+      // Fetch settings for the specific organization
+      const settings = await Settings.findOne({ organizationId: req.organizationId }).lean();
       if (!settings) {
-        return next(new AppError('Permission denied (Settings not initialized)', 403));
+        return next(new AppError('Permission denied (Settings not found for this organization)', 403));
       }
 
       // Find the user's role in the settings

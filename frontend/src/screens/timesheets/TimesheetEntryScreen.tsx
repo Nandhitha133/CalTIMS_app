@@ -1620,6 +1620,23 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
             </View>
           </View>
 
+          {/* Policy Info */}
+          <View style={styles.policyInfoContainer}>
+            <View style={styles.policyRow}>
+              <View style={[styles.policyDot, { backgroundColor: '#f87171' }]} />
+              <Text style={styles.policyText}>
+                Daily Limit: <Text style={styles.policyBold}>{maxHoursPerDay} hrs</Text>
+              </Text>
+            </View>
+            <View style={styles.policyRow}>
+              <View style={[styles.policyDot, { backgroundColor: '#fbbf24' }]} />
+              <Text style={styles.policyText}>
+                Permission: <Text style={styles.policyBold}>{timesheetSettings?.permissionMaxHoursPerDay || 2} hrs/day</Text>
+                <Text style={styles.policySubtext}>  ({timesheetSettings?.permissionMaxDaysPerWeek || 1} d/week max)  / ({timesheetSettings?.permissionMaxDaysPerMonth || 4} d/month max)</Text>
+              </Text>
+            </View>
+          </View>
+
           {/* Submit Button */}
           <TouchableOpacity
             style={[styles.submitButton, (isWeekSubmitted || isSubmitting || !isSubmitAllowed) && styles.submitButtonDisabled]}
@@ -2074,6 +2091,12 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 8 },
   statsLabel: { fontSize: 12, color: '#64748b' },
   statsValue: { fontSize: 12, fontWeight: 'bold', color: '#1e293b' },
+  policyInfoContainer: { marginHorizontal: 16, marginBottom: 16, gap: 6 },
+  policyRow: { flexDirection: 'row', alignItems: 'center' },
+  policyDot: { width: 6, height: 6, borderRadius: 3, marginRight: 8 },
+  policyText: { fontSize: 11, color: '#64748b' },
+  policyBold: { fontWeight: '700', color: '#334155' },
+  policySubtext: { color: '#94a3b8' },
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#6366f1', marginHorizontal: 16, marginBottom: 16, paddingVertical: 14, borderRadius: 12 },
   submitButtonDisabled: { opacity: 0.5 },
   submitButtonText: { fontSize: 14, fontWeight: 'bold', color: 'white' },

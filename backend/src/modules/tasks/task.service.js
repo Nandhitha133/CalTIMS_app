@@ -11,7 +11,18 @@ class TaskService {
     const filter = { organizationId };
 
     if (search) {
-      filter.name = { $regex: search, $options: 'i' };
+      const matchingProjects = await Project.find({
+        name: { $regex: search, $options: 'i' },
+        organizationId
+      }).select('_id');
+      
+      const projectIds = matchingProjects.map(p => p._id);
+      
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { status: { $regex: search, $options: 'i' } },
+        { projectId: { $in: projectIds } }
+      ];
     }
 
     if (projectId) {

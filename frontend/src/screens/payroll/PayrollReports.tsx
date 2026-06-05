@@ -40,7 +40,8 @@ import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
+import { useSettingsStore } from '../../store/settingsStore';
 import { exportFile } from '../../utils/exportHelper';
 import RNFS from 'react-native-fs';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
@@ -347,6 +348,7 @@ const DepartmentPieChart = ({ data, onSelectDepartment, selectedDepartment }: an
 };
 
 export function PayrollReports({ navigation }: { navigation: any }) {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -634,7 +636,7 @@ export function PayrollReports({ navigation }: { navigation: any }) {
     }
   };
 
-  const currencySymbol = settings?.payroll?.currencySymbol || '₹';
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.payroll?.currencySymbol || 'INR');
   const totalDeptValue = processedData.depts.reduce((sum: number, d: any) => sum + d.value, 0);
 
   const getMetricLabel = () => {

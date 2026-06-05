@@ -33,7 +33,8 @@ import Header from '../../components/common/Header';
 import Footer from '../../components/common/Footer';
 import CollapsibleSidebar from '../../components/common/CollapsibleSidebar';
 import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const COLORS = {
   primary: '#6366f1',
@@ -72,9 +73,10 @@ interface StructureCardProps {
   onEdit: () => void;
   onToggleStatus: () => void;
   onDelete: () => void;
+  currencySymbol: string;
 }
 
-const StructureCard = ({ structure, assignedCount, onEdit, onToggleStatus, onDelete }: StructureCardProps) => {
+const StructureCard = ({ structure, assignedCount, onEdit, onToggleStatus, onDelete, currencySymbol }: StructureCardProps) => {
   const [showDetails, setShowDetails] = useState(false);
 
   return (
@@ -121,11 +123,11 @@ const StructureCard = ({ structure, assignedCount, onEdit, onToggleStatus, onDel
 
             <View style={styles.detailsSection}>
               <Text style={styles.detailsLabel}>Earnings</Text>
-              {structure.earnings?.map((e, idx) => (
+              {structure.earnings?.map((e: Component, idx: number) => (
                 <View key={idx} style={styles.detailRow}>
                   <Text style={styles.detailName}>{e.name}</Text>
                   <Text style={styles.detailValue}>
-                    {e.calculationType === 'Fixed' ? `₹${formatCurrency(e.value)}` : `${e.value}%`}
+                    {e.calculationType === 'Fixed' ? `${currencySymbol}${formatCurrency(e.value)}` : `${e.value}%`}
                   </Text>
                 </View>
               ))}
@@ -133,11 +135,11 @@ const StructureCard = ({ structure, assignedCount, onEdit, onToggleStatus, onDel
 
             <View style={[styles.detailsSection, { marginTop: 12 }]}>
               <Text style={styles.detailsLabel}>Deductions</Text>
-              {structure.deductions?.map((d, idx) => (
+              {structure.deductions?.map((d: Component, idx: number) => (
                 <View key={idx} style={styles.detailRow}>
                   <Text style={styles.detailName}>{d.name}</Text>
                   <Text style={[styles.detailValue, { color: COLORS.error }]}>
-                    {d.calculationType === 'Fixed' ? `₹${formatCurrency(d.value)}` : `${d.value}%`}
+                    {d.calculationType === 'Fixed' ? `${currencySymbol}${formatCurrency(d.value)}` : `${d.value}%`}
                   </Text>
                 </View>
               ))}
@@ -148,7 +150,7 @@ const StructureCard = ({ structure, assignedCount, onEdit, onToggleStatus, onDel
             <View style={styles.earningPreview}>
               <Text style={styles.previewLabel}>Earnings:</Text>
               <View style={styles.previewTags}>
-                {structure.earnings?.slice(0, 2).map((e, idx) => (
+                {structure.earnings?.slice(0, 2).map((e: Component, idx: number) => (
                   <View key={idx} style={[styles.previewTag, styles.earningTag]}>
                     <Text style={styles.previewTagText}>{e.name}</Text>
                   </View>
@@ -161,7 +163,7 @@ const StructureCard = ({ structure, assignedCount, onEdit, onToggleStatus, onDel
             <View style={styles.earningPreview}>
               <Text style={styles.previewLabel}>Deductions:</Text>
               <View style={styles.previewTags}>
-                {structure.deductions?.slice(0, 2).map((d, idx) => (
+                {structure.deductions?.slice(0, 2).map((d: Component, idx: number) => (
                   <View key={idx} style={[styles.previewTag, styles.deductionTag]}>
                     <Text style={styles.previewTagText}>{d.name}</Text>
                   </View>
@@ -249,6 +251,7 @@ const ComponentRow = ({
 );
 
 export const SalaryStructures = () => {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -280,6 +283,8 @@ export const SalaryStructures = () => {
   const [simulationCTC, setSimulationCTC] = useState('');
   const [selectedRole, setSelectedRole] = useState('employee');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || 'INR');
 
   const loadUserData = async () => {
     try {
@@ -372,7 +377,7 @@ export const SalaryStructures = () => {
     const context: Record<string, number> = {};
     let gross = 0;
 
-    formData.earnings.forEach(e => {
+    formData.earnings.forEach((e: Component) => {
       let val = parseFloat(String(e.value)) || 0;
       if (e.calculationType === 'Percentage') {
         const formula = (e.formula || '').toLowerCase();
@@ -385,7 +390,7 @@ export const SalaryStructures = () => {
     });
 
     let totalDeds = 0;
-    formData.deductions.forEach(d => {
+    formData.deductions.forEach((d: Component) => {
       let val = parseFloat(String(d.value)) || 0;
       if (d.calculationType === 'Percentage') {
         const formula = (d.formula || '').toLowerCase();
@@ -565,6 +570,7 @@ export const SalaryStructures = () => {
               onEdit={() => handleEditStructure(s)}
               onToggleStatus={() => setShowStatusConfirm(s)}
               onDelete={() => setShowDeleteConfirm(s._id)}
+              currencySymbol={currencySymbol}
             />
           ))}
 
@@ -611,7 +617,7 @@ export const SalaryStructures = () => {
                   <View style={styles.templateSection}>
                     <Text style={styles.formLabel}>Load Template</Text>
                     <View style={styles.templateButtons}>
-                      {Object.keys(roleTemplates).map(role => (
+                      {Object.keys(roleTemplates).map((role: string) => (
                         <TouchableOpacity
                           key={role}
                           style={[styles.templateButton, selectedRole === role && styles.templateButtonActive]}

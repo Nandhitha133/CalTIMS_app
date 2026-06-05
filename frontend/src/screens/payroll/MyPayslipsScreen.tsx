@@ -36,7 +36,8 @@ import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency } from './payrollFormatters';
+import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
+import { useSettingsStore } from '../../store/settingsStore';
 import { exportFile } from '../../utils/exportHelper';
 import RNFS from 'react-native-fs';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
@@ -247,6 +248,7 @@ const PreviewModal = ({ visible, payslip, onClose, onDownload, onEmail, currency
 };
 
 export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
+  const { organization: orgSettings } = useSettingsStore();
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -262,8 +264,7 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [emailing, setEmailing] = useState<string | null>(null);
 
-  const currencySymbol = settings?.payroll?.currencySymbol ||
-    (settings?.organization?.currency === 'INR' ? '₹' : settings?.organization?.currency === 'USD' ? '$' : '₹');
+  const currencySymbol = getCurrencySymbol(orgSettings?.currency || 'INR');
 
   const loadUserData = async () => {
     try {
@@ -340,11 +341,9 @@ export default function MyPayslipsScreen({ navigation }: { navigation: any }) {
       const filename = `Payslip_${empCode}_${months[payslipItem.month - 1]}_${payslipItem.year}.pdf`;
 
       let content = '';
-      const globalAny = globalThis as any;
       if (typeof data === 'string' && data.startsWith('data:application/pdf')) {
         content = data.split(',')[1];
       } else {
-        // Assume it's base64 or needs conversion
         content = data; 
       }
 

@@ -1,5 +1,5 @@
 // screens/leaves/LeaveManagementScreen.tsx
-import React, { useState, useCallback, memo } from 'react';
+import React, { useState, useCallback, useEffect, memo } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
   Platform,
   Share,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import RNFS from 'react-native-fs';
@@ -41,6 +41,7 @@ import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import StatusBadge from '../../components/common/StatusBadge';
 import ProGuard from '../../components/common/ProGuard';
+import SafeSelector from '../../components/common/SafeSelector';
 import { FileSpreadsheet } from 'lucide-react-native';
 
 // Helper function to safely extract data from API response
@@ -395,7 +396,9 @@ const FilterPanel = ({
   onClear,
   onClose,
   employees,
-  leaveTypes
+  leaveTypes,
+  activeSelector,
+  setActiveSelector
 }: {
   visible: boolean;
   filters: any;
@@ -404,12 +407,24 @@ const FilterPanel = ({
   onClose: () => void;
   employees: User[];
   leaveTypes: string[];
+  activeSelector: string | null;
+  setActiveSelector: (val: string | null) => void;
 }) => {
   const [tempFilters, setTempFilters] = useState(filters);
 
   React.useEffect(() => {
-    if (visible) setTempFilters(filters);
+    if (visible) {
+      setTempFilters(filters);
+      setActiveSelector(null);
+    }
   }, [visible, filters]);
+
+  const STATUS_OPTIONS = [
+    { label: 'All Statuses', value: '' },
+    { label: 'Pending', value: 'pending' },
+    { label: 'Approved', value: 'approved' },
+    { label: 'Rejected', value: 'rejected' },
+  ];
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true}>
@@ -434,30 +449,51 @@ const FilterPanel = ({
               </View>
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Employee</Text>
-                <TextInput
+                <SafeSelector
+                  options={[
+                    { label: 'All Employees', value: '' },
+                    ...employees.map(emp => ({
+                      label: emp.name,
+                      value: emp.id || emp._id || ''
+                    }))
+                  ]}
+                  selectedValue={tempFilters.userId}
+                  onValueChange={(val) => setTempFilters((prev: any) => ({ ...prev, userId: val }))}
+                  visible={activeSelector === 'employee'}
+                  onOpen={() => setActiveSelector('employee')}
+                  onClose={() => setActiveSelector(null)}
+                  placeholder="Select Employee"
                   style={styles.filterInput}
-                  placeholder="Search employee"
-                  value={tempFilters.userId}
-                  onChangeText={(text) => setTempFilters((prev: any) => ({ ...prev, userId: text }))}
                 />
               </View>
               <View style={styles.filterRow}>
                 <View style={[styles.filterField, { flex: 1 }]}>
                   <Text style={styles.filterLabel}>Status</Text>
-                  <TextInput
+                  <SafeSelector
+                    options={STATUS_OPTIONS}
+                    selectedValue={tempFilters.status}
+                    onValueChange={(val) => setTempFilters((prev: any) => ({ ...prev, status: val }))}
+                    visible={activeSelector === 'status'}
+                    onOpen={() => setActiveSelector('status')}
+                    onClose={() => setActiveSelector(null)}
+                    placeholder="Select Status"
                     style={styles.filterInput}
-                    placeholder="Status"
-                    value={tempFilters.status}
-                    onChangeText={(text) => setTempFilters((prev: any) => ({ ...prev, status: text }))}
                   />
                 </View>
                 <View style={[styles.filterField, { flex: 1 }]}>
                   <Text style={styles.filterLabel}>Leave Type</Text>
-                  <TextInput
+                  <SafeSelector
+                    options={[
+                      { label: 'All Types', value: '' },
+                      ...leaveTypes.map(t => ({ label: t.toUpperCase(), value: t }))
+                    ]}
+                    selectedValue={tempFilters.leaveType}
+                    onValueChange={(val) => setTempFilters((prev: any) => ({ ...prev, leaveType: val }))}
+                    visible={activeSelector === 'leaveType'}
+                    onOpen={() => setActiveSelector('leaveType')}
+                    onClose={() => setActiveSelector(null)}
+                    placeholder="Select Type"
                     style={styles.filterInput}
-                    placeholder="Type"
-                    value={tempFilters.leaveType}
-                    onChangeText={(text) => setTempFilters((prev: any) => ({ ...prev, leaveType: text }))}
                   />
                 </View>
               </View>
@@ -484,7 +520,9 @@ const EligibilityFilterPanel = ({
   onApply,
   onClear,
   onClose,
-  departments
+  departments,
+  activeSelector,
+  setActiveSelector
 }: {
   visible: boolean;
   filters: any;
@@ -492,11 +530,16 @@ const EligibilityFilterPanel = ({
   onClear: () => void;
   onClose: () => void;
   departments: string[];
+  activeSelector: string | null;
+  setActiveSelector: (val: string | null) => void;
 }) => {
   const [tempFilters, setTempFilters] = useState(filters);
 
   React.useEffect(() => {
-    if (visible) setTempFilters(filters);
+    if (visible) {
+      setTempFilters(filters);
+      setActiveSelector(null);
+    }
   }, [visible, filters]);
 
   return (
@@ -512,11 +555,18 @@ const EligibilityFilterPanel = ({
           <View style={styles.modalContent}>
             <View style={styles.filterField}>
               <Text style={styles.filterLabel}>Department</Text>
-              <TextInput
+              <SafeSelector
+                options={[
+                  { label: 'All Departments', value: '' },
+                  ...departments.map(d => ({ label: d, value: d }))
+                ]}
+                selectedValue={tempFilters.department}
+                onValueChange={(val) => setTempFilters((prev: any) => ({ ...prev, department: val }))}
+                visible={activeSelector === 'department'}
+                onOpen={() => setActiveSelector('department')}
+                onClose={() => setActiveSelector(null)}
+                placeholder="Select Department"
                 style={styles.filterInput}
-                placeholder="All Departments"
-                value={tempFilters.department}
-                onChangeText={(text) => setTempFilters((prev: any) => ({ ...prev, department: text }))}
               />
             </View>
           </View>
@@ -733,11 +783,13 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'applications' | 'eligibility'>('applications');
   const [searchType, setSearchType] = useState<'employee' | 'leave'>('leave');
+  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
+  const [allEmployeesForFilter, setAllEmployeesForFilter] = useState<User[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<string[]>(['annual', 'casual', 'sick']);
   const [departments, setDepartments] = useState<string[]>([]);
   const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, approved: 0, rejected: 0 });
@@ -815,7 +867,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
     try {
       setLoading(true);
       const params: any = { page, limit: 10, isAdminView: true };
-      if (searchQuery.length >= 2 && searchType === 'leave') params.search = searchQuery;
+      if (searchQuery.trim().length >= 2) params.search = searchQuery.trim();
       if (filters.status) params.status = filters.status;
       if (filters.leaveType) params.leaveType = filters.leaveType;
       if (filters.userId) params.userId = filters.userId;
@@ -917,21 +969,38 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
     }
   };
 
+  const fetchAllEmployeesForFilter = async () => {
+    try {
+      const response = await userAPI.getAll({ limit: 1000, isActive: true });
+      const data = extractData(response, []);
+      const userList = Array.isArray(data) ? data : (data?.data || []);
+      setAllEmployeesForFilter(userList);
+    } catch (error) {
+      console.error('Error fetching all employees for filter:', error);
+    }
+  };
+
   const fetchAllData = async () => {
     await loadUserData();
     await Promise.all([
       fetchStats(),
       fetchLeaveTypes(),
       fetchDepartments(),
+      fetchAllEmployeesForFilter(),
       activeTab === 'applications' ? fetchLeaves() : fetchEmployees(),
     ]);
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchAllData();
-    }, [page, eligibilityPage, searchQuery, filters, eligibilityFilters, activeTab])
-  );
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (isFocused) {
+      const timer = setTimeout(() => {
+        fetchAllData();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isFocused, page, eligibilityPage, searchQuery, filters, eligibilityFilters, activeTab]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -1157,8 +1226,10 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
                     setShowFilters(false);
                   }}
                   onClose={() => setShowFilters(false)}
-                  employees={employees}
+                  employees={allEmployeesForFilter}
                   leaveTypes={leaveTypes}
+                  activeSelector={activeSelector}
+                  setActiveSelector={setActiveSelector}
                 />
 
                 {/* Leave Requests List */}
@@ -1258,6 +1329,8 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
                   }}
                   onClose={() => setShowEligibilityFilters(false)}
                   departments={departments}
+                  activeSelector={activeSelector}
+                  setActiveSelector={setActiveSelector}
                 />
 
                 {/* Eligibility Table Header */}

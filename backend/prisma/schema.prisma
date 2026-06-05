@@ -1,0 +1,1016 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Organization ─────────────────────────────────────────────────────────────
+model Organization {
+  id               String            @id @default(uuid()) @map("_id")
+  name             String            @unique
+  slug             String            @unique @default("")
+  taxId            String?
+  address          String?
+  isActive         Boolean           @default(true)
+  isDeleted        Boolean           @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  announcements    Announcement[]
+  approvalRequests ApprovalRequest[]
+  attendance       Attendance[]
+  auditLogs        AuditLog[]
+  events           CompanyEvent[]
+  departments      Department[]
+  designations     Designation[]
+  documents        Document[]
+  employees        Employee[]
+  holidays         Holiday[]
+  incidents        Incident[]
+  invoices         Invoice[]
+  leaves           Leave[]
+  leaveTypes       LeaveType[]
+  loginHistories   LoginHistory[]
+  notifications    Notification[]
+  payrollBatches   PayrollBatch[]
+  payrollLedger    PayrollLedger[]
+  payrollPolicies  PayrollPolicy[]
+  projects         Project[]
+  reportSchedules  ReportSchedule[]
+  roles            Role[]
+  settings         OrgSettings?
+  subscriptions    Subscription[]
+  subscriptionHistories SubscriptionHistory[]
+  systemSettings   SystemSetting[]
+  timesheets       Timesheet[]
+  timesheetWeeks   TimesheetWeek[]
+  trialTracking    TrialTracking[]
+  users            User[]
+  workflows        Workflow[]
+  supportTickets   SupportTicket[]
+  userActivityLogs UserActivityLog[]
+  permAuditLogs    PermissionAuditLog[]
+  roleSalaryStructures RoleSalaryStructure[]
+  payslipTemplates PayslipTemplate[]
+  payrollJobs      PayrollJob[]
+  payslips         Payslip[]
+  calendarIntegrations CalendarIntegration[]
+  calendarEvents       CalendarEvent[]
+}
+
+// ─── Subscription ─────────────────────────────────────────────────────────────
+model Subscription {
+  id              String       @id @default(uuid()) @map("_id")
+  organizationId  String       @unique
+  planType        String       @default("TRIAL") // TRIAL, BASIC, PRO
+  status          String       @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  startDate       DateTime     @default(now())
+  endDate         DateTime
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model SubscriptionHistory {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  planName       String
+  amount         Float
+  startDate      DateTime
+  endDate        DateTime
+  status         String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model TrialTracking {
+  id                String        @id @default(uuid()) @map("_id")
+  organizationId    String?       @unique
+  organizationName  String
+  trialStartDate    DateTime      @default(now())
+  trialEndDate      DateTime
+  status            String        @default("ACTIVE") // ACTIVE, EXPIRED, CONVERTED
+  createdAt         DateTime      @default(now())
+  organization      Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+// ─── Identity & Access ────────────────────────────────────────────────────────
+model User {
+  id                   String         @id @default(uuid()) @map("_id")
+  email                String         @unique
+  password             String
+  name                 String
+  role                 String         @default("STAFF") // STAFF, ADMIN, SUPER_ADMIN
+  roleId               String?
+  organizationId       String?
+  isActive             Boolean        @default(true)
+  isEmailVerified      Boolean        @default(false)
+  avatar               String?
+  phoneNumber          String?
+  isDeleted            Boolean        @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  organization         Organization?  @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  roleRef              Role?          @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employee             Employee?
+  announcements        Announcement[] @relation("AnnouncementAuthor")
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  timesheetWeeks       TimesheetWeek[]
+  userActivityLogs     UserActivityLog[]
+  permissionAuditLogs  PermissionAuditLog[]
+  calendarIntegrations CalendarIntegration[]
+  calendarEvents       CalendarEvent[]
+  loginHistories       LoginHistory[]
+  supportComments      SupportComment[]
+
+  @@index([organizationId])
+}
+
+model Role {
+  id             String           @id @default(uuid()) @map("_id")
+  name           String
+  organizationId String?
+  description    String?
+  isSystem       Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization?    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users          User[]
+  permissions    RolePermission[]
+
+  @@unique([name, organizationId])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid()) @map("_id")
+  roleId       String
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([roleId, permissionId])
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @map("_id")
+  name        String           @unique
+  description String?
+  module      String
+  roles       RolePermission[]
+}
+
+model LoginHistory {
+  id             String       @id @default(uuid()) @map("_id")
+  userId         String?
+  organizationId String?
+  ipAddress      String?
+  userAgent      String?
+  status         String       @default("SUCCESS") // SUCCESS, FAILED
+  createdAt      DateTime     @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId])
+  @@index([organizationId])
+}
+
+// ─── Employee ─────────────────────────────────────────────────────────────────
+model Employee {
+  id               String             @id @default(uuid()) @map("_id")
+  userId           String             @unique
+  organizationId   String
+  employeeCode     String
+  designationId    String?
+  departmentId     String?
+  managerId        String?
+  status           String             @default("ACTIVE")
+  dob              DateTime?
+  gender           String?
+  address          String?
+  joiningDate      DateTime?
+  bankDetails      Json?
+  isDeleted        Boolean            @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime           @default(now())
+
+  approvalRequests ApprovalRequest[]  @relation("ApprovalRequester")
+  attendance       Attendance[]
+  documents        Document[]
+  department       Department?        @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  designation      Designation?       @relation(fields: [designationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  manager          Employee?          @relation("EmployeeHierarchy", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subordinates     Employee[]         @relation("EmployeeHierarchy")
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user             User               @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leaves           Leave[]            @relation("LeaveEmployee")
+  processedLeaves  Leave[]            @relation("LeaveProcessor")
+
+  leaveBalances    LeaveBalance[]
+  payrollProfile   PayrollProfile?
+  processedPayrolls ProcessedPayroll[]
+  projectMembers   ProjectMember[]
+  managedProjects  Project[]          @relation("ProjectManager")
+  payslips         Payslip[]
+  assignedTaskIds  String[]
+  assignedTasks    Task[]             @relation("TaskAssignees", fields: [assignedTaskIds], references: [id])
+  timesheets       Timesheet[]
+  supportTickets   SupportTicket[]
+  incidents        Incident[]         @relation("IncidentEmployee")
+  assignedIncidents Incident[]        @relation("IncidentAssignee")
+
+  @@unique([id, organizationId])
+  @@unique([userId, organizationId])
+  @@unique([organizationId, employeeCode])
+  @@index([organizationId])
+  @@index([managerId])
+}
+
+// ─── Department ───────────────────────────────────────────────────────────────
+model Department {
+  id             String       @id @default(uuid()) @map("_id")
+  name           String
+  organizationId String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employees      Employee[]
+
+  @@unique([organizationId, name])
+}
+
+// ─── Designation ──────────────────────────────────────────────────────────────
+model Designation {
+  id             String       @id @default(uuid()) @map("_id")
+  name           String
+  organizationId String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employees      Employee[]
+
+  @@unique([organizationId, name])
+}
+
+// ─── Project ──────────────────────────────────────────────────────────────────
+model Project {
+  id               String          @id @default(uuid()) @map("_id")
+  name             String
+  code             String
+  description      String?
+  clientName       String?
+  startDate        DateTime        @default(now())
+  endDate          DateTime?
+  organizationId   String
+  status           String          @default("ACTIVE")
+  managerId        String?
+  budgetHours      Float?          @default(0)
+  onlyProjectTasks Boolean         @default(false)
+  type             String          @default("project")
+  isSystemType     Boolean         @default(false)
+  isDeleted        Boolean         @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  manager          Employee?       @relation("ProjectManager", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks            Task[]
+  timesheets       Timesheet[]
+  members          ProjectMember[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+// ─── ProjectMember ────────────────────────────────────────────────────────────
+model ProjectMember {
+  id                String   @id @default(uuid()) @map("_id")
+  projectId         String
+  employeeId        String
+  role              String   @default("MEMBER")
+  allocationPercent Float    @default(100)
+  budgetHours       Float?   @default(0)
+  joinedAt          DateTime @default(now())
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([projectId, employeeId])
+  @@index([projectId])
+  @@index([employeeId])
+}
+
+// ─── Task ─────────────────────────────────────────────────────────────────────
+model Task {
+  id             String           @id @default(uuid()) @map("_id")
+  name           String
+  description    String?
+  projectId      String
+  organizationId String
+  priority       String           @default("MEDIUM")
+  status         String           @default("TODO")
+  isDeleted      Boolean          @default(false)
+  deletedAt      DateTime?
+  dueDate        DateTime?
+  createdAt      DateTime         @default(now())
+  assigneeIds    String[]
+  assignees      Employee[]       @relation("TaskAssignees", fields: [assigneeIds], references: [id])
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  timesheets     Timesheet[]
+  supportTickets SupportTicket[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@index([projectId])
+}
+
+// ─── SupportTicket ────────────────────────────────────────────────────────────
+model SupportTicket {
+  id             String           @id @default(uuid()) @map("_id")
+  organizationId String
+  employeeId     String
+  taskId         String?
+  title          String
+  description    String
+  category       String
+  status         String           @default("OPEN")
+  priority       String           @default("MEDIUM")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  isDeleted      Boolean          @default(false)
+  deletedAt      DateTime?
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employee       Employee         @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  task           Task?            @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  comments       SupportComment[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@index([employeeId])
+}
+
+model SupportComment {
+  id        String        @id @default(uuid()) @map("_id")
+  ticketId  String
+  userId    String
+  content   String
+  createdAt DateTime      @default(now())
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user      User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([ticketId])
+}
+
+// ─── Incident ─────────────────────────────────────────────────────────────────
+model Incident {
+  id               String       @id @default(uuid()) @map("_id")
+  incidentId       String?
+  organizationId   String
+  employeeId       String
+  assignedToId     String?
+  relatedTimesheetId String?
+  title            String
+  description      String
+  category         String
+  priority         String       @default("Medium")
+  status           String       @default("Open")
+  attachments      String[]     @default([])
+  responses        Json         @default("[]")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employee         Employee     @relation("IncidentEmployee", fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedTo       Employee?    @relation("IncidentAssignee", fields: [assignedToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, incidentId])
+  @@index([organizationId])
+  @@index([employeeId])
+}
+
+// ─── Timesheet ────────────────────────────────────────────────────────────────
+model Timesheet {
+  id             String       @id @default(uuid()) @map("_id")
+  employeeId     String
+  projectId      String
+  taskId         String?
+  organizationId String
+  workDate       DateTime
+  hours          Float
+  description    String?
+  status         String       @default("DRAFT")
+  entry_type     String       @default("project")
+  isLocked       Boolean      @default(false)
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, workDate])
+  @@index([employeeId])
+}
+
+model TimesheetWeek {
+  id             String       @id @default(uuid()) @map("_id")
+  userId         String
+  organizationId String
+  weekStartDate  DateTime
+  weekEndDate    DateTime
+  status           String       @default("DRAFT")
+  rows             Json         @default("[]")
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+  approvedBy       String?
+  rejectionReason  String?
+  isDeleted        Boolean      @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@unique([userId, organizationId, weekStartDate])
+  @@index([userId])
+  @@index([organizationId, weekStartDate])
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+model Attendance {
+  id             String       @id @default(uuid()) @map("_id")
+  employeeId     String
+  organizationId String
+  workDate       DateTime
+  checkIn        DateTime?
+  checkOut       DateTime?
+  status         String       @default("PRESENT")
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, workDate])
+}
+
+// ─── Leave ────────────────────────────────────────────────────────────────────
+model LeaveType {
+  id             String         @id @default(uuid()) @map("_id")
+  name           String
+  organizationId String
+  yearlyQuota    Float
+  isDeductible   Boolean        @default(true)
+  color          String?
+  carryForward   Boolean        @default(false)
+  leaves         Leave[]
+  leaveBalances  LeaveBalance[]
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, name])
+}
+
+model LeaveBalance {
+  id          String    @id @default(uuid()) @map("_id")
+  employeeId  String
+  leaveTypeId String
+  total       Float
+  used        Float     @default(0)
+  remaining   Float
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([employeeId, leaveTypeId])
+}
+
+model Leave {
+  id             String       @id @default(uuid()) @map("_id")
+  leaveId        String?
+  employeeId     String
+  organizationId String
+  leaveTypeId    String
+  startDate      DateTime
+  endDate        DateTime
+  totalDays      Float        @default(0)
+  reason         String?
+  rejectionReason String?
+  status         String       @default("PENDING")
+  isHalfDay      Boolean      @default(false)
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  processedById  String?
+  createdAt      DateTime     @default(now())
+  employee       Employee     @relation("LeaveEmployee", fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  processedBy    Employee?    @relation("LeaveProcessor", fields: [processedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type           LeaveType    @relation(fields: [leaveTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, leaveId])
+  @@index([organizationId])
+}
+
+
+// ─── PayrollPolicy ────────────────────────────────────────────────────────────
+model PayrollPolicy {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  name           String
+  rules          Json
+  version        Int          @default(1)
+  isActive       Boolean      @default(true)
+  isDefault      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+
+model PayrollProfile {
+  id                String   @id @default(uuid()) @map("_id")
+  employeeId        String   @unique
+  organizationId    String
+  user              String?  @unique // legacy userId mapping
+  annualCTC         Float?
+  monthlyCTC        Float?
+  payrollType       String?  @default("Monthly")
+  earnings          Json?    @default("[]")
+  deductions        Json?    @default("[]")
+  salaryStructureId String?
+  salaryMode        String?  @default("Profile-Based")
+  profileVersion    Int      @default(1)
+  updatedAt         DateTime @updatedAt
+  employee          Employee @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+model PayrollBatch {
+  id                    String             @id @default(uuid()) @map("_id")
+  organizationId        String
+  month                 Int
+  year                  Int
+  status    String             @default("DRAFT")
+  isPaid                Boolean            @default(false)
+  paidAt                DateTime?
+  paidBy                String?
+  totalEmployees        Int                @default(0)
+  totalGross            Float              @default(0)
+  totalNet              Float              @default(0)
+  totalDeductions       Float              @default(0)
+  failedCount           Int                @default(0)
+  executionSummary      String?
+  departmentDistribution Json?              @default("{}")
+  processedBy           String?
+  processedAt           DateTime?
+  errors                Json?              @default("[]")
+  isDeleted             Boolean            @default(false)
+  deletedAt             DateTime?
+  createdAt             DateTime           @default(now())
+  organization          Organization       @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  processedPayrolls     ProcessedPayroll[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, month, year])
+}
+
+model ProcessedPayroll {
+  id                String       @id @default(uuid()) @map("_id")
+  payrollBatchId    String
+  employeeId        String
+  userId            String?      // legacy userId mapping
+  organizationId    String
+  month             Int
+  year              Int
+  paymentType       String?
+  currencySymbol    String?      @default("₹")
+  isPaid            Boolean      @default(false)
+  paidAt            DateTime?
+  paidBy            String?
+  grossYield        Float        @default(0)
+  liability         Float        @default(0)
+  netPay            Float        @default(0)
+  breakdown         Json?        @default("{}")
+  earnings          Json?        @default("[]")
+  deductions        Json?        @default("[]")
+  attendance        Json?        @default("{}")
+  employeeInfo      Json?        @default("{}")
+  bankDetails       Json?        @default("{}")
+  profileVersion    Int          @default(1)
+  payslipTemplateId String?
+  processedAt       DateTime?    @default(now())
+  isDeleted         Boolean      @default(false)
+  deletedAt         DateTime?
+  createdAt         DateTime     @default(now())
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  batch             PayrollBatch @relation(fields: [payrollBatchId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payslip           Payslip?
+
+  @@unique([id, organizationId])
+  @@unique([payrollBatchId, employeeId])
+  @@index([organizationId, month, year])
+}
+
+model Payslip {
+  id                  String           @id @default(uuid()) @map("_id")
+  organizationId      String
+  employeeId          String
+  processedPayrollId  String           @unique
+  month               Int
+  year                Int
+  status              String           @default("GENERATED") // GENERATED, SENT, PAID
+  
+  // Single Source of Truth Fields
+  earnings            Json?            @default("[]")
+  deductions          Json?            @default("[]")
+  gross               Float            @default(0)
+  totalDeductions     Float            @default(0)
+  netPay              Float            @default(0)
+  
+  netSalary           Float            @default(0) // Legacy compatibility
+  breakdown           Json?            @default("{}")
+  employeeInfo        Json?            @default("{}")
+  bankDetails         Json?            @default("{}")
+  isEmailSent         Boolean          @default(false)
+  lastEmailSentAt     DateTime?
+  generatedAt         DateTime         @default(now())
+  generatedBy         String?
+  paidAt              DateTime?
+  paidBy              String?
+  isDeleted           Boolean          @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  organization        Organization     @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employee            Employee         @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  processedPayroll    ProcessedPayroll @relation(fields: [processedPayrollId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, month, year, employeeId])
+  @@index([organizationId, month, year])
+  @@index([employeeId])
+}
+
+
+model PayrollJob {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  type           String       // SEND_PAYSLIP_EMAILS, GENERATE_BULK_PDF
+  status         String       @default("Pending") // Pending, Processing, Completed, Failed
+  payload        Json         @default("{}")
+  priority       Int          @default(0)
+  attempts       Int          @default(0)
+  lastError      String?
+  processedAt    DateTime?
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([status, priority, createdAt])
+}
+
+model RoleSalaryStructure {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  name           String?      // standard name
+  roleName       String?      // compatibility
+  type           String?      @default("Role-Based")
+  baseSalary     Float?       @default(0)
+  earnings       Json?        @default("[]")
+  deductions     Json?        @default("[]")
+  effectiveFrom  DateTime     @default(now())
+  effectiveTo    DateTime?
+  isActive       Boolean      @default(true)
+  isDeleted      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+model PayslipTemplate {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String?
+  name           String
+  isDefault      Boolean      @default(false)
+  htmlContent    String?
+  cssContent     String?
+  fields         Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId])
+}
+
+// ─── Workflow / Approval ──────────────────────────────────────────────────────
+model Workflow {
+  id             String         @id @default(uuid()) @map("_id")
+  organizationId String
+  name           String
+  resourceType   String
+  isActive       Boolean        @default(true)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  steps          WorkflowStep[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+model WorkflowStep {
+  id             String   @id @default(uuid()) @map("_id")
+  workflowId     String
+  stepOrder      Int
+  approverRoleId String?
+  approverId     String?
+  workflow       Workflow @relation(fields: [workflowId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model ApprovalRequest {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  requesterId    String
+  resourceType   String
+  resourceId     String
+  status         String       @default("PENDING")
+  currentStep    Int          @default(1)
+  comments       String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requester      Employee     @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@index([resourceId])
+}
+
+// ─── Announcement / Notification ─────────────────────────────────────────────
+model Announcement {
+  id                 String       @id @default(uuid()) @map("_id")
+  organizationId     String
+  authorId           String
+  title              String
+  content            String
+  type               String       @default("INFO")
+  priority           String       @default("LOW")
+  targetRoles        String[]     @default([])
+  isActive           Boolean      @default(true)
+  isDeleted          Boolean      @default(false)
+  expiresAt          DateTime?
+  targetDepartmentId String?
+  createdAt          DateTime     @default(now())
+  author             User         @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+model Notification {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  userId         String
+  title          String
+  message        String
+  isRead         Boolean      @default(false)
+  link           String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([userId, isRead])
+  @@index([organizationId])
+}
+
+// ─── Holiday / CompanyEvent ───────────────────────────────────────────────────
+model Holiday {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  name           String
+  date           DateTime
+  isPublic       Boolean      @default(true)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, date])
+}
+
+model CompanyEvent {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  title          String
+  description    String?
+  startDate      DateTime
+  endDate        DateTime
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId, startDate])
+}
+
+// ─── Document / Invoice ───────────────────────────────────────────────────────
+model Document {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  employeeId     String?
+  name           String
+  fileType       String
+  fileUrl        String
+  fileSize       Int
+  category       String
+  createdAt      DateTime     @default(now())
+  employee       Employee?    @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+  @@index([employeeId])
+}
+
+model Invoice {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  amount         Float
+  status         String       @default("UNPAID")
+  dueDate        DateTime
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+// ─── Settings (org-wide JSON blob) ───────────────────────────────────────────
+model SystemSetting {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  key            String
+  value          String
+  group          String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([organizationId, key])
+}
+
+model OrgSettings {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String       @unique
+  data           Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+// ─── AuditLog ─────────────────────────────────────────────────────────────────
+model AuditLog {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  userId         String?
+  action         String
+  resource       String
+  details        Json?
+  isDeleted      Boolean      @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt])
+  @@index([userId])
+}
+
+model UserActivityLog {
+  id             String        @id @default(uuid()) @map("_id")
+  userId         String
+  organizationId String?
+  action         String
+  resource       String?
+  details        Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model PermissionAuditLog {
+  id             String        @id @default(uuid()) @map("_id")
+  organizationId String?
+  changedById    String?
+  targetRoleId   String?
+  action         String
+  details        Json?
+  createdAt      DateTime      @default(now())
+  changedBy      User?         @relation(fields: [changedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([organizationId])
+}
+
+// ─── ReportSchedule ───────────────────────────────────────────────────────────
+model ReportSchedule {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  name           String
+  frequency      String       @default("weekly")
+  scheduledTime  String       @default("09:00")
+  reportType     String       @default("approved")
+  recipientIds   String[]     @default([])
+  projectIds     String[]     @default([])
+  isActive       Boolean      @default(true)
+  lastSentAt     DateTime?
+  history        Json         @default("[]")
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId])
+}
+
+model PayrollLedger {
+  id             String       @id @default(uuid()) @map("_id")
+  organizationId String
+  action         String
+  batchId        String
+  performedBy    String
+  metadata       Json?        @default("{}")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt])
+}
+
+// ─── External Calendar Integrations ───────────────────────────────────────────
+model CalendarIntegration {
+  id             String       @id @default(uuid()) @map("_id")
+  userId         String
+  organizationId String
+  provider       String       // google, microsoft
+  accessToken    String
+  refreshToken   String?
+  tokenExpiry    DateTime?
+  status         String       @default("CONNECTED") // CONNECTED, DISCONNECTED, EXPIRED
+  lastSyncedAt   DateTime?
+  
+  user           User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model CalendarEvent {
+  id             String       @id @default(uuid()) @map("_id")
+  userId         String
+  organizationId String
+  externalId     String?      // Provider's event ID
+  title          String
+  description    String?
+  startDate      DateTime
+  endDate        DateTime
+  location       String?
+  provider       String       // google, microsoft, internal
+  color          String?
+  
+  user           User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId, startDate])
+  @@index([organizationId])
+  @@index([externalId])
+}
