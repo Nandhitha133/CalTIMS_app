@@ -230,9 +230,7 @@ const DetailModal = memo(({ visible, log, onClose, onExport, onExportUser }: any
             )}
           </ScrollView>
           <View style={detailStyles.footer}>
-            <TouchableOpacity style={detailStyles.exportUserButton} onPress={() => onExportUser(log)}>
-              <Download size={16} color="white" /><Text style={detailStyles.exportUserButtonText}>User Activity</Text>
-            </TouchableOpacity>
+            
             <TouchableOpacity style={detailStyles.exportButton} onPress={onExport}>
               <Download size={16} color="#1e293b" /><Text style={detailStyles.exportButtonText}>Export All</Text>
             </TouchableOpacity>
@@ -332,7 +330,7 @@ export default function AuditLogScreen() {
   const handleExportCSV = async () => {
     const headers = ['Action', 'User', 'Role', 'Entity', 'Status', 'IP', 'Timestamp'];
     const rows = filteredLogs.map(l => [
-      l.action, l.performedBy?.name || 'System', l.role, l.entity, l.status, l.ipAddress, new Date(l.createdAt).toISOString()
+      l.action, l.performedBy?.name || 'System', l.role, l.entity, l.status, l.ipAddress, l.createdAt ? `[${format(new Date(l.createdAt), 'yyyy-MM-dd HH:mm:ss')}]` : ''
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     await exportFile(csv, `audit_logs_${format(new Date(), 'yyyyMMdd')}.csv`, 'text/csv');
@@ -360,7 +358,7 @@ export default function AuditLogScreen() {
 
     const headers = ['Action', 'User', 'Role', 'Entity', 'Status', 'IP', 'Timestamp'];
     const rows = userLogs.map(l => [
-      l.action, l.performedBy?.name || 'System', l.role, l.entity, l.status, l.ipAddress, new Date(l.createdAt).toISOString()
+      l.action, l.performedBy?.name || 'System', l.role, l.entity, l.status, l.ipAddress, l.createdAt ? `[${format(new Date(l.createdAt), 'yyyy-MM-dd HH:mm:ss')}]` : ''
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     await exportFile(csv, `audit_activity_${userName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.csv`, 'text/csv');
@@ -427,7 +425,7 @@ export default function AuditLogScreen() {
         ) : (
           <FlatList
             data={filteredLogs}
-            keyExtractor={item => item._id}
+            keyExtractor={(item, index) => item._id ? item._id.toString() : index.toString()}
             renderItem={({ item }) => <AuditLogCard log={item} onPress={() => setSelectedLog(item)} />}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
             ListHeaderComponent={

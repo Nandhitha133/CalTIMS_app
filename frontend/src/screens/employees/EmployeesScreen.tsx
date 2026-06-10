@@ -42,6 +42,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  CheckCircle2,
+  TrendingUp,
 } from 'lucide-react-native';
 import { userAPI, auditAPI } from '../../services/endpoints';
 import { exportFile, convertToCSV } from '../../utils/exportHelper';
@@ -50,6 +52,7 @@ import StatusBadge from '../../components/common/StatusBadge';
 import DropdownModal from '../../components/common/DropdownModal';
 import EmployeeCard from '../../components/employees/EmployeeCard';
 import EmployeeHistory from '../../components/employees/EmployeeHistory';
+import { appEventBus } from '../../utils/eventBus';
 import { FileSpreadsheet } from 'lucide-react-native';
 
 // Helper to extract data from API response
@@ -118,7 +121,12 @@ const styles = StyleSheet.create({
   pageButtonText: { fontSize: 13, fontWeight: '600', color: '#3b82f6' },
   pageInfo: { fontSize: 13, color: '#64748b' },
   errorText: { color: '#ef4444', fontSize: 12, marginTop: 4 },
-  filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1e293b' }
+  filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1e293b' },
+  statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  statCard: { flex: 1, backgroundColor: 'white', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+  statIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  statValue: { fontSize: 24, fontWeight: '700', color: '#1e293b', marginBottom: 4 },
+  statLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
 });
 
 const exportModalStyles = StyleSheet.create({
@@ -418,6 +426,12 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     { value: 'employee', label: 'Employee' }, { value: 'intern', label: 'Intern' },
   ], []);
 
+  const stats = useMemo(() => ({
+    total: allEmployees.length,
+    active: allEmployees.filter(e => e.isActive).length,
+    inactive: allEmployees.filter(e => !e.isActive).length,
+  }), [allEmployees]);
+
   const statusOptions = useMemo(() => [
     { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' },
   ], []);
@@ -559,7 +573,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     else if (/\d/.test(data.bankName)) errors.bankName = 'Bank name cannot contain numbers';
     
     if (!data.accountNumber?.trim()) errors.accountNumber = 'Account number is required';
-    else if (data.accountNumber.length !== 16) errors.accountNumber = 'Invalid Account Number';
+    else if (data.accountNumber.length < 10 || data.accountNumber.length > 17) errors.accountNumber = 'Account number must be 10 to 17 digits';
 
     if (!data.branchName?.trim()) errors.branchName = 'Branch name is required';
     else if (/\d/.test(data.branchName)) errors.branchName = 'Branch name cannot contain numbers';
@@ -669,6 +683,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
         await userAPI.activate(employee._id);
       }
       Alert.alert('Success', employee.isActive ? 'Employee deactivated' : 'Employee activated');
+      appEventBus.emit('employee-status-updated');
       fetchEmployees();
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.message || 'Action failed');
@@ -881,7 +896,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
           </View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Account Number *</Text>
-            <TextInput style={[modalStyles.input, errors.accountNumber ? { borderColor: '#ef4444' } : null]} placeholder="16 digit account number" keyboardType="numeric" maxLength={16} value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} />
+            <TextInput style={[modalStyles.input, errors.accountNumber ? { borderColor: '#ef4444' } : null]} placeholder="10 to 17 digit account number" keyboardType="numeric" maxLength={17} value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} />
             {errors.accountNumber ? <Text style={styles.errorText}>{errors.accountNumber}</Text> : null}
           </View>
           <View style={modalStyles.field}>
@@ -925,6 +940,31 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
         </View>
       ) : (
         <View style={styles.content}>
+          {/* Stats Row */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: '#eff6ff' }]}>
+                <Users size={20} color="#3b82f6" />
+              </View>
+              <Text style={styles.statValue}>{stats.total}</Text>
+              <Text style={styles.statLabel}>TOTAL</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: '#ecfdf5' }]}>
+                <UserCheck size={20} color="#10b981" />
+              </View>
+              <Text style={styles.statValue}>{stats.active}</Text>
+              <Text style={styles.statLabel}>ACTIVE</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIcon, { backgroundColor: '#fef2f2' }]}>
+                <UserX size={20} color="#ef4444" />
+              </View>
+              <Text style={styles.statValue}>{stats.inactive}</Text>
+              <Text style={styles.statLabel}>INACTIVE</Text>
+            </View>
+          </View>
+
         {/* Search and Filter Bar */}
           <View style={styles.searchContainer}>
             <View style={styles.searchBox}>

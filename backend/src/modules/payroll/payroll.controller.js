@@ -170,15 +170,46 @@ exports.createOrUpdateProfile = async (req, res, next) => {
     if (!employeeId) return res.status(400).json({ success: false, message: 'Employee ID is required' });
     
     if (updateData.salaryStructureId === '') updateData.salaryStructureId = null;
-    ['monthlyCTC'].forEach(field => { if (updateData[field] === '') updateData[field] = 0; });
-    
-    const before = await prisma.payrollProfile.findUnique({ where: { employeeId } });
+    const prismaData = {
+      user: updateData.user || updateData.userId || null,
+      annualCTC: updateData.annualCTC,
+      monthlyCTC: updateData.monthlyCTC,
+      payrollType: updateData.payrollType,
+      earnings: updateData.earnings,
+      deductions: updateData.deductions,
+      salaryStructureId: updateData.salaryStructureId,
+      salaryMode: updateData.salaryMode,
+    };
 
-    const profile = await prisma.payrollProfile.upsert({
-      where: { employeeId },
-      update: updateData,
-      create: { employeeId, organizationId: req.organizationId, ...updateData },
-    });
+    let profile;
+    let before;
+    try {
+      before = await prisma.payrollProfile.findUnique({ where: { employeeId } });
+      profile = await prisma.payrollProfile.upsert({
+        where: { employeeId },
+        update: prismaData,
+        create: { employeeId, organizationId: req.organizationId, ...prismaData },
+      });
+    } catch (prismaErr) {
+      console.error('[Prisma Error]:', prismaErr);
+      return res.status(500).json({ success: false, message: 'Prisma Error: ' + (prismaErr.message || 'Unknown validation failure') });
+    }
+
+    // Sync with Mongoose Model
+    try {
+      const PayrollProfile = require('./payrollProfile.model');
+      const mongooseUpdateData = { ...updateData, employeeId, organizationId: req.organizationId };
+      if (!mongooseUpdateData.user) mongooseUpdateData.user = mongooseUpdateData.userId || employeeId;
+      
+      await PayrollProfile.findOneAndUpdate(
+        { $or: [{ employeeId: employeeId }, { user: mongooseUpdateData.user }] },
+        { $set: mongooseUpdateData },
+        { upsert: true, new: true }
+      );
+    } catch (mongooseErr) {
+      console.error('[Mongoose Error]:', mongooseErr);
+      // We do not fail the request if Mongoose sync fails, but we log it.
+    }
 
     await auditService.log(
       req.user?.id, 
@@ -192,12 +223,37 @@ exports.createOrUpdateProfile = async (req, res, next) => {
     ).catch(() => {});
 
     res.status(200).json({ success: true, data: profile });
-  } catch (err) { logger.error('Error in createOrUpdateProfile:', err.message); next(err); }
+  } catch (err) { 
+    console.error('Error in createOrUpdateProfile:', err.message); 
+    // Always return explicit error to bypass generic handler
+    res.status(500).json({ success: false, message: 'Backend Error: ' + err.message });
+  }
 };
 
 exports.deleteProfile = async (req, res, next) => {
   try {
-    await prisma.payrollProfile.delete({ where: { id: req.params.id } });
+    const profileId = req.params.id;
+    // 1. Delete from Prisma
+    let profileData = null;
+    try {
+      profileData = await prisma.payrollProfile.delete({ where: { id: profileId } });
+    } catch(err) {
+      console.warn('Prisma profile delete warning:', err.message);
+    }
+    
+    // 2. Delete from Mongoose
+    const mongooseProfile = await PayrollProfile.findOneAndDelete({ 
+      $or: [ { _id: profileId }, { id: profileId } ]
+    });
+
+    const employeeId = profileData?.employeeId || mongooseProfile?.employeeId;
+    if (employeeId) {
+      await require('./payrollProfile.model').db.model('Employee').findOneAndUpdate(
+        { _id: employeeId },
+        { $unset: { annualCTC: 1, monthlyCTC: 1, salary: 1, ctc: 1, profile: 1, payrollProfile: 1, salaryBreakdown: 1 } }
+      ).catch(e => console.warn('Failed to clean Employee Mongoose doc:', e.message));
+    }
+
     res.status(200).json({ success: true, message: 'Profile deleted successfully' });
   } catch (err) { next(err); }
 };
@@ -606,6 +662,14 @@ exports.getPayrollBatchHistory = async (req, res, next) => {
   try {
     const batches = await payrollService.getPayrollBatches(req.organizationId);
     res.status(200).json({ success: true, data: batches });
+  } catch (err) { next(err); }
+};
+
+exports.deleteBatch = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await payrollService.deleteBatch(id, req.organizationId, req.user?.id);
+    res.status(200).json({ success: true, message: 'Batch deleted successfully' });
   } catch (err) { next(err); }
 };
 

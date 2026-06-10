@@ -71,7 +71,7 @@ interface LeaveRequest {
   endDate: string;
   totalDays: number;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
   userId: User;
   approvedBy?: { name: string };
@@ -112,7 +112,7 @@ const LeaveRequestCard = ({
   isApproving: boolean;
   isRejecting: boolean;
 }) => {
-  const isPending = leave.status === 'pending';
+  const isPending = leave.status === 'PENDING';
   const employeeName = leave.userId?.name || 'Unknown';
   const initial = employeeName.charAt(0).toUpperCase();
 
@@ -817,15 +817,15 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
     try {
       const response = await reportAPI.getLeaveSummary({});
       const data = extractData(response, []);
-      
+
       const newStats = { total: 0, pending: 0, approved: 0, rejected: 0 };
-      
+
       data.forEach((item: any) => {
         // Robust status matching: handle both object and string _id, and trim/lowercase
         const rawStatus = (typeof item._id === 'object' ? item._id?.status : item._id) || '';
         const status = String(rawStatus).toLowerCase().trim();
         const count = Number(item.count) || 0;
-        
+
         if (status || count > 0) {
           newStats.total += count;
           if (status.includes('pending')) newStats.pending += count;
@@ -833,7 +833,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
           else if (status.includes('rejected')) newStats.rejected += count;
         }
       });
-      
+
       setStats(newStats);
     } catch (error) {
       console.error('Error fetching leave stats:', error);
@@ -868,7 +868,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
       setLoading(true);
       const params: any = { page, limit: 10, isAdminView: true };
       if (searchQuery.trim().length >= 2) params.search = searchQuery.trim();
-      if (filters.status) params.status = filters.status;
+      if (filters.status) params.status = filters.status.toUpperCase();
       if (filters.leaveType) params.leaveType = filters.leaveType;
       if (filters.userId) params.userId = filters.userId;
       if (filters.leaveId) params.leaveId = filters.leaveId;
@@ -1059,7 +1059,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
     try {
       setIsExporting(true);
       const params: any = { isAdminView: true, limit: 10000 };
-      if (filters.status) params.status = filters.status;
+      if (filters.status) params.status = filters.status.toUpperCase();
       if (filters.leaveType) params.leaveType = filters.leaveType;
       if (filters.userId) params.userId = filters.userId;
       if (filters.leaveId) params.leaveId = filters.leaveId;
@@ -1112,7 +1112,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
 
       const csvData = await userAPI.export(params);
       const fileName = `leave_eligibility_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
-      
+
       await exportFile(csvData as string, fileName, 'text/csv');
     } catch (error: any) {
       console.error('Export failed:', error);
@@ -1505,11 +1505,11 @@ const styles = StyleSheet.create({
   exportButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#10b981' },
   exportButtonText: { color: '#10b981', fontWeight: '600', fontSize: 13 },
 
-  requestCard: { 
-    backgroundColor: 'white', 
-    borderRadius: 16, 
-    marginBottom: 12, 
-    borderWidth: 1, 
+  requestCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
     overflow: 'hidden',
     shadowColor: '#000',

@@ -53,6 +53,7 @@ import {
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import { timesheetAPI, projectAPI, announcementAPI, calendarAPI, leaveAPI, userAPI, settingsAPI } from '../../services/endpoints';
+import { appEventBus } from '../../utils/eventBus';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -455,6 +456,8 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [summaryData, setSummaryData] = useState<DashboardSummary | null>(null);
+  const [activeEmployeeCount, setActiveEmployeeCount] = useState<number>(0);
+  const [inactiveEmployeeCount, setInactiveEmployeeCount] = useState<number>(0);
   const [projects, setProjects] = useState<Project[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -493,6 +496,22 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
       console.error('Error saving preferences:', error);
       Alert.alert('Error', 'Failed to save preferences');
     }
+  };
+
+  const getUserListTotal = (response: any) => {
+    if (!response) return 0;
+    if (typeof response.total === 'number') return response.total;
+    if (response.pagination?.total != null) return response.pagination.total;
+    if (response.data?.pagination?.total != null) return response.data.pagination.total;
+    if (response.data?.data?.pagination?.total != null) return response.data.data.pagination.total;
+    if (response.data?.users && response.data.pagination?.total != null) return response.data.pagination.total;
+    if (response.data?.users && typeof response.data.users.length === 'number' && response.data.pagination == null) return response.data.users.length;
+    if (Array.isArray(response.users) && response.pagination?.total != null) return response.pagination.total;
+    if (Array.isArray(response.data)) return response.data.length;
+    if (Array.isArray(response.data?.data)) return response.data.data.length;
+    if (Array.isArray(response.users)) return response.users.length;
+    if (Array.isArray(response)) return response.length;
+    return 0;
   };
 
   const loadUserData = async () => {
@@ -554,6 +573,21 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           ],
           projectTotals: [],
         });
+      }
+
+      try {
+        const [activeResponse, inactiveResponse] = await Promise.all([
+          userAPI.getAll({ status: 'active', limit: 1 }),
+          userAPI.getAll({ status: 'inactive', limit: 1 }),
+        ]);
+        const activeTotal = getUserListTotal(activeResponse);
+        const inactiveTotal = getUserListTotal(inactiveResponse);
+        setActiveEmployeeCount(activeTotal);
+        setInactiveEmployeeCount(inactiveTotal);
+      } catch (err: any) {
+        console.error('Employee count fetch error:', err?.message || err);
+        setActiveEmployeeCount(0);
+        setInactiveEmployeeCount(0);
       }
 
       // Fetch projects
@@ -634,6 +668,17 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   };
 
   const fetchAllData = async () => { await fetchDashboardData(); };
+
+  useEffect(() => {
+    const handleEmployeeStatusUpdated = () => {
+      fetchDashboardData();
+    };
+
+    appEventBus.on('employee-status-updated', handleEmployeeStatusUpdated);
+    return () => {
+      appEventBus.off('employee-status-updated', handleEmployeeStatusUpdated);
+    };
+  }, [currentWeekStart, selectedProjectId]);
 
   useFocusEffect(useCallback(() => { fetchAllData(); }, [currentWeekStart, selectedProjectId]));
 
@@ -761,11 +806,23 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
             )}
 
             {(isAdmin || isHR) && (
-              <View style={styles.adminStats}>
-                <View style={styles.adminStatItem}><Text style={styles.adminStatValue}>{summaryData?.totalEmployees || 0}</Text><Text style={styles.adminStatLabel}>Active Employees</Text></View>
-                <View style={styles.adminStatDivider} />
-                <View style={styles.adminStatItem}><Text style={styles.adminStatValue}>{summaryData?.pendingTimesheets || 0}</Text><Text style={styles.adminStatLabel}>Pending Timesheets</Text></View>
-              </View>
+              <>
+                <View style={styles.adminStats}>
+                  <View style={styles.adminStatItem}><Text style={styles.adminStatValue}>{summaryData?.totalEmployees || 0}</Text><Text style={styles.adminStatLabel}>Employees</Text></View>
+                  <View style={styles.adminStatDivider} />
+                  <View style={styles.adminStatItem}><Text style={styles.adminStatValue}>{summaryData?.pendingTimesheets || 0}</Text><Text style={styles.adminStatLabel}>Pending Timesheets</Text></View>
+                </View>
+                <View style={styles.employeeStatusRow}>
+                  <View style={styles.employeeStatusBadgeActive}>
+                    <Text style={styles.employeeStatusLabel}>Active</Text>
+                    <Text style={styles.employeeStatusValue}>{activeEmployeeCount}</Text>
+                  </View>
+                  <View style={styles.employeeStatusBadgeInactive}>
+                    <Text style={styles.employeeStatusLabel}>Inactive</Text>
+                    <Text style={styles.employeeStatusValue}>{inactiveEmployeeCount}</Text>
+                  </View>
+                </View>
+              </>
             )}
           </LinearGradient>
 
@@ -1039,6 +1096,11 @@ const styles = StyleSheet.create({
   adminStatValue: { fontSize: moderateScale(32), fontWeight: '800', color: COLORS.white },
   adminStatLabel: { fontSize: moderateScale(11), color: '#94a3b8', marginTop: verticalScale(4) },
   adminStatDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
+  employeeStatusRow: { flexDirection: 'row', gap: scale(12), marginTop: verticalScale(12), justifyContent: 'center' },
+  employeeStatusBadgeActive: { flex: 1, backgroundColor: 'rgba(16,185,129,0.12)', borderRadius: scale(14), padding: scale(12), alignItems: 'center' },
+  employeeStatusBadgeInactive: { flex: 1, backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: scale(14), padding: scale(12), alignItems: 'center' },
+  employeeStatusLabel: { fontSize: moderateScale(12), color: '#94a3b8', marginBottom: verticalScale(4), textTransform: 'uppercase', letterSpacing: 0.4 },
+  employeeStatusValue: { fontSize: moderateScale(18), fontWeight: '800', color: COLORS.white },
   quickActions: { flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(20) },
   quickAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(12), padding: scale(14), borderRadius: scale(16), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
   quickActionIcon: { width: scale(40), height: verticalScale(40), borderRadius: scale(12), alignItems: 'center', justifyContent: 'center' },

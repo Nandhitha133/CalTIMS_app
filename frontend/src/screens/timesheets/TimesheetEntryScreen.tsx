@@ -39,6 +39,7 @@ import {
   RefreshCw,
   CheckCheck,
 } from 'lucide-react-native';
+import { useSocketEvent } from '../../services/socket';
 import {
   timesheetAPI,
   projectAPI,
@@ -50,6 +51,7 @@ import {
 } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -130,11 +132,11 @@ const DropdownModal = ({ visible, onClose, options, selectedValue, onSelect, tit
 };
 
 // Quick Fill Suggestions Panel Component
-const QuickFillSuggestions = ({ 
-  visible, 
-  onClose, 
-  onRepeatLastWeek, 
-  onFillStandardHours, 
+const QuickFillSuggestions = ({
+  visible,
+  onClose,
+  onRepeatLastWeek,
+  onFillStandardHours,
   onAutoFill,
   isRepeatLoading,
   isWeekSubmitted,
@@ -521,17 +523,17 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   const weekStartsOn = 1; // Monday
   const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn }), [currentDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  
+
   // Dynamic settings from backend (Unified from fullSettings)
   const timesheetSettings = fullSettings?.timesheet || tsSettings;
   const complianceSettings = fullSettings?.compliance || {};
   const generalSettings = fullSettings?.general || {};
 
-  const maxHoursPerDay = timesheetSettings?.maxHoursPerDay || 12;
-  const minHoursPerDay = timesheetSettings?.minHoursPerDay || 4;
+  const maxHoursPerDay = 24;
+  const minHoursPerDay = 8;
   const maxHoursPerWeek = timesheetSettings?.maxHoursPerWeek || 48;
   const workingHoursPerDay = generalSettings?.workingHoursPerDay || timesheetSettings?.workingHoursPerDay || 8;
-  
+
   const leaveTaskTypes = timesheetSettings?.leaveTypes || DEFAULT_LEAVE_TYPES;
   const taskCategories = timesheetSettings?.taskCategories || DEFAULT_TASK_TYPES;
 
@@ -548,7 +550,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       Alert.alert('Error', 'Cannot modify a submitted week');
       return;
     }
-    
+
     // Ensure user data is available
     let currentUserId = user?.id || user?._id;
     if (!currentUserId) {
@@ -565,11 +567,11 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     try {
       const today = new Date();
       today.setHours(23, 59, 59, 999);
-      
+
       const lastWeekStart = addDays(weekStart, -7);
       const from = format(lastWeekStart, 'yyyy-MM-dd');
       const to = format(addDays(lastWeekStart, 6), 'yyyy-MM-dd');
-      
+
       console.log(`Fetching last week timesheets from ${from} to ${to} for user ${currentUserId}`);
       const response = await timesheetAPI.getAll({ from, to, userId: currentUserId });
       const lastWeekTimesheets = extractData(response, []);
@@ -587,7 +589,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         ts.rows.forEach((r: any) => {
           const pid = (r.projectId?._id || r.projectId?.id || r.projectId)?.toString();
           if (!pid || pid === 'LEAVE-SYS') return;
-          
+
           // Allow copying even if project not in current "assigned" list, 
           // but we should ideally check if it still exists.
           // For now, we'll be permissive.
@@ -599,12 +601,12 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
           const newDayHours = Array(7).fill('00:00');
           weekDays.forEach((day, i) => {
             if (day.getTime() > today.getTime()) return; // Only fill up to today
-            
+
             const lastWeekDay = format(addDays(lastWeekStart, i), 'yyyy-MM-dd');
             const entry = r.entries?.find((e: any) => {
-              try { 
+              try {
                 const entryDate = typeof e.date === 'string' ? e.date.split('T')[0] : format(new Date(e.date), 'yyyy-MM-dd');
-                return entryDate === lastWeekDay; 
+                return entryDate === lastWeekDay;
               } catch { return false; }
             });
             if (entry) {
@@ -655,7 +657,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
     // If no active row, and we have a default empty row, use it
     if (activeRowIndices.length === 0 && rows.length === 1 && !rows[0].projectId) {
-       activeRowIndices = [{ r: rows[0], idx: 0 }];
+      activeRowIndices = [{ r: rows[0], idx: 0 }];
     }
 
     if (activeRowIndices.length === 0) {
@@ -670,20 +672,20 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
     const today = new Date();
     today.setHours(23, 59, 59, 999);
-    
+
     let filledDays = 0;
 
     const newRows = rows.map((row, rowIdx) => {
       const isActive = activeRowIndices.some(({ idx }) => idx === rowIdx);
       if (!isActive) return { ...row };
-      
+
       const newDayHours = [...row.dayHours];
       weekDays.forEach((day, i) => {
         if (!isWorkingDay(day)) return;
         if (day.getTime() > today.getTime()) return; // Only fill up to today
         if (lockedDays[i]) return;
         if (holidays.has(format(day, 'yyyy-MM-dd'))) return;
-        
+
         const cur = newDayHours[i];
         if (!cur || cur === '00:00') {
           newDayHours[i] = perRowStr;
@@ -720,7 +722,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         const dateKey = typeof dateStr === 'string'
           ? dateStr.split('T')[0]
           : format(new Date(dateStr), 'yyyy-MM-dd');
-        
+
         // Use netHours or hoursWorked, fallback to 0
         const net = parseFloat(log.netHours || log.hoursWorked || log.totalHours || 0);
         if (net > 0) {
@@ -735,7 +737,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
     // If no active row, and we have a default empty row, use it
     if (activeRowIndices.length === 0 && rows.length === 1 && !rows[0].projectId) {
-       activeRowIndices = [{ r: rows[0], idx: 0 }];
+      activeRowIndices = [{ r: rows[0], idx: 0 }];
     }
 
     if (activeRowIndices.length === 0) {
@@ -757,7 +759,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
       const dateKey = format(day, 'yyyy-MM-dd');
       const hasAttendance = Object.keys(attendanceByDate).length > 0;
-      
+
       let dailyTarget = 0;
       if (attendanceByDate[dateKey]) {
         dailyTarget = attendanceByDate[dateKey];
@@ -912,6 +914,14 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     ]);
     setLoading(false);
   };
+
+  // Refresh settings when backend notifies of changes
+  useSocketEvent('settings_updated', (payload: any) => {
+    console.log('[Socket] Settings updated event received in TimesheetEntryScreen:', payload);
+    // Refresh timesheet-related settings so min/max/enforcement flags propagate
+    fetchFullSettings();
+    fetchSettings();
+  });
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -1069,7 +1079,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   };
 
   const handleAddRow = () => {
-    const maxRows = tsSettings?.maxRowsPerWeek || 20;
+    const maxRows = timesheetSettings?.maxRowsPerWeek || 20;
     const currentWorkRows = rows.filter(r => !r.isLeaveRow && !isPermissionRow(r.taskType));
     if (currentWorkRows.length >= maxRows) {
       setRowLimitMessage(`Maximum ${maxRows} project rows allowed per week.`);
@@ -1118,27 +1128,26 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   };
 
   const handleSubmitWeek = async () => {
-    const friday = addDays(weekStart, 4);
-    friday.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (today < friday) {
-      Alert.alert('Validation Error', 'You can only submit the timesheet on or after Friday of the selected week.');
+    if (!isSubmitAllowed) {
+      if (isTimesheetFrozen) {
+        Alert.alert('Validation Error', 'This timesheet is frozen and cannot be submitted.');
+      } else {
+        Alert.alert('Validation Error', `The submission deadline (${submissionDeadlineName}) has passed. You can no longer submit this timesheet.`);
+      }
       return;
     }
 
     // Organization Policy Enforcement
-    if (tsSettings?.enforceMinHoursOnSubmit) {
+    if (timesheetSettings?.enforceMinHoursOnSubmit) {
       // 1. Check Daily Minimums
       for (let i = 0; i < 7; i++) {
         if (!isWorkingDay(weekDays[i])) continue;
         if (holidays.has(format(weekDays[i], 'yyyy-MM-dd'))) continue;
-        
+
         const dayTotal = calculateDayTotal(i);
         if (dayTotal > 0 && dayTotal < minHoursPerDay) {
           Alert.alert(
-            'Policy Violation', 
+            'Policy Violation',
             `Daily minimum not met for ${format(weekDays[i], 'EEEE')}. You have logged ${formatHours(dayTotal)} but organizational policy requires a minimum of ${minHoursPerDay} hours.`
           );
           return;
@@ -1227,6 +1236,33 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       return;
     }
 
+    const targetRow = rows.find(r => r.id === rowId);
+    if (!targetRow) return;
+
+    if (isPermissionRow(targetRow.taskType)) {
+      const permissionMaxHoursPerDay = timesheetSettings?.permissionMaxHoursPerDay || 2;
+      const permissionMaxDaysPerWeek = timesheetSettings?.permissionMaxDaysPerWeek || 1;
+
+      if (newEntryHours > permissionMaxHoursPerDay) {
+        Alert.alert('Policy Violation', `Permission hours cannot exceed ${permissionMaxHoursPerDay} hours per day.`);
+        return;
+      }
+      
+      if (newEntryHours > 0) {
+        let daysWithPermission = 0;
+        targetRow.dayHours.forEach((time, idx) => {
+          if (idx !== dayIndex && time && time !== '00:00') {
+             const [rh, rm] = time.split(':').map(Number);
+             if (rh > 0 || rm > 0) daysWithPermission++;
+          }
+        });
+        if (daysWithPermission + 1 > permissionMaxDaysPerWeek) {
+          Alert.alert('Policy Violation', `You can only request permission for up to ${permissionMaxDaysPerWeek} days per week.`);
+          return;
+        }
+      }
+    }
+
     // Calculate daily total including this new value
     const otherRowsTotal = rows.reduce((acc, row) => {
       if (row.id === rowId) return acc;
@@ -1312,8 +1348,44 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     return currentWeekTs ? ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status?.toLowerCase()) : false;
   }, [existingTimesheets, weekStart]);
 
+
+
+  const autoLockDeadlineStr = useMemo(() => timesheetSettings?.freezeTimesheet || complianceSettings?.autoFreezeTimesheets || 'Monday 18:00', [complianceSettings, timesheetSettings]);
+  const weeklyDeadlineStr = useMemo(() => timesheetSettings?.submissionDeadline || 'Friday 18:00', [timesheetSettings]);
+
+  const isTimesheetFrozen = useMemo(() => {
+    const weekStr = format(weekStart, 'yyyy-MM-dd');
+    const currentWeekTs = existingTimesheets?.find(t => {
+      const tsDate = typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd');
+      return tsDate === weekStr;
+    });
+    if (currentWeekTs?.status?.toLowerCase() === 'frozen') return true;
+
+    const [dayName, timeStr] = autoLockDeadlineStr.trim().split(/\s+/);
+    const daysMap: Record<string, number> = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+    const targetDayIndex = daysMap[dayName?.toLowerCase()] ?? 1;
+
+    const wsd = fullSettings?.general?.weekStartDay || 'monday';
+    const isMondayStart = wsd.toLowerCase() === 'monday';
+    let offset = isMondayStart ? (targetDayIndex === 0 ? 6 : targetDayIndex - 1) : targetDayIndex;
+
+    // If the lock day is Mon/Tue/Wed, it refers to the NEXT week. If Thu/Fri/Sat/Sun, it refers to THIS week.
+    const lockDaysOffset = offset <= 2 ? 7 + offset : offset;
+
+    const lockDate = addDays(weekStart, lockDaysOffset);
+    if (timeStr) {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      lockDate.setHours(hours || 0, minutes || 0, 0, 0);
+    } else {
+      lockDate.setHours(23, 59, 59, 999);
+    }
+
+    return new Date() > lockDate;
+  }, [existingTimesheets, weekStart, autoLockDeadlineStr, fullSettings]);
+
   const isRowLocked = (row: any) => {
     if (row.isLeaveRow || isPermissionRow(row.taskType)) return false;
+    if (isTimesheetFrozen) return true;
     const weekStr = format(weekStart, 'yyyy-MM-dd');
     const currentWeekTs = existingTimesheets?.find(t => {
       const tsDate = typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd');
@@ -1407,13 +1479,30 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     return formatHours(totalHours);
   };
 
+  const submissionDeadlineName = useMemo(() => {
+    const deadline = timesheetSettings?.submissionDeadline || 'Friday 18:00';
+    const dayName = deadline.toLowerCase().split(' ')[0];
+    return dayName.charAt(0).toUpperCase() + dayName.slice(1);
+  }, [timesheetSettings]);
+
   const isSubmitAllowed = useMemo(() => {
-    const friday = addDays(weekStart, 4);
-    friday.setHours(0, 0, 0, 0);
+    if (isTimesheetFrozen) return false;
+    const deadline = timesheetSettings?.submissionDeadline || 'Friday 18:00';
+    const targetDayName = deadline.toLowerCase().split(' ')[0];
+    const daysMap: Record<string, number> = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+    const targetDayIndex = daysMap[targetDayName] ?? 5;
+
+    const wsd = fullSettings?.general?.weekStartDay || 'monday';
+    const isMondayStart = wsd.toLowerCase() === 'monday';
+    let offset = isMondayStart ? (targetDayIndex === 0 ? 6 : targetDayIndex - 1) : targetDayIndex;
+
+    const deadlineDate = addDays(weekStart, offset);
+    deadlineDate.setHours(0, 0, 0, 0);
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return today >= friday;
-  }, [weekStart]);
+    return today <= deadlineDate;
+  }, [weekStart, timesheetSettings, fullSettings, isTimesheetFrozen]);
 
   const hasActiveRows = useMemo(() => {
     return rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && r.projectId && r.taskType !== 'Select Task');
@@ -1430,11 +1519,11 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Quick Fill Suggestions Panel */}
           <QuickFillSuggestions
-            visible={showSuggestions && !isWeekSubmitted}
+            visible={showSuggestions && !isWeekSubmitted && !isTimesheetFrozen}
             onClose={() => setShowSuggestions(false)}
             onRepeatLastWeek={handleRepeatLastWeek}
             onFillStandardHours={handleFillStandardHours}
@@ -1448,33 +1537,61 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
           />
 
           {/* Re-open suggestions button */}
-          {!showSuggestions && !isWeekSubmitted && (
+          {!showSuggestions && !isWeekSubmitted && !isTimesheetFrozen && (
             <TouchableOpacity style={styles.reopenSuggestionsButton} onPress={() => setShowSuggestions(true)}>
               <Sparkles size={14} color="#6366f1" />
               <Text style={styles.reopenSuggestionsText}>Quick Fill</Text>
             </TouchableOpacity>
           )}
 
+          {/* Timesheet Frozen Banner */}
+          {isTimesheetFrozen && (
+            <View style={styles.frozenBannerContainer}>
+              <View style={styles.frozenBannerContent}>
+                <View style={styles.frozenBannerHeader}>
+                  <AlertTriangle size={16} color="#e11d48" />
+                  <Text style={styles.frozenBannerTitle}>Timesheet Frozen</Text>
+                </View>
+                <Text style={styles.frozenBannerText}>
+                  This timesheet week has been frozen — the submission deadline ({weeklyDeadlineStr}) has passed and no further edits are allowed. (Auto-lock: {autoLockDeadlineStr})
+                </Text>
+                <Text style={styles.frozenBannerText}>
+                  Please raise a Help & Support ticket so the admin can assist you.
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.raiseTicketButton} onPress={() => navigation.navigate('Incidents' as never)}>
+                <Text style={styles.raiseTicketButtonText}>Raise Ticket</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Header Section */}
           <View style={styles.headerContainer}>
-            <View style={styles.headerTopRow}>
-              <View style={styles.navWrapper}>
-                <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.navButton}>
-                  <ChevronLeft size={16} color="#64748b" />
-                </TouchableOpacity>
-                <View style={styles.weekInfo}>
-                  <Calendar size={14} color="#6366f1" />
-                  <Text style={styles.weekMonthText}>{format(weekStart, 'MMMM yyyy')}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => handleWeekChange(1)}
-                  disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
-                  style={[styles.navButton, isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 })) && styles.navButtonDisabled]}
-                >
-                  <ChevronRight size={16} color="#64748b" />
-                </TouchableOpacity>
+            <View style={styles.navWrapper}>
+              <TouchableOpacity onPress={() => handleWeekChange(-1)} style={styles.navButton}>
+                <ChevronLeft size={16} color="#64748b" />
+              </TouchableOpacity>
+              <View style={styles.weekInfo}>
+                <Calendar size={14} color="#6366f1" />
+                <Text style={styles.weekMonthText}>{format(weekStart, 'MMMM yyyy')}</Text>
+                <View style={styles.navDivider} />
+                <Text style={styles.weekSubTextItalic}>Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')} (Week {getWeek(weekStart)})</Text>
               </View>
-              
+              <TouchableOpacity
+                onPress={() => handleWeekChange(1)}
+                disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }))}
+                style={[styles.navButton, isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 })) && styles.navButtonDisabled]}
+              >
+                <ChevronRight size={16} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.headerControls}>
+              <View style={styles.deadlineBadge}>
+                <Clock size={14} color="#64748b" />
+                <Text style={styles.deadlineText}>DEADLINE: <Text style={styles.deadlineTextBold}>{weeklyDeadlineStr}</Text></Text>
+              </View>
+
               <TouchableOpacity
                 onPress={() => setCurrentDate(new Date())}
                 style={styles.currentWeekButton}
@@ -1482,13 +1599,6 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
                 <Calendar size={14} color="white" />
                 <Text style={styles.currentWeekButtonText}>CURRENT WEEK</Text>
               </TouchableOpacity>
-            </View>
-
-            <View style={styles.weekSubBanner}>
-              <Info size={12} color="#6366f1" />
-              <Text style={styles.weekSubText}>
-                Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')} (Week {getWeek(weekStart)})
-              </Text>
             </View>
           </View>
 
@@ -1558,7 +1668,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
                     <Text style={[styles.headerCell, styles.headerTotal]}>WORK HOURS</Text>
                     <Text style={[styles.headerCell, styles.headerAction]}>ACTION</Text>
                   </View>
-                  
+
                   {rows.map((row, index) => (
                     <TimesheetRow
                       key={row.id}
@@ -1649,7 +1759,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
               <>
                 <Send size={18} color="white" />
                 <Text style={styles.submitButtonText}>
-                  {isWeekSubmitted ? 'Week Submitted' : (!isSubmitAllowed ? 'Cannot Submit Before Friday' : `Submit Week (${formatHours(totalWeekHours)})`)}
+                  {isWeekSubmitted ? 'Week Submitted' : (!isSubmitAllowed ? `Cannot Submit Before ${submissionDeadlineName}` : `Submit Week (${formatHours(totalWeekHours)})`)}
                 </Text>
               </>
             )}
@@ -1849,22 +1959,67 @@ const styles = StyleSheet.create({
     color: '#6366f1',
   },
 
+  // Frozen Banner
+  frozenBannerContainer: {
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#ffe4e6',
+    borderRadius: 8,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    flexDirection: 'column',
+  },
+  frozenBannerContent: {
+    marginBottom: 10,
+  },
+  frozenBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  frozenBannerTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#e11d48',
+    marginLeft: 6,
+  },
+  frozenBannerText: {
+    fontSize: 12,
+    color: '#be123c',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  raiseTicketButton: {
+    backgroundColor: '#e11d48',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  raiseTicketButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
   // Header
   headerContainer: {
     marginHorizontal: 16,
     marginBottom: 16,
     marginTop: 8,
   },
-  headerTopRow: {
+  headerControls: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 12,
   },
   navWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 24,
     paddingVertical: 6,
     paddingHorizontal: 8,
     borderWidth: 1,
@@ -1874,45 +2029,50 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
-    flexShrink: 1,
   },
-  navButton: { padding: 6, borderRadius: 8, backgroundColor: '#f8fafc' },
+  navButton: { padding: 6, borderRadius: 20, backgroundColor: '#f8fafc' },
   navButtonDisabled: { opacity: 0.5 },
-  weekInfo: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 6, gap: 6 },
+  weekInfo: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, gap: 8 },
   weekMonthText: { fontSize: 13, fontWeight: 'bold', color: '#1e293b' },
-  weekDateText: { fontSize: 12, color: '#64748b', fontStyle: 'italic' },
-  currentWeekButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#6366f1',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    marginLeft: 8,
-  },
-  currentWeekButtonText: { color: 'white', fontWeight: 'bold', fontSize: 11 },
-  weekSubBanner: {
+  navDivider: { width: 1, height: 16, backgroundColor: '#cbd5e1' },
+  weekSubTextItalic: { fontSize: 12, color: '#64748b', fontStyle: 'italic' },
+
+  deadlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 24,
     gap: 6,
   },
-  weekSubText: {
-    fontSize: 11,
+  deadlineText: {
+    fontSize: 12,
     color: '#475569',
-    fontWeight: '500',
+  },
+  deadlineTextBold: {
+    fontWeight: 'bold',
+    color: '#334155',
+  },
+
+  currentWeekButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#6366f1',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 24,
+    elevation: 2,
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  currentWeekButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 
   // Main Card
@@ -2023,12 +2183,12 @@ const styles = StyleSheet.create({
   },
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   headerCell: { paddingVertical: 12, paddingHorizontal: 8, fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', justifyContent: 'center' },
-  headerSno: { width: 50, textAlign: 'center' },
-  headerProject: { width: 180 },
-  headerTask: { width: 180 },
-  headerDay: { width: 90, alignItems: 'center', justifyContent: 'center' },
-  headerTotal: { width: 100, textAlign: 'center' },
-  headerAction: { width: 70, textAlign: 'center' },
+  headerSno: { width: scale(50), textAlign: 'center' },
+  headerProject: { width: scale(180) },
+  headerTask: { width: scale(180) },
+  headerDay: { width: scale(90), alignItems: 'center', justifyContent: 'center' },
+  headerTotal: { width: scale(100), textAlign: 'center' },
+  headerAction: { width: scale(70), textAlign: 'center' },
   dayName: { fontSize: 11, fontWeight: 'bold', color: '#1e293b' },
   dayDate: { fontSize: 9, color: '#94a3b8', marginTop: 2 },
   lowHoursBadge: {
@@ -2051,13 +2211,13 @@ const styles = StyleSheet.create({
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   permissionRow: { backgroundColor: '#fefce8' },
   cell: { paddingVertical: 10, paddingHorizontal: 8, justifyContent: 'center' },
-  cellSno: { width: 50, alignItems: 'center' },
-  snoText: { fontSize: 13, color: '#64748b' },
-  cellProject: { width: 180 },
-  cellTask: { width: 180 },
-  cellHour: { width: 90, alignItems: 'center' },
-  cellTotal: { width: 100, alignItems: 'center' },
-  cellAction: { width: 70, alignItems: 'center' },
+  cellSno: { width: scale(50), alignItems: 'center' },
+  snoText: { fontSize: moderateScale(13), color: '#64748b' },
+  cellProject: { width: scale(180) },
+  cellTask: { width: scale(180) },
+  cellHour: { width: scale(90), alignItems: 'center' },
+  cellTotal: { width: scale(100), alignItems: 'center' },
+  cellAction: { width: scale(70), alignItems: 'center' },
   selectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#f8fafc', height: 44 },
   selectButtonText: { fontSize: 12, color: '#1e293b', flex: 1 },
   placeholderText: { color: '#94a3b8' },
@@ -2082,8 +2242,8 @@ const styles = StyleSheet.create({
   leaveTotalHours: { color: '#10b981' },
   deleteButtonContainer: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center' },
   deleteButtonDisabled: { backgroundColor: '#f1f5f9' },
-  swipeRowContainer: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#f8fafc', height: 50 },
-  swipeLabelCell: { width: 410, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
+  swipeRowContainer: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#f8fafc', height: verticalScale(50) },
+  swipeLabelCell: { width: scale(410), flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(16) },
   swipeLabelText: { fontSize: 12, fontWeight: '600', color: '#334155' },
   swipeValueCell: { justifyContent: 'center', alignItems: 'center' },
   swipeValueText: { fontSize: 12, color: '#64748b', fontWeight: '500' },

@@ -124,7 +124,7 @@ class ApiService {
         errorMessage = response.statusText || errorMessage;
       }
 
-      console.error(`API ERROR [${response.status}] ${response.url}:`, errorMessage);
+      console.warn(`API ERROR [${response.status}] ${response.url}:`, errorMessage);
 
       const error: any = new Error(errorMessage);
       error.status = response.status;

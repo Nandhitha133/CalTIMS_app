@@ -233,7 +233,7 @@ const AddLeaveTypeModal = ({
 
   const handleAdd = () => {
     if (!name.trim()) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Leave name is required' });
+      Alert.alert('Error', 'Leave name is required');
       return;
     }
     onAdd({
@@ -485,20 +485,20 @@ export default function LeavePolicyTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setInitialState(JSON.stringify(leaveTypes));
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Leave Policy saved successfully!' });
+      Alert.alert('Success', 'Leave Policy saved successfully!');
     },
     onError: (error: any) => {
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Save failed' });
+      Alert.alert('Error', error.response?.data?.message || 'Save failed');
     },
   });
 
   const handleSave = () => {
     if (JSON.stringify(leaveTypes) === initialState) {
-      Toast.show({ type: 'info', text1: 'Info', text2: 'There is nothing to change' });
+      Alert.alert('Info', 'There is nothing to change');
       return;
     }
     if (!validation.isValid) {
-      Toast.show({ type: 'error', text1: 'Validation Error', text2: validation.error || 'Invalid configuration' });
+      Alert.alert('Validation Error', validation.error || 'Invalid configuration');
       return;
     }
     saveMutation.mutate();

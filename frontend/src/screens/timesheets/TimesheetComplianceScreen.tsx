@@ -43,6 +43,7 @@ import { timesheetAPI, projectAPI, settingsAPI, taskAPI } from '../../services/e
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
 import ProGuard from '../../components/common/ProGuard';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 
 interface User {
@@ -266,7 +267,8 @@ const FillModal = ({
       weekDays.forEach((day, i) => {
         // Simple Mon-Fri check
         const isWorkDay = day.getDay() !== 0 && day.getDay() !== 6;
-        if (isWorkDay && !isDayBeforeProjectStart(day, r.projectId)) {
+        const isFutureDate = format(day, 'yyyy-MM-dd') > format(new Date(), 'yyyy-MM-dd');
+        if (isWorkDay && !isDayBeforeProjectStart(day, r.projectId) && !isFutureDate) {
           newDayHours[i] = '08:00';
         }
       });
@@ -389,7 +391,8 @@ const FillModal = ({
                       </View>
 
                       {weekDays.map((day, dayIdx) => {
-                        const isDisabled = isDayBeforeProjectStart(day, row.projectId);
+                        const isFutureDate = format(day, 'yyyy-MM-dd') > format(new Date(), 'yyyy-MM-dd');
+                        const isDisabled = isDayBeforeProjectStart(day, row.projectId) || isFutureDate;
                         return (
                           <View key={dayIdx} style={[modalStyles.cell, modalStyles.dayCell]}>
                             <TextInput
@@ -978,8 +981,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   exportButton: {
-    width: 44,
-    height: 44,
+    width: scale(44),
+    height: scale(44),
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1018,8 +1021,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatar: {
-    width: 44,
-    height: 44,
+    width: scale(44),
+    height: scale(44),
     borderRadius: 12,
     backgroundColor: '#3b82f6',
     alignItems: 'center',
@@ -1185,17 +1188,17 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   projectCell: {
-    width: 100,
+    width: scale(100),
   },
   taskCell: {
-    width: 90,
+    width: scale(90),
   },
   dayCell: {
-    width: 45,
+    width: scale(45),
     alignItems: 'center',
   },
   actionCell: {
-    width: 60,
+    width: scale(60),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1234,15 +1237,15 @@ const modalStyles = StyleSheet.create({
     height: 40,
   },
   hourInput: {
-    width: 40,
+    width: scale(40),
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     paddingHorizontal: 6,
     paddingVertical: 8,
-    fontSize: 12,
+    fontSize: moderateScale(12),
     textAlign: 'center',
-    height: 40,
+    height: verticalScale(40),
   },
   hourInputDisabled: {
     opacity: 0.5,
@@ -1368,8 +1371,8 @@ const successModalStyles = StyleSheet.create({
     elevation: 10,
   },
   iconWrapper: {
-    width: 90,
-    height: 90,
+    width: scale(90),
+    height: scale(90),
     borderRadius: 45,
     backgroundColor: '#ecfdf5',
     alignItems: 'center',

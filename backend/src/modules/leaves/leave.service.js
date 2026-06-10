@@ -307,7 +307,7 @@ const leaveService = {
     }
 
     if (query.status && query.status !== '') filter.status = query.status.trim().toLowerCase();
-    if (query.leaveType && query.leaveType !== '') filter.leaveType = new RegExp(`^${query.leaveType.trim()}$`, 'i');
+    if (query.leaveType && query.leaveType !== '') filter.leaveType = query.leaveType.trim().toLowerCase();
     if (query.leaveId && query.leaveId !== '') filter.leaveId = new RegExp(query.leaveId.trim(), 'i');
 
     // Support filtering by leave date range (overlapping leaves)

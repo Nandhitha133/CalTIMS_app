@@ -49,6 +49,7 @@ import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
 import { exportFile, convertToCSV } from '../../utils/exportHelper';
 import { formatHours } from '../../utils/formatters';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -1113,8 +1114,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   filterButton: {
-    width: 44,
-    height: 44,
+    width: scale(44),
+    height: scale(44),
     borderRadius: 12,
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -1123,8 +1124,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   exportButton: {
-    width: 44,
-    height: 44,
+    width: scale(44),
+    height: scale(44),
     borderRadius: 12,
     backgroundColor: '#6366f1',
     alignItems: 'center',
@@ -1195,8 +1196,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   employeeAvatar: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
     borderRadius: 20,
     backgroundColor: '#eef2ff',
     alignItems: 'center',
@@ -1238,8 +1239,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   projectDot: {
-    width: 6,
-    height: 6,
+    width: scale(6),
+    height: scale(6),
     borderRadius: 3,
   },
   projectName: {
@@ -1274,8 +1275,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtn: {
-    width: 36,
-    height: 36,
+    width: scale(36),
+    height: scale(36),
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1461,8 +1462,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   detailsProjectDot: {
-    width: 10,
-    height: 10,
+    width: scale(10),
+    height: scale(10),
     borderRadius: 5,
   },
   detailsProjectName: {

@@ -65,15 +65,15 @@ const getFormattedTimezones = () => {
     ? (Intl as any).supportedValuesOf('timeZone')
     : commonTimezones;
 
-  return timezones
-    .map((tz: string) => {
+  return Array.from(timezones || commonTimezones)
+    .map((tz: any) => {
       try {
         const formatter = new Intl.DateTimeFormat('en-US', {
           timeZone: tz,
           timeZoneName: 'shortOffset',
         });
         const parts = formatter.formatToParts(new Date());
-        const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+0';
+        const offsetPart = parts.filter(p => p.type === 'timeZoneName')[0]?.value || 'GMT+0';
         let name = tz.replace(/_/g, ' ');
         if (tz === 'UTC') name = 'UTC (Coordinated Universal Time)';
         return { value: tz, label: `(${offsetPart}) ${name}` };
@@ -108,8 +108,10 @@ const DAYS_OF_WEEK = [
 ];
 
 // ---------- Helpers ----------
-const getSelectedDays = (workWeek: string) => {
+const getSelectedDays = (workWeek: any) => {
   if (!workWeek) return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  if (Array.isArray(workWeek)) return workWeek;
+  if (typeof workWeek !== 'string') return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
   if (workWeek === 'Mon-Fri') return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
   if (workWeek === 'Sun-Thu') return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
   if (workWeek === 'Mon-Sat')
@@ -270,9 +272,9 @@ const TimezonePicker = ({
 }) => {
   const [visible, setVisible] = useState(false);
   const [search, setSearch] = useState('');
-  const selected = TIMEZONES.find((t: any) => t.value === value);
+  const selected = TIMEZONES.filter((t: any) => t.value === value)[0];
   const filtered = search
-    ? TIMEZONES.filter((t: any) => t.label.toLowerCase().includes(search.toLowerCase()))
+    ? TIMEZONES.filter((t: any) => t.label.toLowerCase().indexOf(search.toLowerCase()) !== -1)
     : TIMEZONES;
 
   return (
@@ -299,7 +301,7 @@ const TimezonePicker = ({
                 style={styles.searchInput}
                 placeholder="Search timezone..."
                 value={search}
-                onChangeText={setSearch}
+                onChangeText={(text) => setSearch(text)}
                 autoFocus
                 clearButtonMode="while-editing"
               />
@@ -415,6 +417,8 @@ export default function OrganizationTab() {
         finalLogoUrl = res.data.url || res.data.data.url;
       }
 
+      const selectedCurrency = CURRENCIES.filter(c => c.code === form.currency)[0] || CURRENCIES[0];
+
       return settingsAPI.updateSettings({
         organization: {
           ...form,
@@ -434,6 +438,9 @@ export default function OrganizationTab() {
           dateFormat: form.dateFormat,
           enableEnterpriseRBAC: form.enableEnterpriseRBAC,
         },
+        payroll: {
+          currencySymbol: selectedCurrency.symbol,
+        }
       });
     },
     onSuccess: () => {
@@ -737,7 +744,7 @@ const PickerSelect = ({
 }) => {
   const [visible, setVisible] = useState(false);
   const optArray = typeof options[0] === 'string' ? (options as string[]).map(o => ({ value: o, label: o })) : options as any;
-  const selected = optArray.find((o: any) => o.value === value);
+  const selected = optArray.filter((o: any) => o.value === value)[0];
 
   return (
     <>

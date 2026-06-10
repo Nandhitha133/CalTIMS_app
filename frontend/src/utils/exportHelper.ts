@@ -10,7 +10,7 @@ export function convertToCSV(headers: string[], rows: any[][]): string {
   const BOM = '\uFEFF';
   const csvContent = [
     headers.join(','),
-    ...rows.map(row => 
+    ...rows.map(row =>
       row.map(cell => {
         const str = String(cell ?? '').replace(/"/g, '""');
         return `"${str}"`;
@@ -218,4 +218,92 @@ export async function requestStoragePermission(): Promise<boolean> {
     }
   }
   return true;
+}
+
+/**
+ * Native File Downloader for Binary Files (PDFs, Images, etc)
+ * Bypasses React Native's fetch which corrupts binary streams.
+ */
+export async function downloadFileFromUrl(
+  url: string,
+  fileName: string,
+  fileType: string,
+  headers: Record<string, string> = {}
+): Promise<boolean> {
+  console.log(`[downloadFileFromUrl] Starting direct native download for: ${fileName}`);
+
+  try {
+    const { FileViewer } = NativeModules;
+
+    // 1. Android Flow
+    if (Platform.OS === 'android') {
+      const downloadPath = `${RNFS.ExternalStorageDirectoryPath}/Download/${fileName}`;
+
+      if (Platform.Version < 29) {
+        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Storage permission is required to save the report.');
+          return false;
+        }
+      }
+
+      try {
+        const options = {
+          fromUrl: url,
+          toFile: downloadPath,
+          headers
+        };
+
+        const res = await RNFS.downloadFile(options).promise;
+
+        if (res.statusCode !== 200) throw new Error('Download failed with status: ' + res.statusCode);
+
+        try { await RNFS.scanFile(downloadPath); } catch (e) { }
+
+        Alert.alert('Download Complete', `File has been saved successfully to your Downloads folder:\n\n${fileName}`, [
+          { text: 'OK' },
+          {
+            text: 'Open File', onPress: async () => {
+              try { await FileViewer.openFile(downloadPath, fileType); }
+              catch (e) { Alert.alert('PDF Viewer Required', 'No application found to open this PDF. Please install a PDF viewer (like Google PDF Viewer or Adobe Reader) to open it. The file is saved in your Downloads folder.'); }
+            }
+          }
+        ]);
+        return true;
+      } catch (writeErr) {
+        console.warn('Direct write failed, falling back to cache:', writeErr);
+        // Fallback to cache
+        const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+        await RNFS.downloadFile({ fromUrl: url, toFile: cachePath, headers }).promise;
+
+        Alert.alert('Download Complete', `File downloaded securely.\n\nWould you like to open it now?`, [
+          { text: 'Cancel' },
+          {
+            text: 'Open File', onPress: async () => {
+              try { await FileViewer.openFile(cachePath, fileType); }
+              catch (e) { Alert.alert('PDF Viewer Required', 'No application found to open this PDF. Please install a PDF viewer to open it.'); }
+            }
+          }
+        ]);
+        return true;
+      }
+    }
+
+    // 2. iOS Flow
+    if (Platform.OS === 'ios') {
+      const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+      const res = await RNFS.downloadFile({ fromUrl: url, toFile: cachePath, headers }).promise;
+
+      if (res.statusCode !== 200) throw new Error('Download failed');
+
+      const shareResult = await Share.share({ title: fileName, url: `file://${cachePath}` });
+      return shareResult.action === Share.sharedAction;
+    }
+
+    return true;
+  } catch (err: any) {
+    console.error('Direct download error:', err);
+    Alert.alert('Download Failed', 'Could not fetch the file from the server.');
+    return false;
+  }
 }

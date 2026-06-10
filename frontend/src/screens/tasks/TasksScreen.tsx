@@ -666,6 +666,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [tempFilters, setTempFilters] = useState({ projectId: '', status: '' });
+  const [taskStats, setTaskStats] = useState({ total: 0, pending: 0, inProgress: 0, completed: 0 });
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -791,6 +792,20 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       setTasks(extracted.data);
       setTotalPages(extracted.pagination.totalPages || 1);
       setTotalResults(extracted.pagination.total || 0);
+
+      // Fetch accurate stats ignoring pagination
+      const statsParams: any = { limit: 10000 };
+      if (searchQuery.trim().length >= 2) statsParams.search = searchQuery.trim();
+      if (projectFilter) statsParams.projectId = projectFilter;
+      const statsResponse = await taskAPI.getAll(statsParams);
+      const statsData = extractResponseData(statsResponse).data;
+      
+      setTaskStats({
+        total: statsData.length,
+        pending: statsData.filter((t: any) => t.status === 'PENDING').length,
+        inProgress: statsData.filter((t: any) => t.status === 'IN_PROGRESS').length,
+        completed: statsData.filter((t: any) => t.status === 'COMPLETED').length,
+      });
     } catch (error: any) {
       console.error('Error fetching tasks:', error);
       Alert.alert('Error', error?.message || 'Failed to load tasks');
@@ -1022,12 +1037,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
     else if (dropdownContext === 'edit') setEditFormData(prev => ({ ...prev, priority: priority as TaskPriority }));
   }, [dropdownContext]);
 
-  const stats = useMemo(() => ({
-    total: tasks.length,
-    pending: tasks.filter(t => t.status === 'pending').length,
-    inProgress: tasks.filter(t => t.status === 'in-progress').length,
-    completed: tasks.filter(t => t.status === 'completed').length,
-  }), [tasks]);
+
 
   const activeFilterCount = (projectFilter ? 1 : 0) + (statusFilter ? 1 : 0);
 
@@ -1052,10 +1062,10 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
 
           {/* Stats Row */}
           <View style={styles.statsContainer}>
-            <StatCard title="Total" value={stats.total} icon={ListTodo} color="#3b82f6" bgColor="#eff6ff" />
-            <StatCard title="Pending" value={stats.pending} icon={BarChart} color="#f59e0b" bgColor="#fffbeb" />
-            <StatCard title="In Progress" value={stats.inProgress} icon={BarChart} color="#3b82f6" bgColor="#eff6ff" />
-            <StatCard title="Completed" value={stats.completed} icon={BarChart} color="#10b981" bgColor="#ecfdf5" />
+            <StatCard title="Total" value={taskStats.total} icon={ListTodo} color="#3b82f6" bgColor="#eff6ff" />
+            <StatCard title="Pending" value={taskStats.pending} icon={BarChart} color="#f59e0b" bgColor="#fffbeb" />
+            <StatCard title="In Progress" value={taskStats.inProgress} icon={BarChart} color="#3b82f6" bgColor="#eff6ff" />
+            <StatCard title="Completed" value={taskStats.completed} icon={BarChart} color="#10b981" bgColor="#ecfdf5" />
           </View>
 
           {/* Search and Filter */}

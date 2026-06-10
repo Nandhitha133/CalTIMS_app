@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation, useNavigationState } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQuery } from '@tanstack/react-query';
+import { settingsAPI } from '../../services/endpoints';
 import {
   LayoutDashboard,
   Clock,
@@ -42,8 +44,9 @@ interface User {
   email: string;
   role: string;
   roleId?: {
+    name?: string;
     permissions: any;
-  };
+  } | string;
 }
 
 interface CollapsibleSidebarProps {
@@ -118,7 +121,7 @@ const navSections: NavSection[] = [
           { to: 'PayrollProfiles', label: 'Payroll Profiles', module: 'Payroll', submodule: 'Payroll Engine' },
           { to: 'PayrollRun', label: 'Payroll Engine', module: 'Payroll', submodule: 'Payroll Engine' },
           { to: 'PayrollHistory', label: 'Execution Ledger', module: 'Payroll', submodule: 'Execution Ledger' },
-          { to: 'PayrollPayslip', label: 'Payslip Generation', module: 'Payroll', submodule: 'Payslip Generation' },
+          { to: 'PayrollPayslips', label: 'Payslip Generation', module: 'Payroll', submodule: 'Payslip Generation' },
           { to: 'PayrollReports', label: 'Payroll Reports', module: 'Payroll', submodule: 'Payroll Reports' },
           { to: 'BankTransferExport', label: 'Bank Export', module: 'Payroll', submodule: 'Bank Export' },
         ],
@@ -154,6 +157,20 @@ export default function CollapsibleSidebar({
     const route = state?.routes[state?.routes.length - 1];
     return route?.name;
   });
+
+  const { data: rolesRes } = useQuery<any>({
+    queryKey: ['rolesListSidebar'],
+    queryFn: () => settingsAPI.getRoles()
+  });
+  const systemRoles = rolesRes?.data?.data || rolesRes?.data || [];
+  
+  let mappedRoleName = '';
+  if (typeof user?.roleId === 'string' && systemRoles.length > 0) {
+    const roleObj = systemRoles.find((r: any) => r.id === user.roleId);
+    if (roleObj) {
+      mappedRoleName = roleObj.name;
+    }
+  }
 
   useEffect(() => {
     if (visible) {
@@ -251,41 +268,80 @@ export default function CollapsibleSidebar({
   };
 
   const hasPermission = (item: NavItem | SubNavItem) => {
-    if (!user || !user.role) return false;
-    const roleName = user.role.toLowerCase();
+    if (isSuperAdminUser) return true;
+
+    const r1 = (user?.role || '').toLowerCase();
+    const r2 = (typeof user?.roleId === 'object' ? user?.roleId?.name || '' : mappedRoleName).toLowerCase();
+    const r3 = ((user as any)?.roleName || '').toLowerCase();
+
+    const isAdmin = ['admin', 'super_admin', 'owner', 'super admin'].some(
+      r => r === r1 || r === r2 || r === r3
+    );
 
     // Admin, Super Admin, and Owner have access to everything
-    if (roleName === 'admin' || roleName === 'super_admin' || roleName === 'owner') return true;
+    if (isAdmin) return true;
 
-    // Check granular permissions if available
-    // Permissions may be attached either to `user.roleId.permissions` (populated role object)
-    // or flattened to `user.permissions` depending on the API response shape.
-    const permissions = user.roleId?.permissions || (user as any).permissions;
-
-    // If granular permissions are available, use them decisively
-    if (permissions) {
-      if (item.module && item.submodule) {
-        const modulePerms = permissions[item.module];
-        if (modulePerms) {
-          const submodulePerms = modulePerms[item.submodule];
-          if (submodulePerms && Array.isArray(submodulePerms) && submodulePerms.length > 0) {
-            return true;
-          }
-        }
-        // permissions exist but this module/submodule not allowed
-        return false;
-      }
-      // permissions exist but item has no module/submodule — deny by default
-      return false;
-    }
-
-    // No granular permissions present: fall back to role-based list when provided
+    // Determine baseline access based on roles
+    let hasRoleAccess = false;
     if (item.roles && item.roles.length > 0) {
-      return item.roles.map(r => r.toLowerCase()).includes(roleName);
+      const allowedRoles = item.roles.map(r => r.toLowerCase());
+      hasRoleAccess = allowedRoles.includes(r1) || allowedRoles.includes(r2) || allowedRoles.includes(r3);
+    } else {
+      // No explicit role restrictions means this item should be visible by default to everyone
+      hasRoleAccess = true;
+    }
+    
+    // Granular Permissions check
+    let rawPermissions = (typeof user?.roleId === 'object' ? user?.roleId?.permissions : undefined) || (user as any)?.permissions;
+    let permissions = rawPermissions;
+    if (typeof rawPermissions === 'string') {
+      try {
+        permissions = JSON.parse(rawPermissions);
+      } catch (e) {
+        permissions = {};
+      }
     }
 
-    // No permissions data and no explicit role restrictions means this item should be visible by default
-    return true;
+    const hasGranularPerms = permissions && Object.keys(permissions).length > 0 && !permissions.all;
+
+    // If the item doesn't map to a specific module, or user has no granular perms, fall back to baseline role access
+    if (!item.module || !hasGranularPerms) {
+      return hasRoleAccess;
+    }
+
+    // Since they have granular permissions and this item is a module, it MUST be explicitly granted
+    const moduleKey = Object.keys(permissions).filter(
+      (k) => k.toLowerCase() === item.module!.toLowerCase()
+    )[0];
+    const modulePerms = moduleKey ? permissions[moduleKey] : null;
+
+    if (!modulePerms) {
+      return false; // Explicitly hidden because it's not in their granular permissions
+    }
+
+    if (!item.submodule) {
+      // Parent module
+      let hasAnyActivePerms = false;
+      if (Array.isArray(modulePerms)) {
+        hasAnyActivePerms = modulePerms.length > 0;
+      } else {
+        hasAnyActivePerms = Object.values(modulePerms).some(
+          (p) => Array.isArray(p) && p.length > 0
+        );
+      }
+      return hasAnyActivePerms;
+    } else {
+      // Specific submodule
+      let submodulePerms = null;
+      if (!Array.isArray(modulePerms)) {
+        const subKey = Object.keys(modulePerms).filter(
+          (k) => k.toLowerCase() === item.submodule!.toLowerCase()
+        )[0];
+        submodulePerms = subKey ? modulePerms[subKey] : null;
+      }
+      
+      return !!(submodulePerms && Array.isArray(submodulePerms) && submodulePerms.length > 0);
+    }
   };
 
 
@@ -318,8 +374,14 @@ export default function CollapsibleSidebar({
                 <Text style={styles.avatarText}>{getInitials()}</Text>
               </View>
               <View style={styles.userInfo}>
-
-                <Text style={styles.userRole}>{user?.role?.toUpperCase() || 'EMPLOYEE'}</Text>
+                <Text style={styles.userRole}>
+                  {isSuperAdminUser ? 'SUPER ADMIN' : (
+                    (user as any)?.roleName?.toUpperCase() ||
+                    (typeof user?.roleId === 'object' ? user?.roleId?.name?.toUpperCase() : undefined) ||
+                    user?.role?.toUpperCase() ||
+                    (mappedRoleName ? mappedRoleName.toUpperCase() : 'EMPLOYEE')
+                  )}
+                </Text>
               </View>
             </View>
 
@@ -383,79 +445,79 @@ export default function CollapsibleSidebar({
                   const visibleItems = section.items.filter(hasPermission);
                   if (visibleItems.length === 0) return null;
 
-              return (
-                <View key={section.label} style={styles.navSection}>
-                  <Text style={styles.sectionLabel}>{section.label}</Text>
-                  <View style={styles.navItems}>
-                    {visibleItems.map((item) => {
-                      const hasSubItems = item.subItems && item.subItems.length > 0;
-                      const isExpanded = expandedItem === item.label;
-                      const isItemActive = isActive(item.to);
+                  return (
+                    <View key={section.label} style={styles.navSection}>
+                      <Text style={styles.sectionLabel}>{section.label}</Text>
+                      <View style={styles.navItems}>
+                        {visibleItems.map((item) => {
+                          const hasSubItems = item.subItems && item.subItems.length > 0;
+                          const isExpanded = expandedItem === item.label;
+                          const isItemActive = isActive(item.to);
 
-                      if (hasSubItems) {
-                        return (
-                          <View key={item.label}>
+                          if (hasSubItems) {
+                            return (
+                              <View key={item.label}>
+                                <TouchableOpacity
+                                  style={[styles.navItem, isExpanded && styles.navItemActive]}
+                                  onPress={() => setExpandedItem(isExpanded ? null : item.label)}
+                                >
+                                  <item.icon size={20} color={isExpanded ? '#3b82f6' : '#64748b'} />
+                                  <Text style={[styles.navLabel, isExpanded && styles.navLabelActive]}>
+                                    {item.label}
+                                  </Text>
+                                  <ChevronDown
+                                    size={16}
+                                    color="#64748b"
+                                    style={[styles.chevron, isExpanded && styles.chevronRotated]}
+                                  />
+                                </TouchableOpacity>
+
+                                {isExpanded && (
+                                  <View style={styles.subItems}>
+                                    {item.subItems?.filter(hasPermission).map((subItem) => (
+                                      <TouchableOpacity
+                                        key={subItem.to}
+                                        style={[styles.subNavItem, isActive(subItem.to) && styles.subNavItemActive]}
+                                        onPress={() => navigateToScreen(subItem.to)}
+                                      >
+                                        <View style={styles.subNavDot} />
+                                        <Text style={[styles.subNavLabel, isActive(subItem.to) && styles.subNavLabelActive]}>
+                                          {subItem.label}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    ))}
+                                  </View>
+                                )}
+                              </View>
+                            );
+                          }
+
+                          return (
                             <TouchableOpacity
-                              style={[styles.navItem, isExpanded && styles.navItemActive]}
-                              onPress={() => setExpandedItem(isExpanded ? null : item.label)}
+                              key={item.to}
+                              style={[styles.navItem, isItemActive && styles.navItemActive]}
+                              onPress={() => navigateToScreen(item.to)}
                             >
-                              <item.icon size={20} color={isExpanded ? '#3b82f6' : '#64748b'} />
-                              <Text style={[styles.navLabel, isExpanded && styles.navLabelActive]}>
+                              <item.icon size={20} color={isItemActive ? '#3b82f6' : '#64748b'} />
+                              <Text style={[styles.navLabel, isItemActive && styles.navLabelActive]}>
                                 {item.label}
                               </Text>
-                              <ChevronDown
-                                size={16}
-                                color="#64748b"
-                                style={[styles.chevron, isExpanded && styles.chevronRotated]}
-                              />
                             </TouchableOpacity>
-
-                            {isExpanded && (
-                              <View style={styles.subItems}>
-                                {item.subItems?.filter(hasPermission).map((subItem) => (
-                                  <TouchableOpacity
-                                    key={subItem.to}
-                                    style={[styles.subNavItem, isActive(subItem.to) && styles.subNavItemActive]}
-                                    onPress={() => navigateToScreen(subItem.to)}
-                                  >
-                                    <View style={styles.subNavDot} />
-                                    <Text style={[styles.subNavLabel, isActive(subItem.to) && styles.subNavLabelActive]}>
-                                      {subItem.label}
-                                    </Text>
-                                  </TouchableOpacity>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-                        );
-                      }
-
-                      return (
-                        <TouchableOpacity
-                          key={item.to}
-                          style={[styles.navItem, isItemActive && styles.navItemActive]}
-                          onPress={() => navigateToScreen(item.to)}
-                        >
-                          <item.icon size={20} color={isItemActive ? '#3b82f6' : '#64748b'} />
-                          <Text style={[styles.navLabel, isItemActive && styles.navLabelActive]}>
-                            {item.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
                 })}
               </>
             )}
 
-          {/* Logout Button */}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={20} color="#ef4444" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            {/* Logout Button */}
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <LogOut size={20} color="#ef4444" />
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </Animated.View>
         <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
       </View>

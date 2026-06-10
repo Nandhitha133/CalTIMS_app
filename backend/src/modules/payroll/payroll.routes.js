@@ -65,6 +65,7 @@ router.get('/reports/department-analysis', requireFeature('payroll'), checkPermi
 router.get('/dashboard', requireFeature('payroll'), checkPermission('Payroll', 'Dashboard', 'view'), payrollController.getDashboardData);
 router.get('/analytics', requireFeature('payroll'), checkPermission('Payroll', 'Dashboard', 'view'), payrollController.getAnalytics);
 router.get('/batches', requireFeature('payroll'), checkPermission('Payroll', 'Execution Ledger', 'view'), payrollController.getPayrollBatchHistory);
+router.delete('/batches/:id', requireFeature('payroll'), checkPermission('Payroll', 'Execution Ledger', 'run'), payrollController.deleteBatch);
 
 
 // ─── Verification & Readiness ────────────────────────────────────────────────

@@ -9,11 +9,8 @@ export { default as PayrollPayslips } from './PayrollPayslips';
 export { default as PayrollReports } from './PayrollReports';
 export { default as BankTransferExport } from './BankTransferExport';
 export { default as PayrollExecution } from './PayrollExecution';
-
+// @ts-ignore
+export { default as PayrollSetupWizard } from './PayrollSetupWizard';
 // Unimplemented optional stubs
 export const PayrollProcessing = () => null;
 export const PayrollHourManagement = () => null;
-
-// @ts-ignore
-export { default as PayrollSetupWizard } from './PayrollSetupWizard';
-// end of file

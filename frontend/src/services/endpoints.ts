@@ -247,51 +247,41 @@ export const settingsAPI = {
 
 // ==================== PAYROLL API ====================
 export const payrollAPI = {
-  getMyPayslips: (params?: any) => 
-    apiService.get('/payroll/payslips/my', params),
-  downloadPayslip: (id: string) => 
-    apiService.get(`/payroll/payslip/${id}/download`),
-  sendPayslipEmail: (id: string) => 
-    apiService.post(`/payroll/payslip/${id}/send-email`),
-  bulkSendPayslipEmails: (ids: string[]) => 
-    apiService.post('/payroll/payslips/bulk-send-email', { ids }),
-  getProfiles: (params?: any) => 
-    apiService.get('/payroll/profiles', params),
-  getRoleStructures: () => 
-    apiService.get('/payroll/role-structures'),
-  updateProfile: (id: string, data: any) => 
-    apiService.patch(`/payroll/profiles/${id}`, data),
-  deleteProfile: (id: string) => 
-    apiService.delete(`/payroll/profiles/${id}`),
-  setupFullProfile: (data: any, config?: any) => 
-    apiService.post('/payroll/profiles', data, config),
-  getDashboard: (params?: any) => 
-    apiService.get('/payroll/dashboard', params),
-  getBatches: (params?: any) => 
-    apiService.get('/payroll/batches', params),
-  getHistory: (params: any) => 
-    apiService.get('/payroll/history', params),
-  getAnalytics: (params?: any) => 
-    apiService.get('/payroll/analytics', params),
-  getSummaryReport: (params: any) => 
-    apiService.get('/payroll/reports/summary', params),
-  getDepartmentAnalysis: (params: any) => 
-    apiService.get('/payroll/reports/department-analysis', params),
-  getReadiness: (params: any) => 
-    apiService.get('/payroll/dashboard', params),
-  getPreview: (params: any) => 
-    apiService.post('/payroll/process/simulate', params),
-  run: (data: any) => 
-    apiService.post('/payroll/run', data),
-  markPaid: (data: any) => 
-    apiService.post('/payroll/mark-paid', data),
-  updateRoleStructure: (data: any) => 
-    data._id ? apiService.patch(`/payroll/role-structures/${data._id}`, data) : apiService.post('/payroll/role-structures', data),
-  toggleStructureStatus: (id: string) => 
-    apiService.patch(`/payroll/role-structures/${id}/toggle`),
-  deleteStructure: (id: string) => 
-    apiService.delete(`/payroll/role-structures/${id}`),
-};
+  getConfig: () => apiService.get('/payroll/config'),
+  updateConfig: (data: any) => apiService.patch('/payroll/config', data),
+  getRoleStructures: () => apiService.get('/payroll/role-structures'),
+  updateRoleStructure: (data: any) => apiService.post('/payroll/role-structures', data),
+  getProfiles: () => apiService.get('/payroll/profiles'),
+  getProfile: (userId: string) => apiService.get(`/payroll/profiles/${userId}`),
+  updateProfile: (data: any) => apiService.post('/payroll/profiles', data),
+  setupFullProfile: (data: any) => apiService.post('/payroll/setup-profile', data),
+  deleteProfile: (id: string) => apiService.delete(`/payroll/profiles/${id}`),
+  toggleStructureStatus: (id: string) => apiService.patch(`/payroll/role-structures/${id}/toggle`),
+  deleteStructure: (id: string) => apiService.delete(`/payroll/role-structures/${id}`),
+  simulate: (data: any) => apiService.post('/payroll/process/simulate', data),
+  save: (data: any) => apiService.post('/payroll/process/save', data),
+  run: (data: any) => apiService.post('/payroll/run', data),
+  markPaid: (data: any) => apiService.post('/payroll/mark-paid', data),
+  getHistory: (params?: any) => apiService.get('/payroll/history', params),
+  generatePayslips: (data: any) => apiService.post('/payroll/payslips/generate', data),
+  getGeneratedPayslips: (params?: any) => apiService.get('/payroll/payslips/generated', params),
+  markPayslipAsPaid: (id: string) => apiService.post(`/payroll/payslips/${id}/mark-paid`),
+  bulkMarkPayslipsAsPaid: (ids: string[]) => apiService.post('/payroll/payslips/bulk-mark-paid', { ids }),
+  getMyPayslips: (params?: any) => apiService.get('/payroll/payslips/my', params),
+  getPayslip: (id: string) => apiService.get(`/payroll/payslips/${id}`),
+  downloadPayslip: (id: string) => apiService.get(`/payroll/payslip/${id}/download`, undefined, { headers: { 'Accept': 'application/pdf' } }),
+  sendPayslipEmail: (id: string) => apiService.post(`/payroll/payslip/${id}/send-email`),
+  bulkSendPayslipEmails: (ids: string[]) => apiService.post('/payroll/payslips/bulk-send-email', { ids }),
+  exportBank: (params?: any) => apiService.get('/payroll/export-bank', params),
+  getSummaryReport: (params?: any) => apiService.get('/payroll/reports/summary', params),
+  getDepartmentAnalysis: (params?: any) => apiService.get('/payroll/reports/department-analysis', params),
+  getDashboard: (params?: any) => apiService.get('/payroll/dashboard', params),
+  getAnalytics: (params?: any) => apiService.get('/payroll/analytics', params),
+
+  getReadiness: (params?: any) => apiService.get('/payroll/readiness', params),
+  getPreview: (params?: any) => apiService.get('/payroll/preview', params),
+  getBatches: () => apiService.get('/payroll/batches'),
+}
 
 // ==================== POLICY API ====================
 export const policyAPI = {

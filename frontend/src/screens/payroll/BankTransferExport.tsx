@@ -1,713 +1,559 @@
-// screens/payroll/BankTransferExport.tsx
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  RefreshControl,
   ActivityIndicator,
   Alert,
-  Modal,
-  Share,
-  Platform,
+  Dimensions,
+  Platform
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import RNFS from 'react-native-fs';
-import { Landmark, Wallet, CheckCircle2, Clock, AlertCircle, ShieldAlert, Filter, Download, Eye, Edit3, X, Search, ChevronDown, ChevronLeft, ChevronRight, Building2, Calendar, Users } from 'lucide-react-native';
-import { payrollAPI, settingsAPI, userAPI } from '../../services/endpoints';
+import {
+  Download,
+  CreditCard,
+  CheckCircle2,
+  AlertCircle,
+  Calendar,
+  Filter,
+  CheckSquare,
+  Square,
+  Building,
+  Clock,
+  Landmark,
+  ShieldAlert,
+  ChevronDown
+} from 'lucide-react-native';
+import { useAuthStore } from '../../store/authStore';
+import { payrollAPI, userAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
-import PageHeader from '../../components/common/PageHeader';
-import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
-import { useSettingsStore } from '../../store/settingsStore';
-import { exportFile } from '../../utils/exportHelper';
-import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import { useNavigation } from '@react-navigation/native';
+import { exportFile, convertToCSV } from '../../utils/exportHelper';
 
-const COLORS = {
-  primary: '#6366f1',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
-  dark: '#1e293b',
-  light: '#f8fafc',
-  gray: '#64748b',
-  white: '#ffffff',
-  border: '#e2e8f0',
-};
+const { width } = Dimensions.get('window');
 
-// Helper to extract data from API response
-const extractData = (response: any, defaultValue: any = null): any => {
-  if (!response) return defaultValue;
-  if (response.data?.data) return response.data.data;
-  if (response.data) return response.data;
-  return response;
-};
+const months = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 
-// KPI Card Component
-const KPICard = ({ id, label, value, icon: Icon, color, bgColor, subtitle, isActive, onPress }: any) => (
-  <TouchableOpacity
-    style={[styles.kpiCard, isActive && styles.kpiCardActive]}
-    onPress={() => onPress(id)}
-    activeOpacity={0.7}
-  >
-    <View style={[styles.kpiIcon, { backgroundColor: bgColor || `${color}15` }]}>
-      <Icon size={22} color={color} />
-    </View>
-    <View style={styles.kpiContent}>
-      <Text style={styles.kpiLabel}>{label}</Text>
-      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-      {subtitle && <Text style={styles.kpiSubtitle}>{subtitle}</Text>}
-    </View>
-  </TouchableOpacity>
-);
-
-// Employee Row Component
-const EmployeeRow = ({ employee, onPress, currencySymbol }: any) => {
-  const getValidationStyle = () => {
-    switch (employee.validation.type) {
-      case 'Ready':
-        return { bg: `${COLORS.success}15`, color: COLORS.success, text: 'Ready', icon: CheckCircle2 };
-      case 'Pending':
-        return { bg: `${COLORS.warning}15`, color: COLORS.warning, text: 'Partial', icon: Clock };
-      default:
-        return { bg: `${COLORS.error}15`, color: COLORS.error, text: 'Missing', icon: ShieldAlert };
-    }
-  };
-
-  const validationStyle = getValidationStyle();
-  const IconComponent = validationStyle.icon;
-
-  return (
-    <TouchableOpacity style={styles.employeeRow} onPress={() => onPress(employee)} activeOpacity={0.7}>
-      <View style={styles.employeeAvatar}>
-        <Text style={styles.employeeInitial}>{employee.user?.name?.charAt(0) || '?'}</Text>
-      </View>
-      <View style={styles.employeeInfo}>
-        <Text style={styles.employeeName}>{employee.user?.name}</Text>
-        <Text style={styles.employeeMeta}>
-          {employee.user?.bankName || 'No Bank'} • {employee.user?.accountNumber ? `****${employee.user.accountNumber.slice(-4)}` : 'No Account'}
-        </Text>
-      </View>
-      <View style={styles.employeeRight}>
-        <Text style={styles.employeeAmount}>
-          {currencySymbol}{formatCurrency(employee.breakdown?.netPay || 0)}
-        </Text>
-        <View style={[styles.employeeStatus, { backgroundColor: validationStyle.bg }]}>
-          <IconComponent size={10} color={validationStyle.color} />
-          <Text style={[styles.employeeStatusText, { color: validationStyle.color }]}>
-            {validationStyle.text}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-// Preview Modal Component
-const PreviewModal = ({ visible, onClose, onConfirm, previewRows, headers, currencySymbol, totalLiquidity, nodeCount }: any) => (
-  <Modal visible={visible} animationType="slide" transparent>
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Export File Preview</Text>
-          <TouchableOpacity onPress={onClose}>
-            <X size={24} color={COLORS.gray} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.modalContent}>
-            <View style={styles.warningBox}>
-              <AlertCircle size={20} color={COLORS.warning} />
-              <Text style={styles.warningText}>
-                Please review the payout records below. Once generated, this file will serve as the official bank transfer instruction.
-              </Text>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View>
-                <View style={styles.previewHeaderRow}>
-                  {headers.map((header: string, idx: number) => (
-                    <Text key={idx} style={[styles.previewHeaderCell, getPreviewCellStyle(idx)]}>
-                      {header}
-                    </Text>
-                  ))}
-                </View>
-                {previewRows.map((row: any[], idx: number) => (
-                  <View key={idx} style={styles.previewRow}>
-                    {row.map((cell, cidx) => (
-                      <Text key={cidx} style={[styles.previewCell, getPreviewCellStyle(cidx)]}>
-                        {typeof cell === 'number' ? `${currencySymbol}${formatCurrency(cell)}` : cell}
-                      </Text>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </ScrollView>
-
-        <View style={styles.modalFooter}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Discard</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.exportButton} onPress={onConfirm}>
-            <Download size={16} color={COLORS.white} />
-            <Text style={styles.exportButtonText}>Generate CSV</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  </Modal>
-);
-
-// Confirmation Modal Component
-const ConfirmModal = ({ visible, onClose, onConfirm, nodeCount, totalLiquidity, currencySymbol }: any) => (
-  <Modal visible={visible} transparent animationType="fade">
-    <View style={styles.confirmOverlay}>
-      <View style={styles.confirmContainer}>
-        <View style={[styles.confirmIcon, { backgroundColor: `${COLORS.warning}15` }]}>
-          <AlertCircle size={32} color={COLORS.warning} />
-        </View>
-        <Text style={styles.confirmTitle}>Generate Bank Transfer File?</Text>
-        <Text style={styles.confirmMessage}>
-          You are about to generate a transfer file for {nodeCount} employees totaling{' '}
-          {currencySymbol}{formatCurrency(totalLiquidity)}. Ensure all details are verified.
-        </Text>
-        <View style={styles.confirmButtons}>
-          <TouchableOpacity style={styles.confirmCancel} onPress={onClose}>
-            <Text style={styles.confirmCancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.confirmConfirm} onPress={onConfirm}>
-            <Text style={styles.confirmConfirmText}>Generate & Download</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  </Modal>
-);
-
-const getPreviewCellStyle = (index: number) => {
-  if (index === 0) return { width: 100 }; // Employee ID
-  if (index === 1) return { width: 140 }; // Account Number
-  if (index === 2) return { width: 140 }; // Beneficiary Name
-  if (index === 3) return { width: 120 }; // Bank Name
-  if (index === 4) return { width: 100 }; // IFSC
-  if (index === 5) return { width: 100, textAlign: 'right' as const }; // Amount
-  return { width: 120 }; // Description
-};
-
-export function BankTransferExport({ navigation }: { navigation: any }) {
-  const { organization: orgSettings } = useSettingsStore();
-  const [user, setUser] = useState<any>(null);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
+export default function BankTransferExport() {
+  const { user } = useAuthStore();
+  const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [isRefetching, setIsRefetching] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [activeSelector, setActiveSelector] = useState<string | null>(null);
-  const [bankFilter, setBankFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [settings, setSettings] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [usersData, setUsersData] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [filterBank, setFilterBank] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [showYearPicker, setShowYearPicker] = useState(false);
+  const [showBankPicker, setShowBankPicker] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
 
-  const loadUserData = async () => {
+  useEffect(() => {
+    fetchData(history.length === 0);
+  }, [month, year]);
+
+  const fetchData = async (isInitial = false) => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) setUser(JSON.parse(userData));
-    } catch (error) {
-      console.error('Error loading user data:', error);
+      if (isInitial) setLoading(true);
+      else setIsRefetching(true);
+      const [hRes, uRes, sRes]: any[] = await Promise.all([
+        payrollAPI.getHistory({ month, year }),
+        userAPI.getAll({ decryptPII: true }),
+        settingsAPI.getSettings()
+      ]);
+      
+      if (hRes?.success) setHistory(hRes.data);
+      if (uRes?.success) setUsersData(uRes.data);
+      if (sRes?.success) setSettings(sRes.data);
+    } catch (err) {
+      console.error('Failed to load bank transfer data', err);
+    } finally {
+      setLoading(false);
+      setIsRefetching(false);
     }
   };
 
-  const fetchSettings = async () => {
-    try {
-      const response = await settingsAPI.getSettings();
-      const data = extractData(response);
-      setSettings(data);
-    } catch (error) {
-      console.error('Error fetching settings:', error);
+  const validatePayout = (h: any) => {
+    const bankName = h.employee?.user?.bankName || h.bankDetails?.bankName;
+    const accountNumber = h.employee?.user?.accountNumber || h.bankDetails?.accountNumber;
+    const ifsc = h.employee?.user?.ifscCode || h.bankDetails?.ifscCode;
+
+    let score = 0;
+    if (bankName) score++;
+    if (accountNumber) score++;
+    if (ifsc) score++;
+
+    if (score === 3) {
+      return { type: 'Ready', label: 'READY', color: '#10b981', bg: '#ecfdf5', icon: CheckCircle2 };
+    } else if (score > 0) {
+      return { type: 'Pending', label: 'PENDING', color: '#f59e0b', bg: '#fffbeb', icon: Clock };
+    } else {
+      return { type: 'Failed', label: 'FAILED', color: '#ef4444', bg: '#fef2f2', icon: ShieldAlert };
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await userAPI.getAll({ limit: 1000 });
-      const data = extractData(response, []);
-      setUsersData(data);
-    } catch (error) {
-      console.error('Error fetching users:', error);
+  const allNodes = useMemo(() => {
+    let data = history.filter((h: any) => h.month === month && h.year === year);
+    return data.map(h => ({
+      ...h,
+      id: h._id || h.id,
+      status: validatePayout(h),
+      bankName: h.employee?.user?.bankName || h.bankDetails?.bankName || 'Unassigned',
+      accountNumber: h.employee?.user?.accountNumber || h.bankDetails?.accountNumber || '-',
+      ifsc: h.employee?.user?.ifscCode || h.bankDetails?.ifscCode || '-',
+      netPayCalc: Math.round(h.netPay || h.breakdown?.netPay || 0)
+    }));
+  }, [history, month, year, usersData]);
+
+  // Initial selection
+  useEffect(() => {
+    if (allNodes.length > 0) {
+      const readyIds = allNodes.filter(n => n.status.type === 'Ready').map(n => n.id);
+      setSelectedIds(readyIds);
     }
-  };
-
-  const fetchHistory = async (m: number, y: number) => {
-    try {
-      const response = await payrollAPI.getHistory({ month: m, year: y });
-      const data = extractData(response, []);
-      setHistory(data);
-    } catch (error) {
-      console.error('Error fetching history:', error);
-    }
-  };
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    await Promise.all([fetchSettings(), fetchUsers(), fetchHistory(month, year)]);
-    setLoading(false);
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchAllData();
-    setRefreshing(false);
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      loadUserData();
-      fetchAllData();
-    }, [month, year])
-  );
+  }, [allNodes]);
 
   const uniqueBanks = useMemo(() => {
-    const banks = new Set();
-    usersData.forEach((u: any) => {
-      if (u.bankName) banks.add(u.bankName);
-    });
-    return Array.from(banks).sort();
-  }, [usersData]);
-
-  const validatePayout = useCallback((payout: any) => {
-    const bankName = payout.user?.bankName;
-    const accountNumber = payout.user?.accountNumber;
-    const ifsc = payout.user?.ifscCode;
-
-    if (bankName && accountNumber && ifsc) {
-      return { type: 'Ready', label: 'Ready', color: COLORS.success, bg: `${COLORS.success}15` };
-    }
-    if (!bankName && !accountNumber && !ifsc) {
-      return { type: 'Error', label: 'Missing Info', color: COLORS.error, bg: `${COLORS.error}15` };
-    }
-    return { type: 'Pending', label: 'Partial Info', color: COLORS.warning, bg: `${COLORS.warning}15` };
-  }, []);
+    const banks = new Set(allNodes.map(n => n.bankName));
+    return ['All', ...Array.from(banks)];
+  }, [allNodes]);
 
   const filteredNodes = useMemo(() => {
-    if (!history.length) return [];
-    let nodes = history.filter(
-      (h: any) => h.month === month && h.year === year && (h.breakdown?.netPay || 0) > 0
-    );
-
-    nodes = nodes.map((n: any) => {
-      // 1. Try to find user in usersData (latest source of truth)
-      const userId = n.user?._id || n.user;
-      const fullUser = Array.isArray(usersData) ? usersData.find((u: any) => u._id === userId) : null;
-      
-      // 2. Prepare user object with fallbacks
-      // Prefer latest data from fullUser, then populated n.user, then snapshot data
-      const userFromSnapshot = n.employeeInfo ? {
-        _id: userId,
-        name: n.employeeInfo.name,
-        employeeId: n.employeeInfo.employeeId,
-        bankName: n.bankDetails?.bankName,
-        accountNumber: n.bankDetails?.accountNumber,
-        ifscCode: n.bankDetails?.ifscCode,
-      } : null;
-
-      const userObject = fullUser || (typeof n.user === 'object' ? n.user : null) || userFromSnapshot || { _id: userId };
-
-      const enrichedNode = {
-        ...n,
-        user: userObject
-      };
-
-      return {
-        ...enrichedNode,
-        validation: validatePayout(enrichedNode),
-      };
+    return allNodes.filter(n => {
+      if (filterBank !== 'All' && n.bankName !== filterBank) return false;
+      if (filterStatus !== 'All' && n.status.label !== filterStatus) return false;
+      return true;
     });
-
-    if (bankFilter) {
-      nodes = nodes.filter((h: any) => h.user?.bankName === bankFilter);
-    }
-
-    if (statusFilter !== 'All') {
-      nodes = nodes.filter((h: any) => h.validation.type === statusFilter);
-    }
-
-    return nodes;
-  }, [history, month, year, bankFilter, statusFilter, validatePayout, usersData]);
+  }, [allNodes, filterBank, filterStatus]);
 
   const stats = useMemo(() => {
-    const totalLiquidity = filteredNodes.reduce((acc, curr) => acc + (curr.breakdown?.netPay || 0), 0);
-    return {
-      totalLiquidity,
-      nodeCount: filteredNodes.length,
-      readyCount: filteredNodes.filter((n) => n.validation.type === 'Ready').length,
-      pendingCount: filteredNodes.filter((n) => n.validation.type === 'Pending').length,
-      errorCount: filteredNodes.filter((n) => n.validation.type === 'Error').length,
-    };
-  }, [filteredNodes]);
+    const ready = allNodes.filter(n => n.status.type === 'Ready').length;
+    const pending = allNodes.filter(n => n.status.type === 'Pending').length;
+    const failed = allNodes.filter(n => n.status.type === 'Failed').length;
+    const totalAmount = allNodes.reduce((acc, n) => acc + n.netPayCalc, 0);
+    return { total: allNodes.length, ready, pending, failed, totalAmount };
+  }, [allNodes]);
 
-  const headers = ['Employee ID', 'Account Number', 'Beneficiary Name', 'Bank Name', 'IFSC', 'Amount', 'Description'];
-  const previewRows = useMemo(() => {
-    return filteredNodes.map((h: any) => [
-      h.user?.employeeId || 'N/A',
-      h.user?.accountNumber || 'NOT-MAPPED',
-      h.user?.name || 'Unknown',
-      h.user?.bankName || 'NOT-MAPPED',
-      h.user?.ifscCode || 'N/A',
-      h.breakdown?.netPay,
-      `Salary_${month}_${year}`,
-    ]);
-  }, [filteredNodes, month, year]);
+  const selectionStats = useMemo(() => {
+    const selectedNodes = filteredNodes.filter(n => selectedIds.includes(n.id));
+    const amount = selectedNodes.reduce((acc, n) => acc + n.netPayCalc, 0);
+    return { count: selectedNodes.length, amount };
+  }, [filteredNodes, selectedIds]);
 
-  const downloadBankFile = async () => {
-    if (!filteredNodes.length) {
-      Alert.alert('No Data', 'No validated payouts found for export');
-      return;
-    }
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
 
-    try {
-      const fileName = `Bank_Transfer_${bankFilter || 'All'}_M${month}_Y${year}.csv`;
-      const content = [headers.join(','), ...previewRows.map((r) => r.join(','))].join('\n');
-
-      await exportFile(content, fileName, 'text/csv');
-      setIsConfirmOpen(false);
-      setIsPreviewOpen(false);
-    } catch (error) {
-      console.error('Export error:', error);
-      Alert.alert('Error', 'Failed to generate bank transfer file');
+  const toggleAll = () => {
+    if (selectedIds.length === filteredNodes.length && filteredNodes.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredNodes.map(n => n.id));
     }
   };
 
-  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.payroll?.currencySymbol || 'INR');
+  const currencySymbol = settings?.payroll?.currencySymbol || '$';
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
-  }
+  const handleExport = async () => {
+    try {
+      if (selectedIds.length === 0) {
+        Alert.alert('No Selection', 'Please select at least one record to export.');
+        return;
+      }
+      setExporting(true);
+      
+      const selectedNodes = filteredNodes.filter(n => selectedIds.includes(n.id));
+      
+      const headers = ['Employee Name', 'Employee ID', 'Bank Name', 'Account Number', 'IFSC Code', 'Net Pay', 'Status'];
+      const rows = selectedNodes.map(node => [
+        node.employee?.user?.name || node.user?.name || 'Unknown',
+        node.employee?.employeeId || node.employee?.user?.employeeId || node.employeeInfo?.employeeId || node.user?.employeeId || '-',
+        node.bankName,
+        `'${node.accountNumber}`, // Quote to prevent excel scientific notation
+        node.ifsc,
+        node.netPayCalc,
+        node.status.label
+      ]);
+
+      const csvString = convertToCSV(headers, rows);
+      await exportFile(csvString, `Bank_Export_${months[month-1]}_${year}.csv`, 'text/csv', false);
+
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to export bank file');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
-    <Layout
-      title="Bank Transfer Export"
-      user={user}
-      sidebarVisible={sidebarVisible}
-      setSidebarVisible={setSidebarVisible}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-    >
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <PageHeader
-          title="Bank Transfer Export"
-          subtitle="Generate and validate bank transfer files for salary payouts"
-          icon={Landmark}
-          iconColor={COLORS.primary}
-          iconBgColor={`${COLORS.primary}15`}
-        />
-
-        <View style={styles.content}>
-          {/* Action Buttons */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.validateButton} onPress={() => setStatusFilter('All')}>
-              <Text style={styles.validateButtonText}>Validate Data</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.generateButton, !filteredNodes.length && styles.disabledButton]}
-              onPress={() => setIsPreviewOpen(true)}
-              disabled={!filteredNodes.length}
-            >
-              <Download size={16} color={COLORS.white} />
-              <Text style={styles.generateButtonText}>Generate File</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* KPI Grid */}
-          <View style={styles.kpiGrid}>
-            <KPICard
-              id="All"
-              label="Total Payout Amount"
-              value={`${currencySymbol}${formatCurrency(stats.totalLiquidity)}`}
-              icon={Wallet}
-              color={COLORS.primary}
-              bgColor={`${COLORS.primary}15`}
-              subtitle="Calculated Net Pay"
-              isActive={statusFilter === 'All'}
-              onPress={setStatusFilter}
-            />
-            <KPICard
-              id="Ready"
-              label="Employees Ready"
-              value={stats.readyCount}
-              icon={CheckCircle2}
-              color={COLORS.success}
-              bgColor={`${COLORS.success}15`}
-              subtitle="Complete Bank Details"
-              isActive={statusFilter === 'Ready'}
-              onPress={setStatusFilter}
-            />
-            <KPICard
-              id="Pending"
-              label="Pending Bank Info"
-              value={stats.pendingCount}
-              icon={Clock}
-              color={COLORS.warning}
-              bgColor={`${COLORS.warning}15`}
-              subtitle="Incomplete Records"
-              isActive={statusFilter === 'Pending'}
-              onPress={setStatusFilter}
-            />
-            <KPICard
-              id="Error"
-              label="Failed Validations"
-              value={stats.errorCount}
-              icon={ShieldAlert}
-              color={COLORS.error}
-              bgColor={`${COLORS.error}15`}
-              subtitle="Missing All Details"
-              isActive={statusFilter === 'Error'}
-              onPress={setStatusFilter}
-            />
-          </View>
-
-          {/* Filters */}
-          <View style={styles.filtersContainer}>
-            <View style={styles.filterGroup}>
-              <View style={[styles.filterChip, { flex: 0.8 }]}>
-                <Calendar size={14} color={COLORS.gray} style={styles.filterIcon} />
-                <SafeSelector
-                  options={[...Array(12)].map((_, i) => ({
-                    label: new Date(2024, i).toLocaleString('default', { month: 'short' }),
-                    value: i + 1,
-                  }))}
-                  selectedValue={month}
-                  onValueChange={(v) => setMonth(v)}
-                  visible={activeSelector === 'month'}
-                  onOpen={() => setActiveSelector('month')}
-                  onClose={() => setActiveSelector(null)}
-                  style={styles.safeSelector}
-                  triggerStyle={styles.safeSelectorTrigger}
-                />
-              </View>
-              <View style={[styles.filterChip, { flex: 0.8 }]}>
-                <Calendar size={14} color={COLORS.gray} style={styles.filterIcon} />
-                <SafeSelector
-                  options={[2024, 2025, 2026].map((y) => ({
-                    label: String(y),
-                    value: y,
-                  }))}
-                  selectedValue={year}
-                  onValueChange={(v) => setYear(v)}
-                  visible={activeSelector === 'year'}
-                  onOpen={() => setActiveSelector('year')}
-                  onClose={() => setActiveSelector(null)}
-                  style={styles.safeSelector}
-                  triggerStyle={styles.safeSelectorTrigger}
-                />
-              </View>
-              <View style={[styles.filterChip, { flex: 1.4 }]}>
-                <Landmark size={14} color={COLORS.gray} style={styles.filterIcon} />
-                <SafeSelector
-                  options={[
-                    { label: 'All Banks', value: '' },
-                    ...uniqueBanks.map((bank: any) => ({ label: bank, value: bank })),
-                  ]}
-                  selectedValue={bankFilter}
-                  onValueChange={(v) => setBankFilter(v)}
-                  visible={activeSelector === 'bank'}
-                  onOpen={() => setActiveSelector('bank')}
-                  onClose={() => setActiveSelector(null)}
-                  style={styles.safeSelector}
-                  triggerStyle={styles.safeSelectorTrigger}
-                />
-              </View>
+    <Layout title="Bank Clearing Export" user={user} refreshing={loading || isRefetching} onRefresh={() => fetchData(true)} sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible}>
+      <View style={styles.container}>
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <Landmark size={20} color="#4f46e5" style={{ marginRight: 8 }} />
+              <Text style={styles.headerTitle}>Bank Clearing Export</Text>
             </View>
+            <Text style={styles.headerSubtitle}>Generate and validate bank transfer files for salary payouts</Text>
           </View>
+          <TouchableOpacity style={styles.headerBtn} onPress={handleExport} disabled={exporting || selectedIds.length === 0}>
+            {exporting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.headerBtnText}>Generate File ({selectedIds.length})</Text>}
+          </TouchableOpacity>
+        </View>
 
-          {/* Employee List */}
-          <View style={styles.tableCard}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.tableTitle}>Employee Payout Records</Text>
-              <Text style={styles.tableCount}>{filteredNodes.length} Records Found</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#4f46e5" style={{ marginTop: 50 }} />
+        ) : (
+          <>
+            {/* KPI Scroll */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kpiScroll}>
+              <View style={[styles.kpiCard, { borderColor: '#818cf8', borderWidth: 1 }]}>
+                <View style={styles.kpiHeader}>
+                  <View style={[styles.kpiIcon, { backgroundColor: '#eef2ff' }]}><CreditCard size={18} color="#4f46e5" /></View>
+                  <Text style={styles.kpiBadge}>REAL-TIME</Text>
+                </View>
+                <Text style={styles.kpiLabel}>TOTAL PAYOUT AMOUNT</Text>
+                <Text style={styles.kpiValue}>{currencySymbol}{stats.totalAmount.toLocaleString()}</Text>
+                <Text style={styles.kpiSub}>Calculated Net Pay</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiHeader}>
+                  <View style={[styles.kpiIcon, { backgroundColor: '#ecfdf5' }]}><CheckCircle2 size={18} color="#10b981" /></View>
+                  <Text style={styles.kpiBadge}>REAL-TIME</Text>
+                </View>
+                <Text style={styles.kpiLabel}>EMPLOYEES READY</Text>
+                <Text style={styles.kpiValue}>{stats.ready}</Text>
+                <Text style={styles.kpiSub}>Complete Bank Details</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiHeader}>
+                  <View style={[styles.kpiIcon, { backgroundColor: '#fffbeb' }]}><Clock size={18} color="#f59e0b" /></View>
+                  <Text style={styles.kpiBadge}>REAL-TIME</Text>
+                </View>
+                <Text style={styles.kpiLabel}>PENDING BANK INFO</Text>
+                <Text style={styles.kpiValue}>{stats.pending}</Text>
+                <Text style={styles.kpiSub}>Incomplete Records</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiHeader}>
+                  <View style={[styles.kpiIcon, { backgroundColor: '#fef2f2' }]}><ShieldAlert size={18} color="#ef4444" /></View>
+                  <Text style={styles.kpiBadge}>REAL-TIME</Text>
+                </View>
+                <Text style={styles.kpiLabel}>FAILED VALIDATIONS</Text>
+                <Text style={styles.kpiValue}>{stats.failed}</Text>
+                <Text style={styles.kpiSub}>Missing All Details</Text>
+              </View>
+            </ScrollView>
+
+            {/* Filters */}
+            <View style={{ marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={styles.totalRecordsText}>TOTAL {filteredNodes.length} RECORDS FOUND</Text>
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                <TouchableOpacity style={styles.filterChip} onPress={() => setShowMonthPicker(true)}>
+                  <Calendar size={14} color="#64748b" style={{ marginRight: 6 }} />
+                  <Text style={styles.filterChipText}>{months[month-1].slice(0,3)}</Text>
+                  <ChevronDown size={14} color="#94a3b8" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.filterChip} onPress={() => setShowYearPicker(true)}>
+                  <Text style={styles.filterChipText}>{year}</Text>
+                  <ChevronDown size={14} color="#94a3b8" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.filterChip} 
+                  onPress={() => setShowBankPicker(true)}
+                >
+                  <Building size={14} color="#64748b" style={{ marginRight: 6 }} />
+                  <Text style={styles.filterChipText}>{filterBank === 'All' ? 'All Banks' : filterBank}</Text>
+                  <ChevronDown size={14} color="#94a3b8" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.filterChip} 
+                  onPress={() => setShowStatusPicker(true)}
+                >
+                  <Filter size={14} color="#64748b" style={{ marginRight: 6 }} />
+                  <Text style={styles.filterChipText}>{filterStatus === 'All' ? 'All Statuses' : filterStatus}</Text>
+                  <ChevronDown size={14} color="#94a3b8" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              </ScrollView>
             </View>
 
-            {filteredNodes.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Search size={48} color={COLORS.border} />
-                <Text style={styles.emptyTitle}>No payout records found</Text>
-                <Text style={styles.emptyText}>Try adjusting your filters</Text>
+            {/* Table/List */}
+            <View style={styles.listContainer}>
+              <View style={styles.listHeader}>
+                <TouchableOpacity onPress={toggleAll} style={styles.checkboxContainer}>
+                  {selectedIds.length === filteredNodes.length && filteredNodes.length > 0 ? (
+                    <CheckSquare size={20} color="#4f46e5" />
+                  ) : (
+                    <Square size={20} color="#cbd5e1" />
+                  )}
+                </TouchableOpacity>
+                <Text style={[styles.columnHeader, { flex: 2 }]}>EMPLOYEE NAME</Text>
+                <Text style={[styles.columnHeader, { flex: 1.5 }]}>BANK DETAILS</Text>
+                <Text style={[styles.columnHeader, { width: 80, textAlign: 'right' }]}>NET PAY</Text>
               </View>
-            ) : (
-              filteredNodes.map((node, idx) => (
-                <EmployeeRow
-                  key={idx}
-                  employee={node}
-                  onPress={() => navigation.navigate('PayrollProfiles', { employeeId: node.user?._id || node.user })}
-                  currencySymbol={currencySymbol}
-                />
-              ))
-            )}
-          </View>
 
-          {/* Export Status Bar */}
-          <View style={styles.statusBar}>
-            <View style={styles.statusLeft}>
-              <View>
-                <Text style={styles.statusLabel}>Ready to Disburse</Text>
-                <Text style={styles.statusValue}>{stats.readyCount} Employees</Text>
-              </View>
-              <View style={styles.statusDivider} />
-              <View>
-                <Text style={[styles.statusLabel, { color: COLORS.error }]}>Issues Found</Text>
-                <Text style={[styles.statusValue, { color: COLORS.error }]}>
-                  {stats.pendingCount + stats.errorCount} Records
-                </Text>
-              </View>
+              {filteredNodes.length > 0 ? filteredNodes.map((node, i) => {
+                const StatusIcon = node.status.icon;
+                const isSelected = selectedIds.includes(node.id);
+                const empName = node.employee?.user?.name || node.user?.name || 'Unknown';
+                const avatarInitials = empName.slice(0, 1).toUpperCase();
+
+                return (
+                  <View key={node.id} style={styles.nodeRow}>
+                    <TouchableOpacity onPress={() => toggleSelection(node.id)} style={styles.checkboxContainer}>
+                      {isSelected ? <CheckSquare size={20} color="#4f46e5" /> : <Square size={20} color="#cbd5e1" />}
+                    </TouchableOpacity>
+                    
+                    <View style={[styles.cell, { flex: 2, flexDirection: 'row', alignItems: 'center' }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.empName}>{empName}</Text>
+                        <Text style={styles.empId}>{node.employee?.employeeId || node.employee?.user?.employeeId || node.employeeInfo?.employeeId || node.user?.employeeId}</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.cell, { flex: 1.5, paddingRight: 8 }]}>
+                      <Text style={styles.bankName}>{node.bankName}</Text>
+                      <Text style={styles.bankSub} numberOfLines={1} ellipsizeMode="tail">ACC: {node.accountNumber}</Text>
+                      <Text style={styles.bankSub} numberOfLines={1} ellipsizeMode="tail">IFSC: {node.ifsc}</Text>
+                    </View>
+
+                    <View style={[styles.cell, { width: 80, alignItems: 'flex-end' }]}>
+                      <Text style={styles.netPay}>{currencySymbol}{node.netPayCalc.toLocaleString()}</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: node.status.bg }]}>
+                        <Text style={[styles.statusText, { color: node.status.color }]}>{node.status.label}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              }) : (
+                <View style={styles.emptyState}>
+                  <CreditCard size={48} color="#cbd5e1" />
+                  <Text style={styles.emptyText}>No records found matching filters.</Text>
+                </View>
+              )}
             </View>
-            <TouchableOpacity
-              style={styles.fixButton}
-              onPress={() => navigation.navigate('PayrollProfiles')}
-            >
-              <Edit3 size={14} color={COLORS.white} />
-              <Text style={styles.fixButtonText}>Fix Issues</Text>
+
+            {/* Bottom spacer for floating bar */}
+            <View style={{ height: Platform.OS === 'ios' ? 120 : 100 }} />
+          </>
+        )}
+      </View>
+
+      {/* Floating Bottom Bar */}
+      {!loading && (
+        <View style={styles.floatingBar}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ marginRight: 16 }}>
+              <Text style={styles.floatLabel}>SELECTED FOR EXPORT</Text>
+              <Text style={styles.floatValue}>{selectionStats.count} / {filteredNodes.length} Employees</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.floatLabel}>SELECTED PAYOUT</Text>
+              <Text style={styles.floatValue} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{selectionStats.amount.toLocaleString()}</Text>
+            </View>
+          </View>
+          <TouchableOpacity 
+            style={[styles.floatBtn, selectedIds.length === 0 && { opacity: 0.5 }]} 
+            onPress={handleExport}
+            disabled={selectedIds.length === 0 || exporting}
+          >
+            {exporting ? <ActivityIndicator color="#fff" /> : <Text style={styles.floatBtnText}>PREVIEW & EXPORT ({selectionStats.count})</Text>}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Month Picker Modal */}
+      {showMonthPicker && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Month</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {months.map((mName, i) => {
+                const m = i + 1;
+                const isSelected = m === month;
+                return (
+                  <TouchableOpacity 
+                    key={i} 
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => { setMonth(m); setShowMonthPicker(false); }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#4f46e5' : '#334155' }}>
+                      {mName}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={18} color="#4f46e5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 20, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => setShowMonthPicker(false)}>
+              <Text style={{ fontWeight: '800', color: '#64748b' }}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      )}
 
-      {/* Preview Modal */}
-      <PreviewModal
-        visible={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        onConfirm={() => setIsConfirmOpen(true)}
-        previewRows={previewRows}
-        headers={headers}
-        currencySymbol={currencySymbol}
-        totalLiquidity={stats.totalLiquidity}
-        nodeCount={stats.nodeCount}
-      />
+      {/* Year Picker Modal */}
+      {showYearPicker && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Year</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {Array.from({ length: 5 }).map((_, i) => {
+                const y = new Date().getFullYear() - i;
+                const isSelected = y === year;
+                return (
+                  <TouchableOpacity 
+                    key={y} 
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => { setYear(y); setShowYearPicker(false); }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#4f46e5' : '#334155' }}>
+                      {y}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={18} color="#4f46e5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 20, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => setShowYearPicker(false)}>
+              <Text style={{ fontWeight: '800', color: '#64748b' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
-      {/* Confirmation Modal */}
-      <ConfirmModal
-        visible={isConfirmOpen}
-        onClose={() => setIsConfirmOpen(false)}
-        onConfirm={downloadBankFile}
-        nodeCount={stats.nodeCount}
-        totalLiquidity={stats.totalLiquidity}
-        currencySymbol={currencySymbol}
-      />
+      {/* Bank Picker Modal */}
+      {showBankPicker && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Bank</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {uniqueBanks.map((b, i) => {
+                const isSelected = filterBank === b;
+                return (
+                  <TouchableOpacity 
+                    key={i} 
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => { setFilterBank(b); setShowBankPicker(false); }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#4f46e5' : '#334155' }}>
+                      {b === 'All' ? 'All Banks' : b}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={18} color="#4f46e5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 20, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => setShowBankPicker(false)}>
+              <Text style={{ fontWeight: '800', color: '#64748b' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Status Picker Modal */}
+      {showStatusPicker && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Status</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {['All', 'READY', 'PENDING', 'FAILED'].map((s, i) => {
+                const isSelected = filterStatus === s;
+                return (
+                  <TouchableOpacity 
+                    key={i} 
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => { setFilterStatus(s); setShowStatusPicker(false); }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#4f46e5' : '#334155' }}>
+                      {s === 'All' ? 'All Statuses' : s}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={18} color="#4f46e5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 20, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => setShowStatusPicker(false)}>
+              <Text style={{ fontWeight: '800', color: '#64748b' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
     </Layout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.light },
-  content: { paddingHorizontal: 16, paddingBottom: 100 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.light },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  headerSubtitle: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  headerBtn: { backgroundColor: '#4f46e5', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, marginLeft: 8 },
+  headerBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  
+  kpiScroll: { paddingBottom: 20, gap: 16, flexDirection: 'row' },
+  kpiCard: { width: 220, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
+  kpiHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  kpiIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  kpiBadge: { fontSize: 9, fontWeight: '800', color: '#94a3b8', letterSpacing: 0.5 },
+  kpiLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', marginBottom: 4 },
+  kpiValue: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
+  kpiSub: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
 
-  actionRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  validateButton: { flex: 1, paddingVertical: 14, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, alignItems: 'center' },
-  validateButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.gray },
-  generateButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 12 },
-  generateButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.white },
-  disabledButton: { opacity: 0.5 },
+  filterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
+  filterChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  filterChipActive: { backgroundColor: '#eef2ff', borderColor: '#c7d2fe' },
+  filterChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  filterChipTextActive: { color: '#4f46e5' },
+  totalRecordsText: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 0.5 },
 
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  kpiCard: { flex: 1, minWidth: '45%', backgroundColor: COLORS.white, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: COLORS.border },
-  kpiCardActive: { borderColor: COLORS.primary, borderWidth: 2 },
-  kpiIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  kpiContent: { flex: 1 },
-  kpiLabel: { fontSize: 9, color: COLORS.gray, textTransform: 'uppercase', fontWeight: 'bold' },
-  kpiValue: { fontSize: 16, fontWeight: 'bold', marginTop: 2 },
-  kpiSubtitle: { fontSize: 9, color: COLORS.gray, marginTop: 2 },
+  listContainer: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  listHeader: { flexDirection: 'row', padding: 16, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', alignItems: 'center' },
+  columnHeader: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 0.5 },
+  
+  nodeRow: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
+  checkboxContainer: { width: 32, justifyContent: 'center' },
+  cell: { justifyContent: 'center' },
+  
+  empName: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  empId: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginTop: 2 },
+  
+  bankName: { fontSize: 13, fontWeight: '800', color: '#334155', marginBottom: 2 },
+  bankSub: { fontSize: 10, fontWeight: '600', color: '#64748b' },
+  
+  netPay: { fontSize: 13, fontWeight: '900', color: '#0f172a', marginBottom: 6 },
+  statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  statusText: { fontSize: 9, fontWeight: '800' },
 
-  filtersContainer: { marginBottom: 20 },
-  filterGroup: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  filterChip: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: COLORS.white, 
-    borderRadius: 12, 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    paddingHorizontal: 8, 
-    height: 44,
-  },
-  filterIcon: { marginRight: 4 },
-  safeSelector: { flex: 1 },
-  safeSelectorTrigger: { 
-    borderWidth: 0, 
-    backgroundColor: 'transparent', 
-    minHeight: 0, 
-    paddingHorizontal: 0, 
-    paddingVertical: 0, 
-    height: '100%',
-    flex: 1,
-  },
-  pickerItem: { fontSize: 14, color: COLORS.dark },
+  emptyState: { padding: 40, alignItems: 'center' },
+  emptyText: { fontSize: 14, color: '#94a3b8', fontWeight: '600', marginTop: 12 },
 
-  tableCard: { backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 20 },
-  tableHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  tableTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.dark },
-  tableCount: { fontSize: 11, color: COLORS.gray },
-
-  employeeRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  employeeAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: `${COLORS.primary}15`, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  employeeInitial: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary },
-  employeeInfo: { flex: 1 },
-  employeeName: { fontSize: 14, fontWeight: 'bold', color: COLORS.dark },
-  employeeMeta: { fontSize: 11, color: COLORS.gray, marginTop: 2 },
-  employeeRight: { alignItems: 'flex-end' },
-  employeeAmount: { fontSize: 14, fontWeight: 'bold', color: COLORS.dark },
-  employeeStatus: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginTop: 4 },
-  employeeStatusText: { fontSize: 9, fontWeight: 'bold' },
-
-  emptyContainer: { alignItems: 'center', paddingVertical: 48 },
-  emptyTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.dark, marginTop: 16 },
-  emptyText: { fontSize: 13, color: COLORS.gray, marginTop: 8 },
-
-  statusBar: { backgroundColor: COLORS.dark, borderRadius: 20, padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  statusLeft: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  statusLabel: { fontSize: 9, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase' },
-  statusValue: { fontSize: 14, fontWeight: 'bold', color: COLORS.white, marginTop: 2 },
-  statusDivider: { width: 1, height: 30, backgroundColor: `${COLORS.white}20` },
-  fixButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1, borderColor: `${COLORS.white}30`, borderRadius: 12 },
-  fixButtonText: { fontSize: 11, fontWeight: 'bold', color: COLORS.white },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.dark },
-  modalContent: { padding: 20 },
-  warningBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: `${COLORS.warning}10`, borderRadius: 12, padding: 12, marginBottom: 20 },
-  warningText: { flex: 1, fontSize: 11, color: COLORS.warning },
-  previewHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.light, paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8, marginBottom: 8 },
-  previewHeaderCell: { fontSize: 9, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase' },
-  previewRow: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  previewCell: { fontSize: 11, color: COLORS.dark },
-  modalFooter: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: COLORS.border },
-  cancelButton: { flex: 1, paddingVertical: 14, backgroundColor: COLORS.light, borderRadius: 12, alignItems: 'center' },
-  cancelButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.gray },
-  exportButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 12 },
-  exportButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.white },
-
-  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  confirmContainer: { backgroundColor: COLORS.white, borderRadius: 24, padding: 24, width: '80%', alignItems: 'center' },
-  confirmIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  confirmTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.dark, marginBottom: 8 },
-  confirmMessage: { fontSize: 13, color: COLORS.gray, textAlign: 'center', marginBottom: 24 },
-  confirmButtons: { flexDirection: 'row', gap: 12, width: '100%' },
-  confirmCancel: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: COLORS.light, alignItems: 'center' },
-  confirmCancelText: { fontSize: 14, fontWeight: '600', color: COLORS.gray },
-  confirmConfirm: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: 'center' },
-  confirmConfirmText: { fontSize: 14, fontWeight: '600', color: COLORS.white },
+  floatingBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#0f172a', flexDirection: 'row', padding: 16, alignItems: 'center', justifyContent: 'space-between', paddingBottom: Platform.OS === 'ios' ? 32 : 16 },
+  floatLabel: { fontSize: 9, fontWeight: '800', color: '#64748b', letterSpacing: 0.5, marginBottom: 4 },
+  floatValue: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  floatBtn: { backgroundColor: '#4f46e5', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8 },
+  floatBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' }
 });

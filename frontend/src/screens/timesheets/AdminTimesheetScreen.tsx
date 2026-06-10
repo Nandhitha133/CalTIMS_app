@@ -39,6 +39,7 @@ import PageHeader from '../../components/common/PageHeader';
 import SafeSelector from '../../components/common/SafeSelector';
 import StatusBadge from '../../components/common/StatusBadge';
 import { formatHours } from '../../utils/formatters';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -341,21 +342,26 @@ const FilterModal = ({
               />
             </View>
 
-            {/* Week Filter */}
+            {/* Week Filter (manual input) */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Week</Text>
-              <SafeSelector
-                options={[
-                  { label: 'All Weeks', value: '' },
-                  ...(filterOptions?.weeks?.map(week => ({ label: formatWeek(week), value: week })) || [])
-                ]}
-                selectedValue={tempFilters.week}
-                onValueChange={(value) => setTempFilters({ ...tempFilters, week: value })}
-                visible={activeSelector === 'week'}
-                onOpen={() => setActiveSelector('week')}
-                onClose={() => setActiveSelector(null)}
-                style={styles.filterSafeSelector}
+              <Text style={styles.filterLabel}>Week (number)</Text>
+              <TextInput
+                style={[styles.input, {
+                  color: theme === 'dark' ? '#ffffff' : '#1e293b',
+                  backgroundColor: theme === 'dark' ? '#334155' : '#f8fafc',
+                  borderColor: theme === 'dark' ? '#475569' : '#e2e8f0',
+                  height: 44,
+                }]}
+                placeholder="e.g. 23"
+                placeholderTextColor="#64748b"
+                value={tempFilters.week}
+                onChangeText={(value) => setTempFilters({ ...tempFilters, week: value.replace(/[^0-9]/g, '') })}
+                keyboardType="numeric"
+                maxLength={2}
               />
+              <Text style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+                Tip: enter week number (1–53). Year used is selected Year or current year.
+              </Text>
             </View>
           </ScrollView>
 
@@ -639,6 +645,19 @@ const formatWeek = (weekStartDate: string) => {
   }
 };
 
+const displayWeekLabel = (weekVal: string | undefined | null) => {
+  if (!weekVal) return '—';
+  // If raw numeric week stored (user input not yet converted), show it
+  if (/^\d{1,2}$/.test(String(weekVal))) return String(weekVal);
+  try {
+    const d = new Date(weekVal);
+    if (isNaN(d.getTime())) return String(weekVal);
+    return String(getISOWeek(d));
+  } catch (e) {
+    return String(weekVal);
+  }
+};
+
 export default function AdminTimesheetScreen({ navigation }: { navigation: any }) {
   const route = useRoute();
   const [user, setUser] = useState<any>(null);
@@ -914,7 +933,29 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
   };
 
   const handleFilterApply = (newFilters: any) => {
-    setFilters(newFilters);
+    // If week is entered as a week number (e.g. '23'), convert to ISO week-start date
+    const nf = { ...newFilters };
+    if (nf.week && typeof nf.week === 'string') {
+      const weekStr = nf.week.trim();
+      const weekNumMatch = weekStr.match(/^W?\s*(\d{1,2})$/i);
+      if (weekNumMatch) {
+        const weekNum = parseInt(weekNumMatch[1], 10);
+        const year = (nf.year && nf.year !== '') ? parseInt(nf.year, 10) : new Date().getFullYear();
+
+        // compute ISO week start (Monday) for given year + week number
+        const jan4 = new Date(Date.UTC(year, 0, 4));
+        const dayOfWeek = jan4.getUTCDay(); // 0=Sun..6=Sat
+        const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
+        const mondayWeek1 = new Date(jan4);
+        mondayWeek1.setUTCDate(jan4.getUTCDate() + diffToMonday);
+        const target = new Date(mondayWeek1);
+        target.setUTCDate(mondayWeek1.getUTCDate() + (weekNum - 1) * 7);
+        target.setUTCHours(0, 0, 0, 0);
+        nf.week = target.toISOString();
+      }
+    }
+
+    setFilters(nf);
     setPagination(prev => ({ ...prev, page: 1 }));
     setFilterModalVisible(false);
   };
@@ -1080,7 +1121,7 @@ export default function AdminTimesheetScreen({ navigation }: { navigation: any }
               )}
               {filters.week && (
                 <View style={styles.filterChip}>
-                  <Text style={styles.filterChipLabel}>Week: {formatWeek(filters.week)}</Text>
+                  <Text style={styles.filterChipLabel}>Week: {displayWeekLabel(filters.week)}</Text>
                 </View>
               )}
             </ScrollView>
@@ -1200,6 +1241,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  input: {
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    fontSize: moderateScale(14),
+  },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1221,8 +1268,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statsIcon: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1265,8 +1312,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    height: 44,
+    paddingHorizontal: scale(14),
+    height: verticalScale(44),
     borderRadius: 12,
     borderWidth: 1,
     position: 'relative',
@@ -1282,8 +1329,8 @@ const styles = StyleSheet.create({
     right: -6,
     backgroundColor: '#6366f1',
     borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    minWidth: scale(18),
+    height: scale(18),
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -1297,8 +1344,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    height: 44,
+    paddingHorizontal: scale(12),
+    height: verticalScale(44),
   },
   clearFiltersText: {
     fontSize: 12,
@@ -1309,8 +1356,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    height: 44,
+    paddingHorizontal: scale(14),
+    height: verticalScale(44),
     borderRadius: 12,
   },
   exportButtonText: {
@@ -1377,8 +1424,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   employeeAvatar: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
     borderRadius: 12,
     backgroundColor: '#6366f120',
     alignItems: 'center',
@@ -1436,8 +1483,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtn: {
-    width: 36,
-    height: 36,
+    width: scale(36),
+    height: scale(36),
     borderRadius: 10,
     backgroundColor: '#f1f5f9',
     alignItems: 'center',

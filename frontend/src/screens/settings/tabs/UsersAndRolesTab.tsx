@@ -72,6 +72,7 @@ interface PermissionTreeNodeProps {
   onToggle: (leaves: string[][], status: boolean) => void;
   searchQuery: string;
   isAdmin: boolean;
+  parentMatched?: boolean;
 }
 
 const PERMISSION_STRUCTURE = {
@@ -171,14 +172,8 @@ const ROLE_TEMPLATES: Record<string, any> = {
       "Support": { "Help & Support": ["view"] }
     }
   },
-  'Maintenance': {
-    name: 'Maintenance Mode',
-    description: 'Restricted: Only General Settings accessible during audits/updates',
-    permissions: {
-      "Settings": { "General": ["view"] },
-      "Support": { "Help & Support": ["view"] }
-    }
-  }
+  
+  
 };
 
 // Tri-state checkbox component
@@ -218,6 +213,7 @@ const PermissionTreeNode: React.FC<PermissionTreeNodeProps> = ({
   onToggle,
   searchQuery,
   isAdmin,
+  parentMatched = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -252,9 +248,12 @@ const PermissionTreeNode: React.FC<PermissionTreeNodeProps> = ({
   const matchesSearch = (text: string) => 
     text.toLowerCase().includes((searchQuery || '').toLowerCase());
   
+  const isMatch = matchesSearch(label);
+  const effectivelyMatched = parentMatched || isMatch;
+
   const hasVisibleChild = (() => {
     if (!searchQuery) return true;
-    if (matchesSearch(label)) return true;
+    if (effectivelyMatched) return true;
     
     const checkChildren = (nodes: any): boolean => {
       if (Array.isArray(nodes)) return nodes.some(a => matchesSearch(a));
@@ -313,6 +312,7 @@ const PermissionTreeNode: React.FC<PermissionTreeNodeProps> = ({
               onToggle={onToggle}
               searchQuery={searchQuery}
               isAdmin={isAdmin}
+              parentMatched={effectivelyMatched}
             />
           ))}
         </View>
@@ -320,7 +320,9 @@ const PermissionTreeNode: React.FC<PermissionTreeNodeProps> = ({
 
       {isLeaf && (
         <View style={[styles.treeActionButtons, { paddingLeft: (level * 24) + 60 }]}>
-          {(children as string[]).map(action => {
+          {(children as string[])
+            .filter(action => !searchQuery || effectivelyMatched || matchesSearch(action))
+            .map(action => {
             const isActive = permissions?.[path[0]]?.[path[1]]?.includes(action);
             return (
               <TouchableOpacity
@@ -481,14 +483,15 @@ export default function UsersAndRolesTab() {
 
   const saveMutation = useMutation({
     mutationFn: () => settingsAPI.updateSettings({ roles }),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setIsDirty(false);
       setOriginalRoles(JSON.parse(JSON.stringify(roles)));
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Access configuration synced successfully!' });
+      await useAuthStore.getState().checkAuth(); // Force refresh user state for sidebar updates
+      Alert.alert('Success', 'Access configuration synced successfully!');
     },
     onError: (error: any) => {
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Synchronization failed' });
+      Alert.alert('Error', error.response?.data?.message || 'Synchronization failed');
     },
   });
 
@@ -505,7 +508,7 @@ export default function UsersAndRolesTab() {
 
   const confirmAddRole = () => {
     if (!newRoleName.trim()) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Role name is required' });
+      Alert.alert('Error', 'Role name is required');
       return;
     }
 
@@ -518,7 +521,7 @@ export default function UsersAndRolesTab() {
     setRoles([...roles, newRole]);
     setActiveRoleIdx(roles.length);
     setAddRoleModalVisible(false);
-    Toast.show({ type: 'success', text1: 'Success', text2: 'New role added! Don\'t forget to save.' });
+    Alert.alert('Success', 'New role added! Don\'t forget to save.');
   };
 
   const handleUpdateRoleName = (index: number, newName: string) => {
@@ -544,7 +547,7 @@ export default function UsersAndRolesTab() {
     const targetIndices = isBulkMode && selectedRoleIdxs.length > 0 ? selectedRoleIdxs : [activeRoleIdx];
 
     if (targetIndices.length === 0) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'No roles selected for bulk update' });
+      Alert.alert('Error', 'No roles selected for bulk update');
       return;
     }
 
@@ -601,12 +604,12 @@ export default function UsersAndRolesTab() {
     role.templateType = type;
     newRoles[activeRoleIdx] = role;
     setRoles(newRoles);
-    Toast.show({ type: 'success', text1: 'Success', text2: `${type} template applied to ${role.name}` });
+    Alert.alert('Success', `${type} template applied to ${role.name}`);
   };
 
   const handleDeleteRole = (index: number) => {
     if (roles[index].isSystem) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'System roles cannot be deleted' });
+      Alert.alert('Error', 'System roles cannot be deleted');
       return;
     }
     setDeleteIndex(index);
@@ -618,7 +621,7 @@ export default function UsersAndRolesTab() {
       const newRoles = roles.filter((_, i) => i !== deleteIndex);
       setRoles(newRoles);
       setActiveRoleIdx(Math.max(0, deleteIndex - 1));
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Role removed. Click Save to persist.' });
+      Alert.alert('Success', 'Role removed. Click Save to persist.');
     }
     setDeleteModalVisible(false);
     setDeleteIndex(null);
@@ -880,31 +883,22 @@ export default function UsersAndRolesTab() {
             </View>
           )}
 
-          {/* History Panel */}
-          {currentRole && (
-            <View style={styles.historySection}>
-              <Text style={styles.sectionTitle}>Recent Activity</Text>
-              <Text style={styles.sectionSubtitle}>Timeline of changes for this role</Text>
-              <RoleTimeline roleName={currentRole.name} />
-            </View>
-          )}
+          {/* Bottom Save Button */}
+          <TouchableOpacity
+            style={[styles.saveButton, (!isDirty || saveMutation.isPending) && styles.saveButtonDisabled]}
+            onPress={() => saveMutation.mutate()}
+            disabled={!isDirty || saveMutation.isPending}
+          >
+            {saveMutation.isPending ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Save size={18} color="white" />
+                <Text style={styles.saveButtonText}>Synchronize Access Rules</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
-
-        {/* Bottom Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButton, (!isDirty || saveMutation.isPending) && styles.saveButtonDisabled, { marginHorizontal: 16, marginBottom: 16 }]}
-          onPress={() => saveMutation.mutate()}
-          disabled={!isDirty || saveMutation.isPending}
-        >
-          {saveMutation.isPending ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Save size={18} color="white" />
-              <Text style={styles.saveButtonText}>Synchronize Access Rules</Text>
-            </View>
-          )}
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Delete Confirmation Modal */}

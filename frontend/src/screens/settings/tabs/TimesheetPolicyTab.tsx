@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  Alert,
 } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -240,20 +241,26 @@ const EditableBadge = ({
   onChange,
   badgeStyle,
   textStyle,
-  formatValue
+  formatValue,
+  min,
+  max
 }: { 
   value: number; 
   onChange: (value: number) => void;
   badgeStyle?: any;
   textStyle?: any;
   formatValue: (v: number) => string;
+  min?: number;
+  max?: number;
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [tempValue, setTempValue] = useState(String(value));
 
   const handleSave = () => {
-    const numValue = parseFloat(tempValue);
+    let numValue = parseFloat(tempValue);
     if (!isNaN(numValue)) {
+      if (min !== undefined) numValue = Math.max(min, numValue);
+      if (max !== undefined) numValue = Math.min(max, numValue);
       onChange(numValue);
     }
     setShowModal(false);
@@ -404,12 +411,12 @@ export default function TimesheetPolicyTab() {
       });
     },
     onSuccess: () => {
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Timesheet policies updated!' });
+      Alert.alert('Success', 'Timesheet policies updated!');
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setInitialState(JSON.stringify({ taskCategories, ...policy }));
     },
     onError: (error: any) => {
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Save failed' });
+      Alert.alert('Error', error.response?.data?.message || 'Save failed');
     },
   });
 
@@ -547,13 +554,15 @@ export default function TimesheetPolicyTab() {
                 value={policy.permissionMaxHoursPerDay}
                 onChange={(val) => updatePolicy('permissionMaxHoursPerDay', val)}
                 formatValue={(v) => `${v} HRS`}
+                min={0}
+                max={12}
               />
             </View>
             
             <Slider
               style={styles.slider}
               minimumValue={0.5}
-              maximumValue={8}
+              maximumValue={12}
               step={0.5}
               value={policy.permissionMaxHoursPerDay}
               onValueChange={(value) => updatePolicy('permissionMaxHoursPerDay', value)}
@@ -566,10 +575,10 @@ export default function TimesheetPolicyTab() {
             
             <View style={styles.sliderLabels}>
               <Text style={styles.sliderLabel}>0H</Text>
-              <Text style={styles.sliderLabel}>2H</Text>
-              <Text style={styles.sliderLabel}>4H</Text>
+              <Text style={styles.sliderLabel}>3H</Text>
               <Text style={styles.sliderLabel}>6H</Text>
-              <Text style={styles.sliderLabel}>8H</Text>
+              <Text style={styles.sliderLabel}>9H</Text>
+              <Text style={styles.sliderLabel}>12H</Text>
             </View>
           </View>
 
@@ -586,13 +595,15 @@ export default function TimesheetPolicyTab() {
                 badgeStyle={styles.primaryBadge}
                 textStyle={{ color: '#6366f1' }}
                 formatValue={(v) => v === 0 ? '∞' : `${v}D`}
+                min={0}
+                max={6}
               />
             </View>
             
             <Slider
               style={styles.slider}
               minimumValue={0}
-              maximumValue={5}
+              maximumValue={6}
               step={1}
               value={policy.permissionMaxDaysPerWeek}
               onValueChange={(value) => updatePolicy('permissionMaxDaysPerWeek', value)}
@@ -605,11 +616,9 @@ export default function TimesheetPolicyTab() {
             
             <View style={styles.sliderLabels}>
               <Text style={styles.sliderLabel}>∞</Text>
-              <Text style={styles.sliderLabel}>1D</Text>
               <Text style={styles.sliderLabel}>2D</Text>
-              <Text style={styles.sliderLabel}>3D</Text>
               <Text style={styles.sliderLabel}>4D</Text>
-              <Text style={styles.sliderLabel}>5D</Text>
+              <Text style={styles.sliderLabel}>6D</Text>
             </View>
           </View>
 
@@ -626,13 +635,15 @@ export default function TimesheetPolicyTab() {
                 badgeStyle={styles.primaryBadge}
                 textStyle={{ color: '#6366f1' }}
                 formatValue={(v) => v === 0 ? '∞' : `${v}D`}
+                min={0}
+                max={31}
               />
             </View>
             
             <Slider
               style={styles.slider}
               minimumValue={0}
-              maximumValue={20}
+              maximumValue={31}
               step={1}
               value={policy.permissionMaxDaysPerMonth}
               onValueChange={(value) => updatePolicy('permissionMaxDaysPerMonth', value)}
@@ -645,10 +656,9 @@ export default function TimesheetPolicyTab() {
             
             <View style={styles.sliderLabels}>
               <Text style={styles.sliderLabel}>∞</Text>
-              <Text style={styles.sliderLabel}>5D</Text>
               <Text style={styles.sliderLabel}>10D</Text>
-              <Text style={styles.sliderLabel}>15D</Text>
               <Text style={styles.sliderLabel}>20D</Text>
+              <Text style={styles.sliderLabel}>31D</Text>
             </View>
           </View>
         </SectionCard>
@@ -662,9 +672,14 @@ export default function TimesheetPolicyTab() {
                 <Text style={styles.sliderTitle}>Daily Minimum</Text>
                 <Text style={styles.sliderSubtitle}>Threshold for warning/block</Text>
               </View>
-              <View style={[styles.valueBadge, styles.indigoBadge]}>
-                <Text style={styles.valueBadgeText}>{policy.minHoursPerDay} HRS</Text>
-              </View>
+              <EditableBadge
+                value={policy.minHoursPerDay}
+                onChange={(val) => updatePolicy('minHoursPerDay', val)}
+                badgeStyle={styles.indigoBadge}
+                formatValue={(v) => `${v} HRS`}
+                min={0}
+                max={8}
+              />
             </View>
             
             <Slider
@@ -697,9 +712,14 @@ export default function TimesheetPolicyTab() {
                 <Text style={styles.sliderTitle}>Daily Maximum</Text>
                 <Text style={styles.sliderSubtitle}>Cap on total daily hours</Text>
               </View>
-              <View style={[styles.valueBadge, styles.indigoBadge]}>
-                <Text style={styles.valueBadgeText}>{policy.maxHoursPerDay} HRS</Text>
-              </View>
+              <EditableBadge
+                value={policy.maxHoursPerDay}
+                onChange={(val) => updatePolicy('maxHoursPerDay', val)}
+                badgeStyle={styles.indigoBadge}
+                formatValue={(v) => `${v} HRS`}
+                min={8}
+                max={24}
+              />
             </View>
             
             <Slider
@@ -732,9 +752,12 @@ export default function TimesheetPolicyTab() {
                 <Text style={styles.sliderTitle}>Weekly Limit</Text>
                 <Text style={styles.sliderSubtitle}>Max allowed hours per week</Text>
               </View>
-              <View style={[styles.valueBadge, styles.indigoBadge]}>
-                <Text style={styles.valueBadgeText}>{policy.maxHoursPerWeek} HRS</Text>
-              </View>
+              <EditableBadge
+                value={policy.maxHoursPerWeek}
+                onChange={(val) => updatePolicy('maxHoursPerWeek', val)}
+                badgeStyle={styles.indigoBadge}
+                formatValue={(v) => `${v} HRS`}
+              />
             </View>
             
             <Slider

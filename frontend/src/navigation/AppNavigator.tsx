@@ -20,7 +20,9 @@ import {
   BankTransferExport,
   PayrollHourManagement,
   PayrollPolicy,
-  PayrollPayslip,
+  PayrollPayslips,
+  PayrollSetupWizard,
+  PayrollExecution,
 } from '../screens/payroll';
 import AnnouncementsScreen from '../screens/announcements/AnnouncementsScreen';
 import IncidentsScreen from '../screens/incidents/IncidentListScreen';
@@ -32,6 +34,7 @@ import TimesheetComplianceScreen from '../screens/timesheets/TimesheetCompliance
 import ProjectsScreen from '../screens/projects/ProjectsScreen';
 import TasksScreen from '../screens/tasks/TasksScreen';
 import EmployeesScreen from '../screens/employees/EmployeesScreen';
+import EmployeeDetail from '../screens/employees/EmployeeDetail';
 import AuditLogScreen from '../screens/audit/AuditLogScreen';
 import {
   OrganizationTab,
@@ -73,6 +76,7 @@ export type RootStackParamList = {
   Projects: undefined;
   Tasks: undefined;
   Employees: undefined;
+  EmployeeDetail: { userId: string; employeeInfo?: any };
   Announcements: undefined;
   Calendar: undefined;
   AdminCalendar: undefined;
@@ -86,13 +90,15 @@ export type RootStackParamList = {
   PayrollDashboard: undefined;
   PayrollProfiles: undefined;
   PayrollProcessing: undefined;
-  PayrollPayslip: undefined;
+  PayrollPayslips: undefined;
   PayrollReports: undefined;
   BankTransferExport: undefined;
   PayrollHourManagement: undefined;
   PayrollPolicy: undefined;
   PayrollRun: undefined;
   PayrollHistory: undefined;
+  PayrollExecution: { year: string | number, month: string | number };
+  PayrollSetupWizard: { preSelectedUser?: any };
   OrganizationTab: undefined;
   SubscriptionTab: undefined;
   NotificationsTab: undefined;
@@ -143,6 +149,7 @@ export default function AppNavigator() {
       <Stack.Screen name="Projects" component={ProjectsScreen} />
       <Stack.Screen name="Tasks" component={TasksScreen} />
       <Stack.Screen name="Employees" component={EmployeesScreen} />
+      <Stack.Screen name="EmployeeDetail" component={EmployeeDetail} />
       <Stack.Screen name="AuditLogs" component={AuditLogScreen} />
       <Stack.Screen name="OrganizationTab" component={OrganizationTab} />
       <Stack.Screen name="SubscriptionTab" component={SubscriptionTab} />
@@ -164,17 +171,19 @@ export default function AppNavigator() {
       <Stack.Screen name="PayrollProfiles" component={EmployeePayrollProfiles} />
       <Stack.Screen name="PayrollProcessing" component={PayrollProcessing} />
       <Stack.Screen name="PayrollHistory" component={PayrollHistory} />
+      <Stack.Screen name="PayrollExecution" component={PayrollExecution} />
       <Stack.Screen name="PayrollRun" component={PayrollRun} />
       <Stack.Screen name="PayrollReports" component={PayrollReports} />
       <Stack.Screen name="BankTransferExport" component={BankTransferExport} />
       <Stack.Screen name="PayrollHourManagement" component={PayrollHourManagement} />
       <Stack.Screen name="PayrollPolicy" component={PayrollPolicy} />
-      <Stack.Screen name="PayrollPayslip" component={PayrollPayslip} />
+      <Stack.Screen name="PayrollPayslips" component={PayrollPayslips} />
       <Stack.Screen name="LeaveTracker" component={LeaveTrackerScreen} />
       <Stack.Screen name="LeaveManagement" component={LeaveManagementScreen} />
       <Stack.Screen name="Reports" component={ReportsScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Profile" component={SettingsScreen} />
+      <Stack.Screen name="PayrollSetupWizard" component={PayrollSetupWizard} />
 
 
     </Stack.Navigator>

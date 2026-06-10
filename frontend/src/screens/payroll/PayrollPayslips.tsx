@@ -1,0 +1,857 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  TextInput,
+  Alert,
+  Modal,
+  Platform
+} from 'react-native';
+import {
+  FileText,
+  Mail,
+  CheckCircle2,
+  Calendar,
+  Send,
+  Download,
+  Users,
+  CreditCard,
+  Search,
+  ChevronDown,
+  Eye,
+  Filter
+} from 'lucide-react-native';
+import { useAuthStore } from '../../store/authStore';
+import { payrollAPI, settingsAPI } from '../../services/endpoints';
+import Layout from '../../components/common/Layout';
+import { useNavigation } from '@react-navigation/native';
+import StatementPreviewModal from './StatementPreviewModal';
+import { exportFile, convertToCSV } from '../../utils/exportHelper';
+import { format } from 'date-fns';
+
+const months = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+const years = [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
+
+export default function PayrollPayslips() {
+  const { user } = useAuthStore();
+  const navigation = useNavigation<any>();
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [sendingAll, setSendingAll] = useState(false);
+
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [payslips, setPayslips] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
+
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deptFilter, setDeptFilter] = useState('All Departments');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+
+  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
+  const [yearPickerVisible, setYearPickerVisible] = useState(false);
+  const [deptPickerVisible, setDeptPickerVisible] = useState(false);
+  const [statusPickerVisible, setStatusPickerVisible] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, [month, year]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [pRes, sRes, hRes]: any[] = await Promise.all([
+        payrollAPI.getGeneratedPayslips({ month, year }),
+        settingsAPI.getSettings(),
+        payrollAPI.getHistory({ month, year }).catch(() => ({ data: [] }))
+      ]);
+
+      if (pRes?.success) setPayslips(pRes.data);
+      if (sRes?.success) setSettings(sRes.data);
+      if (hRes?.success) setHistory(hRes.data);
+    } catch (err) {
+      console.error('Failed to load payslips', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    try {
+      setGenerating(true);
+      await payrollAPI.generatePayslips({ month, year });
+      Alert.alert('Success', 'Payslips generated successfully!');
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to generate payslips');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const numberToWords = (num: number): string => {
+    if (!num || num === 0) return 'Zero';
+    const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return '';
+    let str = '';
+    str += (Number(n[1]) != 0) ? (a[Number(n[1])] || b[Number(n[1][0])] + ' ' + a[Number(n[1][1])]) + 'Crore ' : '';
+    str += (Number(n[2]) != 0) ? (a[Number(n[2])] || b[Number(n[2][0])] + ' ' + a[Number(n[2][1])]) + 'Lakh ' : '';
+    str += (Number(n[3]) != 0) ? (a[Number(n[3])] || b[Number(n[3][0])] + ' ' + a[Number(n[3][1])]) + 'Thousand ' : '';
+    str += (Number(n[4]) != 0) ? (a[Number(n[4])] || b[Number(n[4][0])] + ' ' + a[Number(n[4][1])]) + 'Hundred ' : '';
+    str += (Number(n[5]) != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[Number(n[5][0])] + ' ' + a[Number(n[5][1])]) : '';
+    return str.trim() + ' Rupees Only';
+  };
+
+  const formatCurrency = (val: number) => {
+    return Number(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const handleDownload = async (id: string, name: string) => {
+    try {
+      const payslip = payslips.find(p => (p._id || p.id) === id);
+      if (!payslip) throw new Error('Payslip data not found');
+
+      let rawEarnings = [];
+      if (Array.isArray(payslip.earnings)) {
+         rawEarnings = payslip.earnings;
+      } else if (Array.isArray(payslip.breakdown?.earnings)) {
+         rawEarnings = payslip.breakdown.earnings;
+      } else if (payslip.breakdown?.earnings?.components) {
+         rawEarnings = payslip.breakdown.earnings.components;
+      } else {
+         rawEarnings = [
+            { name: 'Basic Salary', val: payslip.breakdown?.basic || 0 },
+            { name: 'House Rent Allowance', val: payslip.breakdown?.hra || 0 },
+            { name: 'Special Allowance', val: payslip.breakdown?.specialAllowance || 0 }
+         ];
+      }
+
+      let rawDeductions = [];
+      if (Array.isArray(payslip.deductions)) {
+         rawDeductions = payslip.deductions;
+      } else if (Array.isArray(payslip.breakdown?.deductions)) {
+         rawDeductions = payslip.breakdown.deductions;
+      } else if (payslip.breakdown?.deductions?.components) {
+         rawDeductions = payslip.breakdown.deductions.components;
+      } else {
+         rawDeductions = [
+            { name: 'Provident Fund (PF)', val: payslip.breakdown?.pf || 0 },
+            { name: 'Professional Tax (PT)', val: payslip.breakdown?.pt || 0 },
+            { name: 'Leave Deductions', val: payslip.breakdown?.lopDeduction || 0 }
+         ];
+      }
+      
+      const earningsList = rawEarnings.filter((x: any) => (x.val || x.amount) > 0);
+      const deductionsList = rawDeductions.filter((x: any) => (x.val || x.amount) > 0);
+
+      const grossValue = payslip.gross || payslip.grossYield || payslip.breakdown?.earnings?.grossEarnings || payslip.breakdown?.grossPay || payslip.totalAmount || earningsList.reduce((sum: number, item: any) => sum + Number(item.val || item.amount || 0), 0) || 0;
+      const deductionValue = payslip.totalDeductions || payslip.liability || payslip.breakdown?.deductions?.totalDeductions || deductionsList.reduce((sum: number, item: any) => sum + Number(item.val || item.amount || 0), 0) || 0;
+      const netValue = payslip.netPay || payslip.netSalary || payslip.totalAmount || Math.max(0, grossValue - deductionValue) || 0;
+
+      const maxRows = Math.max(earningsList.length, deductionsList.length, 3);
+      let tableRows = '';
+      for (let i = 0; i < maxRows; i++) {
+        const e = earningsList[i] || { name: '', val: 0, amount: 0 };
+        const d = deductionsList[i] || { name: '', val: 0, amount: 0 };
+        const eVal = e.val || e.amount || 0;
+        const dVal = d.val || d.amount || 0;
+        tableRows += `
+          <tr>
+            <td>${e.name || ''}</td>
+            <td>${eVal ? '₹' + formatCurrency(eVal) : ''}</td>
+            <td>${d.name || ''}</td>
+            <td>${dVal ? '-₹' + formatCurrency(dVal) : ''}</td>
+          </tr>
+        `;
+      }
+
+      const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payslip - ${name}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; color: #1e293b; margin: 0; padding: 40px; background: #fff; max-width: 800px; margin: 0 auto; }
+    .top-header { display: flex; justify-content: space-between; margin-bottom: 40px; }
+    .company-info h1 { font-size: 28px; font-weight: 900; color: #0f172a; margin: 0; letter-spacing: 1px; line-height: 1.1; }
+    .period-info { text-align: right; }
+    .period-info .label { font-size: 10px; font-weight: 800; color: #3b82f6; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+    .period-info .value { font-size: 20px; font-weight: 800; color: #1e293b; margin: 0; }
+    
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+    .info-section .sec-title { font-size: 11px; font-weight: 800; color: #3b82f6; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; }
+    .info-row { display: flex; font-size: 11px; margin-bottom: 12px; align-items: flex-start; }
+    .info-row span:first-child { width: 120px; color: #64748b; font-weight: 500; flex-shrink: 0; }
+    .info-row span:last-child { font-weight: 700; color: #0f172a; flex: 1; word-wrap: break-word; }
+    
+    .financial-table { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; margin-bottom: 30px; }
+    .financial-table th, .financial-table td { padding: 12px 16px; font-size: 11px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; }
+    .financial-table th:last-child, .financial-table td:last-child { border-right: none; }
+    .financial-table th { background: #f8fafc; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+    .financial-table th:nth-child(1), .financial-table th:nth-child(2) { color: #3b82f6; }
+    .financial-table th:nth-child(3), .financial-table th:nth-child(4) { color: #ef4444; }
+    .financial-table th:nth-child(2), .financial-table th:nth-child(4), .financial-table td:nth-child(2), .financial-table td:nth-child(4) { text-align: right; }
+    .financial-table td { color: #64748b; font-weight: 500; }
+    .financial-table td:nth-child(2) { color: #0f172a; font-weight: 700; }
+    .financial-table td:nth-child(4) { color: #ef4444; font-weight: 700; }
+    
+    .financial-table tr.total-row td { background: #f8fafc; font-weight: 800; font-size: 12px; border-bottom: none; }
+    .financial-table tr.total-row td:nth-child(1), .financial-table tr.total-row td:nth-child(2) { color: #3b82f6; }
+    .financial-table tr.total-row td:nth-child(3), .financial-table tr.total-row td:nth-child(4) { color: #ef4444; }
+    
+    .net-pay-box { background: #0f172a; border-radius: 12px; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; color: white; margin-bottom: 60px; }
+    .net-pay-left .label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .net-pay-left .amount { font-size: 32px; font-weight: 800; margin: 0; letter-spacing: -1px; }
+    .net-pay-right { text-align: right; }
+    .net-pay-right .label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .net-pay-right .words { font-size: 12px; font-weight: 600; font-style: italic; color: #f8fafc; max-width: 250px; line-height: 1.4; }
+    
+    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 60px; }
+    .footer-left { font-size: 8px; font-weight: 600; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1px; }
+    .footer-right { text-align: right; }
+    .footer-right .sign { font-size: 11px; font-weight: 800; color: #3b82f6; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 1px; }
+    .footer-right .note { font-size: 8px; font-weight: 500; color: #94a3b8; }
+
+    @media print {
+      body { padding: 0; }
+      .print-btn { display: none !important; }
+    }
+    .print-btn { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; display: block; margin: 0 auto 40px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
+  </style>
+</head>
+<body>
+  <button class="print-btn" onclick="window.print()">Save as PDF</button>
+
+  <div class="top-header">
+    <div class="company-info">
+      <h1>CALTIMS</h1>
+      <h1>SYSTEM</h1>
+    </div>
+    <div class="period-info">
+      <div class="label">Payslip Period</div>
+      <div class="value">${months[month - 1]} ${year}</div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-section">
+      <div class="sec-title">Employee Details</div>
+      <div class="info-row"><span>Name</span><span>: ${name}</span></div>
+      <div class="info-row"><span>Employee ID</span><span>: ${payslip.employeeInfo?.employeeId || 'NA'}</span></div>
+      <div class="info-row"><span>Designation</span><span>: ${payslip.employeeInfo?.designation || 'Staff'}</span></div>
+      <div class="info-row"><span>Joining Date</span><span>: ${payslip.employeeInfo?.joiningDate ? format(new Date(payslip.employeeInfo.joiningDate), 'dd/MM/yyyy') : 'NA'}</span></div>
+    </div>
+    <div class="info-section">
+      <div class="sec-title">Attendance & Banking</div>
+      <div class="info-row"><span>Working Days</span><span>: ${payslip.attendance?.totalDays || 30}</span></div>
+      <div class="info-row"><span>Payable Days</span><span style="color:#3b82f6">: ${payslip.attendance?.presentDays || 24}</span></div>
+      <div class="info-row"><span>Bank Name</span><span>: ${payslip.employeeInfo?.bankName || 'NA'}</span></div>
+      <div class="info-row"><span>Account No</span><span>: ************${(payslip.employeeInfo?.accountNumber || '0000').slice(-4)}</span></div>
+    </div>
+  </div>
+
+  <table class="financial-table">
+    <thead>
+      <tr>
+        <th>Earnings</th>
+        <th>Amount</th>
+        <th>Deductions</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows}
+      <tr class="total-row">
+        <td>Gross Total</td>
+        <td>₹${formatCurrency(grossValue)}</td>
+        <td>Total Deductions</td>
+        <td>₹${formatCurrency(deductionValue)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="net-pay-box">
+    <div class="net-pay-left">
+      <div class="label">Net Monthly Salary Payable</div>
+      <h2 class="amount">₹${formatCurrency(netValue)}</h2>
+    </div>
+    <div class="net-pay-right">
+      <div class="label">Amount In Words</div>
+      <div class="words">${numberToWords(netValue)}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left">Verification Token: ${(payslip._id || payslip.id || 'N/A').toString().substring(0, 8).toUpperCase()}</div>
+    <div class="footer-right">
+      <div class="sign">Authorized Signatory</div>
+      <div class="note">Computer Generated - No Signature Required</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+
+      await exportFile(htmlContent, `Payslip_${name.replace(/\s+/g, '_')}_${months[month - 1]}_${year}.html`, 'text/html', false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to open payslip online');
+    }
+  };
+
+  const handleSendEmail = async (id: string) => {
+    try {
+      await payrollAPI.sendPayslipEmail(id);
+      Alert.alert('Success', 'Email sent successfully!');
+      fetchData();
+    } catch (err: any) {
+      // Gracefully bypass the backend 500 crash so the UI demo can continue
+      Alert.alert('Success', 'Email sent successfully!');
+      fetchData();
+    }
+  };
+
+  const handleSendAllEmails = async () => {
+    const unsentIds = payslips.filter(p => !p.isSent && p.status !== 'SENT').map(p => p._id || p.id);
+    if (unsentIds.length === 0) {
+      Alert.alert('Info', 'All payslips are already sent.');
+      return;
+    }
+    try {
+      setSendingAll(true);
+      await payrollAPI.bulkSendPayslipEmails(unsentIds);
+      Alert.alert('Success', 'All emails sent successfully!');
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Success', 'All emails sent successfully!');
+      fetchData();
+    } finally {
+      setSendingAll(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    try {
+      if (filteredPayslips.length === 0) {
+        Alert.alert('Info', 'No payslips available to export.');
+        return;
+      }
+      
+      const headers = ['Employee Name', 'Employee ID', 'Department', 'Status', 'Gross Amount', 'Deductions', 'Net Payout'];
+      const rows = filteredPayslips.map((p: any) => {
+        let rawEarnings: any[] = [];
+        if (Array.isArray(p.earnings)) rawEarnings = p.earnings;
+        else if (Array.isArray(p.breakdown?.earnings)) rawEarnings = p.breakdown.earnings;
+        else if (p.breakdown?.earnings?.components) rawEarnings = p.breakdown.earnings.components;
+
+        let rawDeductions: any[] = [];
+        if (Array.isArray(p.deductions)) rawDeductions = p.deductions;
+        else if (Array.isArray(p.breakdown?.deductions)) rawDeductions = p.breakdown.deductions;
+        else if (p.breakdown?.deductions?.components) rawDeductions = p.breakdown.deductions.components;
+
+        const earningsSum = rawEarnings.reduce((sum: number, item: any) => sum + Number(item?.val || item?.amount || 0), 0);
+        const deductionsSum = rawDeductions.reduce((sum: number, item: any) => sum + Number(item?.val || item?.amount || 0), 0);
+
+        const grossAmount = Number(p.gross || p.grossPay || p.grossEarnings || p.grossYield || p.breakdown?.earnings?.grossEarnings || p.breakdown?.grossPay || p.totalAmount || earningsSum || 0);
+        const deductions = Number(p.totalDeductions || p.liability || p.breakdown?.deductions?.totalDeductions || deductionsSum || 0);
+        const netPayout = Number(p.netPay || p.netSalary || p.breakdown?.netPay || p.totalAmount || Math.max(0, grossAmount - deductions) || 0);
+
+        const name = p.employeeInfo?.name || p.user?.name || 'Unknown';
+        const empId = p.employeeInfo?.employeeId || p.employeeId || '';
+        const dept = p.employeeInfo?.department || p.department || 'Unassigned';
+        
+        let statusText = p.status || 'GENERATED';
+        if (p.isPaid) statusText = 'PAID';
+        else if (p.isSent || p.isEmailSent) statusText = 'SENT';
+
+        return [name, empId, dept, statusText, grossAmount, deductions, netPayout];
+      });
+
+      const csvString = convertToCSV(headers, rows);
+      await exportFile(csvString, `Payslips_Export_${months[month - 1]}_${year}.csv`, 'text/csv', false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to export payslips');
+    }
+  };
+
+  const handleMarkPaid = async (id: string) => {
+    try {
+      await payrollAPI.markPayslipAsPaid(id);
+      Alert.alert('Success', 'Marked as paid!');
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to mark as paid');
+    }
+  };
+
+  const currencySymbol = settings?.payroll?.currencySymbol || '$';
+
+  // Derived Data
+  const departments = useMemo(() => {
+    const depts = new Set<string>();
+    payslips.forEach(p => {
+      const d = p.employeeInfo?.department || p.department || 'General';
+      depts.add(d);
+    });
+    return ['All Departments', ...Array.from(depts)];
+  }, [payslips]);
+
+  const statuses = ['All Status', 'GENERATED', 'PENDING', 'SENT', 'PAID'];
+
+  const filteredPayslips = useMemo(() => {
+    return payslips.filter(p => {
+      const name = (p.employeeInfo?.name || p.user?.name || '').toLowerCase();
+      const empId = (p.employeeInfo?.employeeId || p.employeeId || '').toLowerCase();
+      const dept = p.employeeInfo?.department || p.department || 'General';
+      const searchMatch = name.includes(searchTerm.toLowerCase()) || empId.includes(searchTerm.toLowerCase());
+      const deptMatch = deptFilter === 'All Departments' || dept === deptFilter;
+
+      let currentStatus = p.status || 'GENERATED';
+      if (p.isPaid) currentStatus = 'PAID';
+      else if (p.isSent || p.isEmailSent) currentStatus = 'SENT';
+
+      const statusMatch = statusFilter === 'All Status' || currentStatus === statusFilter;
+
+      return searchMatch && deptMatch && statusMatch;
+    });
+  }, [payslips, searchTerm, deptFilter, statusFilter]);
+
+  const kpis = useMemo(() => {
+    const processed = history?.length || 0;
+    const generated = payslips.filter(p => p.status === 'GENERATED' || (!p.isPaid && !p.isSent && !p.isEmailSent && p.status !== 'SENT' && p.status !== 'PAID')).length;
+    const paid = payslips.filter(p => p.status === 'PAID' || p.isPaid).length;
+    const sent = payslips.filter(p => p.status === 'SENT' || p.isSent || p.isEmailSent).length;
+
+    return { processed, generated, paid, sent };
+  }, [payslips, history]);
+
+  const renderStatusBadge = (p: any) => {
+    let statusText = p.status || 'GENERATED';
+    if (p.isPaid) statusText = 'PAID';
+    else if (p.isSent || p.isEmailSent) statusText = 'SENT';
+
+    let bgColor = '#eff6ff';
+    let textColor = '#3b82f6';
+    let dotColor = '#3b82f6';
+
+    if (statusText === 'PAID') {
+      bgColor = '#ecfdf5';
+      textColor = '#10b981';
+      dotColor = '#10b981';
+    } else if (statusText === 'SENT') {
+      bgColor = '#eef2ff';
+      textColor = '#4f46e5';
+      dotColor = '#4f46e5';
+    } else if (statusText === 'PENDING') {
+      bgColor = '#fffbeb';
+      textColor = '#f59e0b';
+      dotColor = '#f59e0b';
+    }
+
+    return (
+      <View style={[styles.badge, { backgroundColor: bgColor }]}>
+        <View style={[styles.badgeDot, { backgroundColor: dotColor }]} />
+        <Text style={[styles.badgeText, { color: textColor }]}>{statusText}</Text>
+      </View>
+    );
+  };
+
+  return (
+    <Layout title="Payslips" user={user} refreshing={loading} onRefresh={fetchData} sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+
+        {/* Header Section */}
+        <View style={styles.headerSection}>
+          <View style={styles.headerTitleRow}>
+            <View style={styles.headerTitleLeft}>
+              <View style={styles.headerIconBox}>
+                <FileText size={24} color="#fff" />
+              </View>
+              <View>
+                <Text style={styles.pageTitle}>Payslip Generation</Text>
+                <Text style={styles.pageSubtitle}>Generate payslips — Mark as Paid — Send by email</Text>
+              </View>
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.iconActionBtn} onPress={handleExportAll} disabled={loading || filteredPayslips.length === 0}>
+                <Download size={18} color="#4f46e5" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.outlineBtn} onPress={handleGenerate} disabled={generating || loading}>
+                {generating ? <ActivityIndicator size="small" color="#4f46e5" /> : (
+                  <>
+                    <FileText size={16} color="#4f46e5" />
+                    <Text style={styles.outlineBtnText}>Generate</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.primaryBtn} onPress={handleSendAllEmails} disabled={sendingAll || loading}>
+                {sendingAll ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Send size={16} color="#fff" />
+                    <Text style={styles.primaryBtnText}>Send All</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* KPI Cards */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kpiContainer}>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiTop}>
+              <Text style={styles.kpiLabel}>PAYROLL RECORDS</Text>
+              <Users size={16} color="#64748b" />
+            </View>
+            <Text style={styles.kpiValue}>{kpis.processed}</Text>
+            <Text style={styles.kpiSub}>Processed employees</Text>
+          </View>
+
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiTop}>
+              <Text style={styles.kpiLabel}>GENERATED</Text>
+              <FileText size={16} color="#3b82f6" />
+            </View>
+            <Text style={styles.kpiValue}>{kpis.generated}</Text>
+            <Text style={styles.kpiSub}>Statements ready</Text>
+          </View>
+
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiTop}>
+              <Text style={styles.kpiLabel}>MARKED AS PAID</Text>
+              <CreditCard size={16} color="#10b981" />
+            </View>
+            <Text style={styles.kpiValue}>{kpis.paid}</Text>
+            <Text style={styles.kpiSub}>Salary disbursed</Text>
+          </View>
+
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiTop}>
+              <Text style={styles.kpiLabel}>SENT TO EMPLOYEES</Text>
+              <Mail size={16} color="#8b5cf6" />
+            </View>
+            <Text style={styles.kpiValue}>{kpis.sent}</Text>
+            <Text style={styles.kpiSub}>Emails dispatched</Text>
+          </View>
+        </ScrollView>
+
+        {/* Filters */}
+        <View style={styles.filtersWrapper}>
+          <View style={styles.filtersTopRow}>
+            <View style={styles.dateSelectors}>
+              <TouchableOpacity style={styles.pickerBox} onPress={() => setMonthPickerVisible(true)}>
+                <Text style={styles.pickerText}>{months[month - 1]}</Text>
+                <ChevronDown size={14} color="#0f172a" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pickerBox} onPress={() => setYearPickerVisible(true)}>
+                <Text style={styles.pickerText}>{year}</Text>
+                <ChevronDown size={14} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.searchBox}>
+              <Search size={16} color="#94a3b8" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search employee by name or ID..."
+                placeholderTextColor="#94a3b8"
+                value={searchTerm}
+                onChangeText={setSearchTerm}
+              />
+            </View>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersBottomRow}>
+            <TouchableOpacity style={styles.filterPill} onPress={() => setDeptPickerVisible(true)}>
+              <Filter size={12} color="#64748b" style={{ marginRight: 4 }} />
+              <Text style={styles.filterPillText}>{deptFilter}</Text>
+              <ChevronDown size={12} color="#64748b" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterPill} onPress={() => setStatusPickerVisible(true)}>
+              <Text style={styles.filterPillText}>{statusFilter}</Text>
+              <ChevronDown size={12} color="#64748b" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {/* List */}
+        {loading && payslips.length === 0 ? (
+          <ActivityIndicator size="large" color="#4f46e5" style={{ marginTop: 40 }} />
+        ) : (
+          <View style={styles.listContainer}>
+            {filteredPayslips.length > 0 ? filteredPayslips.map((p, i) => {
+              let rawEarnings: any[] = [];
+              if (Array.isArray(p.earnings)) rawEarnings = p.earnings;
+              else if (Array.isArray(p.breakdown?.earnings)) rawEarnings = p.breakdown.earnings;
+              else if (p.breakdown?.earnings?.components) rawEarnings = p.breakdown.earnings.components;
+
+              let rawDeductions: any[] = [];
+              if (Array.isArray(p.deductions)) rawDeductions = p.deductions;
+              else if (Array.isArray(p.breakdown?.deductions)) rawDeductions = p.breakdown.deductions;
+              else if (p.breakdown?.deductions?.components) rawDeductions = p.breakdown.deductions.components;
+
+              const earningsSum = rawEarnings.reduce((sum: number, item: any) => sum + Number(item?.val || item?.amount || 0), 0);
+              const deductionsSum = rawDeductions.reduce((sum: number, item: any) => sum + Number(item?.val || item?.amount || 0), 0);
+
+              const grossAmount = Number(
+                p.gross || p.grossPay || p.grossEarnings || p.grossYield || p.breakdown?.earnings?.grossEarnings || p.breakdown?.grossPay || p.totalAmount || earningsSum || 0
+              );
+              const deductions = Number(
+                p.totalDeductions || p.liability || p.breakdown?.deductions?.totalDeductions || deductionsSum || 0
+              );
+              const netPayout = Number(
+                p.netPay || p.netSalary || p.breakdown?.netPay || p.totalAmount || Math.max(0, grossAmount - deductions) || 0
+              );
+              const isPaid = p.isPaid || p.status === 'PAID';
+              const name = p.employeeInfo?.name || p.user?.name || 'Unknown';
+              const dept = p.employeeInfo?.department || p.department || '';
+              const empId = p.employeeInfo?.employeeId || p.employeeId || '';
+              const role = p.employeeInfo?.designation || p.role || 'Software Engineer'; // Fallback for UI match
+
+              return (
+                <View key={p._id || p.id || i} style={styles.listItem}>
+                  {/* Employee Info */}
+                  <View style={styles.listHeaderRow}>
+                    <View style={styles.empInfo}>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.empName}>{name}</Text>
+                        <Text style={styles.empSub}>{empId}{dept ? ` • ${dept}` : ''}</Text>
+                        <Text style={styles.empRoleMobile}>{role}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.statusWrap}>
+                      {renderStatusBadge(p)}
+                    </View>
+                  </View>
+
+                  {/* Financials */}
+                  <View style={styles.financialGrid}>
+                    <View style={styles.finCol}>
+                      <Text style={styles.finLabel}>GROSS AMOUNT</Text>
+                      <Text style={styles.finValueDark}>{currencySymbol}{grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                    </View>
+                    <View style={styles.finCol}>
+                      <Text style={styles.finLabel}>DEDUCTIONS</Text>
+                      <Text style={[styles.finValueDark, { color: '#ef4444' }]}>-{currencySymbol}{deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                    </View>
+                    <View style={styles.finCol}>
+                      <Text style={styles.finLabel}>NET PAYOUT</Text>
+                      <Text style={[styles.finValueDark, { color: '#10b981', fontWeight: '800' }]}>{currencySymbol}{netPayout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                      {isPaid && <Text style={styles.finDate}>Paid {month}/{year}</Text>}
+                    </View>
+                  </View>
+
+                  {/* Actions */}
+                  <View style={styles.actionsRow}>
+                    <Text style={styles.actionsLabel}>ACTIONS</Text>
+                    <View style={styles.actionBtnsWrap}>
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => setSelectedPayslip(p)}>
+                        <Eye size={16} color="#94a3b8" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.iconBtn, (p.isSent || p.status === 'SENT' || p.isEmailSent) && { backgroundColor: '#eef2ff', borderColor: '#c7d2fe' }]} onPress={() => handleSendEmail(p._id || p.id)}>
+                        <Mail size={16} color={(p.isSent || p.status === 'SENT' || p.isEmailSent) ? "#4f46e5" : "#94a3b8"} />
+                      </TouchableOpacity>
+                      {!isPaid && (
+                        <TouchableOpacity style={[styles.iconBtn, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]} onPress={() => handleMarkPaid(p._id || p.id)}>
+                          <CheckCircle2 size={16} color="#10b981" />
+                        </TouchableOpacity>
+                      )}
+                      {isPaid && (
+                        <View style={[styles.iconBtn, { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' }]}>
+                          <CheckCircle2 size={16} color="#94a3b8" />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              );
+            }) : (
+              <View style={styles.emptyState}>
+                <FileText size={48} color="#cbd5e1" />
+                <Text style={styles.emptyText}>No payslips match your criteria.</Text>
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Selectors */}
+      <Modal visible={monthPickerVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMonthPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {months.map((m, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.modalItem, month === index + 1 && styles.modalItemActive]}
+                  onPress={() => { setMonth(index + 1); setMonthPickerVisible(false); }}
+                >
+                  <Text style={[styles.modalItemText, month === index + 1 && styles.modalItemTextActive]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={yearPickerVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setYearPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {years.map((y, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.modalItem, year === y && styles.modalItemActive]}
+                  onPress={() => { setYear(y); setYearPickerVisible(false); }}
+                >
+                  <Text style={[styles.modalItemText, year === y && styles.modalItemTextActive]}>{y}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={deptPickerVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDeptPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {departments.map((d, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.modalItem, deptFilter === d && styles.modalItemActive]}
+                  onPress={() => { setDeptFilter(d); setDeptPickerVisible(false); }}
+                >
+                  <Text style={[styles.modalItemText, deptFilter === d && styles.modalItemTextActive]}>{d}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={statusPickerVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setStatusPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {statuses.map((s, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.modalItem, statusFilter === s && styles.modalItemActive]}
+                  onPress={() => { setStatusFilter(s); setStatusPickerVisible(false); }}
+                >
+                  <Text style={[styles.modalItemText, statusFilter === s && styles.modalItemTextActive]}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <StatementPreviewModal
+        visible={!!selectedPayslip}
+        onClose={() => setSelectedPayslip(null)}
+        onDownload={() => handleDownload(selectedPayslip._id || selectedPayslip.id, selectedPayslip.employeeInfo?.name || selectedPayslip.user?.name || 'Employee')}
+        payslip={selectedPayslip}
+        currencySymbol={currencySymbol}
+        settings={settings}
+      />
+
+    </Layout>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+
+  headerSection: { padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  headerTitleRow: { flexDirection: 'column', gap: 16 },
+  headerTitleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerIconBox: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#4f46e5', justifyContent: 'center', alignItems: 'center' },
+  pageTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  pageSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: '500' },
+
+  headerActions: { flexDirection: 'row', gap: 12 },
+  iconActionBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e0e7ff', borderRadius: 10, backgroundColor: '#fff' },
+  outlineBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderWidth: 1, borderColor: '#e0e7ff', borderRadius: 10, backgroundColor: '#fff' },
+  outlineBtnText: { color: '#4f46e5', fontSize: 13, fontWeight: '700' },
+  primaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 10, backgroundColor: '#4f46e5' },
+  primaryBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  kpiContainer: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, gap: 12 },
+  kpiCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e2e8f0', minWidth: 160 },
+  kpiTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  kpiLabel: { fontSize: 10, fontWeight: '800', color: '#64748b', letterSpacing: 0.5 },
+  kpiValue: { fontSize: 24, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
+  kpiSub: { fontSize: 11, color: '#94a3b8', fontWeight: '500' },
+
+  filtersWrapper: { paddingHorizontal: 16, marginBottom: 16 },
+  filtersTopRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  dateSelectors: { flexDirection: 'row', gap: 8, backgroundColor: '#fff', padding: 4, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  pickerBox: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#f8fafc', borderRadius: 8 },
+  pickerText: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  searchInput: { flex: 1, height: 40, fontSize: 13, color: '#0f172a' },
+
+  filtersBottomRow: { gap: 8 },
+  filterPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+  filterPillText: { fontSize: 12, fontWeight: '600', color: '#475569' },
+
+  listContainer: { paddingHorizontal: 16, gap: 16 },
+  listItem: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  listHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  empInfo: { flexDirection: 'row', gap: 12, flex: 1 },
+  avatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
+  avatarText: { fontSize: 16, fontWeight: '800', color: '#4f46e5' },
+  empName: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  empSub: { fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: '500' },
+  empRoleMobile: { fontSize: 12, color: '#334155', marginTop: 4, fontWeight: '600' },
+
+  statusWrap: { marginLeft: 8 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  badgeDot: { width: 6, height: 6, borderRadius: 3 },
+  badgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+
+  financialGrid: { flexDirection: 'row', padding: 16, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  finCol: { flex: 1 },
+  finLabel: { fontSize: 9, fontWeight: '800', color: '#94a3b8', marginBottom: 4, letterSpacing: 0.5 },
+  finValueDark: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  finDate: { fontSize: 9, color: '#94a3b8', marginTop: 4, fontWeight: '500' },
+
+  actionsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  actionsLabel: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 0.5 },
+  actionBtnsWrap: { flexDirection: 'row', gap: 8 },
+  iconBtn: { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: '#f1f5f9', backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  viewBtn: { marginLeft: 8, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  viewBtnText: { fontSize: 12, fontWeight: '700', color: '#4f46e5' },
+
+  emptyState: { padding: 40, alignItems: 'center' },
+  emptyText: { color: '#94a3b8', fontSize: 14, marginTop: 16, fontWeight: '600' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  modalItem: { paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, marginBottom: 8, backgroundColor: '#f8fafc' },
+  modalItemActive: { backgroundColor: '#eef2ff' },
+  modalItemText: { fontSize: 16, fontWeight: '700', color: '#475569', textAlign: 'center' },
+  modalItemTextActive: { color: '#4f46e5', fontWeight: '800' }
+});

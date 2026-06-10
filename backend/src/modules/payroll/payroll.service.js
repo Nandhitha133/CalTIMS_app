@@ -1345,9 +1345,48 @@ const markAsPaid = async ({ month, year, ids, organizationId, processedBy, versi
     return batch;
 };
 
+const deleteBatch = async (batchId, organizationId, processedBy) => {
+    const batch = await PayrollBatch.findOne({ _id: batchId, organizationId });
+    if (!batch) {
+        throw new AppError('Payroll batch not found.', 404);
+    }
+
+    if (batch.status === 'Paid') {
+        throw new AppError('Cannot delete a payroll batch that has already been marked as Paid.', 400);
+    }
+
+    // Delete associated processed payrolls
+    await ProcessedPayroll.deleteMany({ month: batch.month, year: batch.year, organizationId });
+
+    // Delete the batch
+    await PayrollBatch.deleteOne({ _id: batchId });
+
+    // Bank-Grade: Immutable Audit Ledger
+    await PayrollLedger.create({
+        organizationId,
+        action: 'PAYROLL_BATCH_DELETED',
+        batchId: batch._id,
+        performedBy: processedBy,
+        metadata: { month: batch.month, year: batch.year }
+    });
+
+    await auditService.log(processedBy, 'DELETE_PAYROLL_BATCH', 'PayrollBatch', batch._id, { month: batch.month, year: batch.year }, 'SUCCESS', null, organizationId);
+
+    // Real-time synchronization
+    socketService.emit('PAYROLL_UPDATED', { 
+        organizationId, 
+        action: 'DELETE_BATCH', 
+        month: batch.month, 
+        year: batch.year 
+    });
+
+    return { success: true };
+};
+
 module.exports = {
   simulateUserPayroll,
   saveProcessedPayroll,
+  deleteBatch,
   markAsPaid,
   ensureBatchExists,
   getPayrollSummary,

@@ -289,7 +289,7 @@ export default function SubscriptionPage() {
   const [userCount, setUserCount] = useState(10);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [currencySymbol, setCurrencySymbol] = useState('₹');
+  const currencySymbol = settings?.payroll?.currencySymbol || '$';
   const [settings, setSettings] = useState<any>(null);
 
   const currentPlan = subscription?.planType || 'TRIAL';

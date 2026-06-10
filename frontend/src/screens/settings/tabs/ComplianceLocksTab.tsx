@@ -176,12 +176,10 @@ const BackdatedEntriesToggle = ({ value, onChange }: { value: boolean; onChange:
   const confirmEnable = () => {
     onChange(true);
     setShowConfirmModal(false);
-    Toast.show({
-      type: 'warning',
-      text1: 'Warning',
-      text2: 'Backdated entries are now allowed. Please use with caution.',
-      visibilityTime: 4000,
-    });
+    Alert.alert(
+      'Warning',
+      'Backdated entries are now allowed. Please use with caution.'
+    );
   };
 
   return (
@@ -396,27 +394,27 @@ export default function ComplianceLocksTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setInitialState(JSON.stringify(compliance));
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Compliance policy updated!' });
+      Alert.alert('Success', 'Compliance policy updated!');
     },
     onError: (error: any) => {
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Save failed' });
+      Alert.alert('Error', error.response?.data?.message || 'Save failed');
     },
   });
 
   const handleSave = () => {
     if (JSON.stringify(compliance) === initialState) {
-      Toast.show({ type: 'info', text1: 'Info', text2: 'There is nothing to change' });
+      Alert.alert('Info', 'There is nothing to change');
       return;
     }
 
     // Validate before saving
     if (compliance.timesheetFreezeDay < 1 || compliance.timesheetFreezeDay > 31) {
-      Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Freeze day must be between 1 and 31' });
+      Alert.alert('Validation Error', 'Freeze day must be between 1 and 31');
       return;
     }
 
     if (compliance.auditLogRetentionDays < 0) {
-      Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Retention days cannot be negative' });
+      Alert.alert('Validation Error', 'Retention days cannot be negative');
       return;
     }
 

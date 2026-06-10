@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { scale, verticalScale } from '../../utils/responsive';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Header from './Header';
 import Footer from './Footer';
 import CollapsibleSidebar from './CollapsibleSidebar';
@@ -37,6 +38,22 @@ export default function Layout({
   scrollable = true,
   backgroundColor,
 }: LayoutProps) {
+  const [actualUser, setActualUser] = useState(user);
+
+  useEffect(() => {
+    // If the provided user is missing or incomplete (common when using empty authStore), 
+    // fetch the real user from AsyncStorage to ensure correct role mapping across all screens.
+    if (!user || !user.role || !user.name) {
+      AsyncStorage.getItem('user').then(data => {
+        if (data) {
+          setActualUser(JSON.parse(data));
+        }
+      }).catch(err => console.warn('Layout: Error loading user', err));
+    } else {
+      setActualUser(user);
+    }
+  }, [user]);
+
   return (
     <SafeAreaView style={[styles.container, backgroundColor ? { backgroundColor } : null]}>
       <Header 
@@ -45,7 +62,7 @@ export default function Layout({
         showBackButton={showBackButton}
         onBackPress={onBackPress}
         onMenuPress={() => setSidebarVisible(true)} 
-        user={user}
+        user={actualUser}
       />
       
       {scrollable ? (
@@ -74,7 +91,7 @@ export default function Layout({
         <CollapsibleSidebar 
           visible={sidebarVisible} 
           onClose={() => setSidebarVisible(false)} 
-          user={user} 
+          user={actualUser} 
         />
       )}
     </SafeAreaView>

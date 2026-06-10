@@ -1,1034 +1,300 @@
-// screens/payroll/PayrollDashboard.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  RefreshControl,
   ActivityIndicator,
-  Modal,
+  Alert
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Wallet,
-  Calendar,
-  ChevronRight,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  Play,
-  Users,
   CreditCard,
-  X,
-  FileSpreadsheet,
-  Cpu,
-  History,
-  FileText,
-  Percent,
-  BarChart3,
-  Download,
-  LayoutGrid,
-  Landmark,
+  TrendingDown,
+  Users,
+  Play,
+  AlertCircle,
+  ExternalLink,
+  Calendar
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
-import PageHeader from '../../components/common/PageHeader';
-import SafeSelector from '../../components/common/SafeSelector';
-import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
-import { useSocketEvent } from '../../services/socket';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useNavigation } from '@react-navigation/native';
 
-// Color palette
-const COLORS = {
-  primary: '#6366f1',
-  primaryDark: '#4f46e5',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
-  dark: '#1e293b',
-  light: '#f8fafc',
-  gray: '#64748b',
-  white: '#ffffff',
-  border: '#e2e8f0',
-};
+const months = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 
-// KPI Card Component
-interface KPICardProps {
-  label: string;
-  value: string | number;
-  icon: any;
-  color: string;
-  bgColor: string;
-  onPress: () => void;
-  isActive?: boolean;
-}
-
-const KPICard = ({ label, value, icon: Icon, color, bgColor, onPress, isActive }: KPICardProps) => (
-  <TouchableOpacity
-    style={[styles.kpiCard, isActive && styles.kpiCardActive]}
-    onPress={onPress}
-  >
-    <View style={[styles.kpiIconContainer, { backgroundColor: bgColor }]}>
-      <Icon size={22} color={color} />
-    </View>
-    <View>
-      <Text style={styles.kpiLabel}>{label}</Text>
-      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-    </View>
-  </TouchableOpacity>
-);
-
-// Insight Card Component
-interface InsightCardProps {
-  title: string;
-  message: string;
-  icon: any;
-  color: string;
-  bgColor: string;
-}
-
-const InsightCard = ({ title, message, icon: Icon, color, bgColor }: InsightCardProps) => (
-  <View style={[styles.insightCard, { backgroundColor: bgColor }]}>
-    <View style={[styles.insightIcon, { backgroundColor: color + '20' }]}>
-      <Icon size={16} color={color} />
-    </View>
-    <View style={styles.insightContent}>
-      <Text style={styles.insightTitle}>{title}</Text>
-      <Text style={styles.insightMessage}>{message}</Text>
-    </View>
-  </View>
-);
-
-// Department Item Component
-interface DepartmentItemProps {
-  name: string;
-  percentage: string | number;
-  color: string;
-  isActive?: boolean;
-  onPress?: () => void;
-}
-
-const DepartmentItem = ({ name, percentage, color, isActive, onPress }: DepartmentItemProps) => (
-  <TouchableOpacity
-    style={[styles.deptItem, isActive && styles.deptItemActive]}
-    onPress={onPress}
-    disabled={!onPress}
-  >
-    <View style={styles.deptLeft}>
-      <View style={[styles.deptDot, { backgroundColor: color }]} />
-      <Text style={styles.deptName}>{name}</Text>
-    </View>
-    <Text style={styles.deptPercentage}>{percentage}%</Text>
-  </TouchableOpacity>
-);
-
-
-
-// Recent Batch Row Component
-interface RecentBatchRowProps {
-  batch: any;
-  onPress: () => void;
-  currencySymbol: string;
-}
-
-const RecentBatchRow = ({ batch, onPress, currencySymbol }: RecentBatchRowProps) => (
-  <TouchableOpacity style={styles.batchRow} onPress={onPress}>
-    <View>
-      <Text style={styles.batchPeriod}>
-        {new Date(0, batch.month - 1).toLocaleString('default', { month: 'long' })} {batch.year}
-      </Text>
-      <Text style={styles.batchEmployees}>{batch.totalEmployees} employees</Text>
-    </View>
-    <View style={styles.batchRight}>
-      <Text style={styles.batchAmount}>
-        {currencySymbol}{formatCurrency(batch.totalNet || 0)}
-      </Text>
-      <View style={[
-        styles.batchStatus,
-        batch.status === 'Completed' || batch.status === 'Paid' ? styles.statusCompleted :
-          batch.status === 'Processed' ? styles.statusProcessed : styles.statusDraft
-      ]}>
-        <Text style={styles.batchStatusText}>{batch.status}</Text>
-      </View>
-    </View>
-  </TouchableOpacity>
-);
-
-export const PayrollDashboard = ({ navigation }: { navigation: any }) => {
-  const { organization: orgSettings } = useSettingsStore();
+export default function PayrollDashboard() {
   const [user, setUser] = useState<any>(null);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const navigation = useNavigation<any>();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [historyData, setHistoryData] = useState<any[]>([]);
-  const [analyticsData, setAnalyticsData] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
-  const [activeSelector, setActiveSelector] = useState<string | null>(null);
+  const [dash, setDash] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  useEffect(() => {
+    loadUserData();
+    fetchData();
+  }, [selectedMonth, selectedYear]);
 
   const loadUserData = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
-      if (userData) setUser(JSON.parse(userData));
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
     }
   };
 
-  const fetchSettings = async () => {
+  const fetchData = async () => {
     try {
-      const response: any = await settingsAPI.getSettings();
-      const data = response.data?.data || response.data;
-      setSettings(data);
-    } catch (error) {
-      console.error('Error fetching settings:', error);
+      setLoading(true);
+      const settRes: any = await settingsAPI.getSettings();
+      if (settRes?.success) setSettings(settRes.data);
+
+      const [dashRes, histRes, analyticsRes]: any[] = await Promise.all([
+        payrollAPI.getDashboard({ month: selectedMonth, year: selectedYear }),
+        payrollAPI.getBatches(),
+        payrollAPI.getAnalytics({ month: selectedMonth, year: selectedYear, department: 'All' })
+      ]);
+
+      if (dashRes?.success) setDash(dashRes.data);
+      if (histRes?.success) setHistory(histRes.data.slice(0, 5));
+      if (analyticsRes?.success) setAnalytics(analyticsRes.data);
+    } catch (err) {
+      console.error('Failed to load dashboard data', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchDashboard = async () => {
-    try {
-      const response: any = await payrollAPI.getDashboard({ month: selectedMonth, year: selectedYear });
-      const data = response.data?.data || response.data;
-      if (data) {
-        setDashboardData(data);
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard:', error);
-    }
-  };
+  const currencySymbol = settings?.payroll?.currencySymbol || '$';
 
-  const fetchHistory = async () => {
-    try {
-      const response: any = await payrollAPI.getBatches();
-      const data = response.data?.data || response.data || [];
-      setHistoryData(Array.isArray(data) ? data.slice(0, 5) : []);
-    } catch (error) {
-      console.error('Error fetching history:', error);
-    }
-  };
-
-  const fetchAnalytics = async () => {
-    try {
-      const response: any = await payrollAPI.getAnalytics({ month: selectedMonth, year: selectedYear, department: 'All' });
-      const data = response.data?.data || response.data;
-      if (data) {
-        setAnalyticsData(data);
-      }
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-    }
-  };
-
-  const fetchAllData = async () => {
-    setLoading(true);
-    await Promise.all([
-      fetchDashboard(),
-      fetchHistory(),
-      fetchAnalytics(),
-      fetchSettings(),
-    ]);
-    setLoading(false);
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchAllData();
-    setRefreshing(false);
-  };
-
-  // Real-time synchronization: listen for payroll updates from web or mobile
-  useSocketEvent('PAYROLL_UPDATED', (data) => {
-    console.log('[Dashboard] Real-time payroll update received:', data);
-    // Only refresh if the update belongs to our organization
-    if (data.organizationId === user?.organizationId) {
-      fetchAllData();
-    }
-  });
-
-  useSocketEvent('PAYROLL_PROFILE_UPDATED', (data) => {
-    console.log('[Dashboard] Real-time profile update received:', data);
-    if (data.organizationId === user?.organizationId) {
-      fetchAllData();
-    }
-  });
-
-  useFocusEffect(
-    useCallback(() => {
-      loadUserData();
-      fetchAllData();
-    }, [selectedMonth, selectedYear])
-  );
-
-  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.organization?.currency || 'INR');
-  
-  // Robustly extract KPI stats from the dashboard and analytics response
-  const getStats = () => {
-    const kpis = dashboardData?.summary || {};
-    const payroll = dashboardData?.payroll || {};
-    const analytics = analyticsData?.summary || {};
-    const batch = dashboardData?.batch || {};
-    
-    // Prioritize values from any of the available sources (Dashboard, Analytics, or Batch)
-    // We check every possible field name used in the backend models and services
-    const totalEarnings = 
-      kpis.totalGross || 
-      payroll.totalEarnings || 
-      analytics.totalCost || 
-      batch.totalGross || 
-      kpis.totalEarnings || 
-      analytics.totalGross ||
-      kpis.grossYield ||
-      0;
-
-    const netPay = 
-      kpis.totalPayroll || 
-      payroll.netPayout || 
-      analytics.totalNetPay || 
-      batch.totalNet || 
-      kpis.netPayout || 
-      analytics.totalNet ||
-      kpis.netPay ||
-      0;
-
-    const totalDeductions = 
-      kpis.totalDeductions || 
-      payroll.totalDeductions || 
-      analytics.totalDeductions || 
-      batch.totalDeductions || 
-      kpis.liability ||
-      0;
-
-    const activeEmployees = 
-      kpis.activeEmployees || 
-      analytics.employeeCount || 
-      batch.totalEmployees ||
-      0;
-
-    return {
-      totalPayout: totalEarnings, // Displayed as "Total Earnings"
-      netPay,
-      totalDeductions,
-      activeEmployees,
-    };
-  };
-
-  const stats = getStats();
-  const kpis = dashboardData?.summary || {};
- 
-   const deptData: any[] = dashboardData?.trends?.deptDistribution || analyticsData?.departmentDistribution || [];
-   const breakdownData: any[] = (analyticsData?.breakdown || []).sort((a: any, b: any) => b.value - a.value).slice(0, 5);
-
-   const alerts = [
-    { label: 'Missing Bank Details', count: dashboardData?.compliance?.missingBankDetails || 0, route: 'Employees' },
-    { label: 'Pending Structures', count: dashboardData?.compliance?.missingSalaryStructure || 0, route: 'PayrollProfiles' },
-    { label: 'Formula Errors', count: dashboardData?.summary?.failedEmployees || 0, route: 'PayrollProcessing' },
-  ];
-
-  const insights = [
-    {
-      title: 'Efficiency',
-      message: `Net vs Gross ratio is ${stats.totalPayout > 0 ? ((stats.netPay / stats.totalPayout) * 100).toFixed(1) : 0}%`,
-      icon: Activity,
-      color: COLORS.primary,
-    },
-    {
-      title: 'Growth',
-      message: `Payroll ${(kpis.growthPercentage || 0) >= 0 ? 'increased' : 'decreased'} by ${Math.abs(kpis.growthPercentage || 0)}%`,
-      icon: (kpis.growthPercentage || 0) >= 0 ? TrendingUp : TrendingDown,
-      color: (kpis.growthPercentage || 0) >= 0 ? COLORS.success : COLORS.error,
-    },
-  ];
-
-  const totalDeptValue = deptData.reduce((sum: number, d: any) => sum + d.value, 0);
-  const COLORS_PIE = [COLORS.primary, COLORS.success, COLORS.warning, COLORS.error, '#8b5cf6', '#ec4899'];
-
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+  const renderKpiCard = (label: string, value: number, Icon: any, color: string, bg: string, isStatic = false) => (
+    <View style={styles.kpiCard}>
+      <View style={[styles.kpiIconBox, { backgroundColor: bg }]}>
+        <Icon size={20} color={color} />
       </View>
-    );
-  }
+      <View style={styles.kpiContent}>
+        <Text style={styles.kpiLabel}>{label}</Text>
+        <Text style={styles.kpiValue}>
+          {isStatic ? value : `${currencySymbol}${value?.toLocaleString() || '0'}`}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
-    <Layout
-      title="Payroll Dashboard"
-      user={user}
-      sidebarVisible={sidebarVisible}
-      setSidebarVisible={setSidebarVisible}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-    >
-      <PageHeader
-        title="Payroll Dashboard"
-        subtitle="Manage company-wide salary disbursements"
-        icon={Wallet}
-        iconColor={COLORS.primary}
-        iconBgColor={`${COLORS.primary}15`}
-        rightComponent={
-          <TouchableOpacity
-            style={styles.runButton}
-            onPress={() => navigation.navigate('PayrollProcessing')}
-          >
-            <Play size={16} color={COLORS.white} />
-            <Text style={styles.runButtonText}>Run Payroll</Text>
+    <Layout title="Payroll Dashboard" user={user} refreshing={loading} onRefresh={fetchData} sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header Options */}
+        <View style={styles.headerControls}>
+          <View style={styles.dateSelector}>
+            <Calendar size={18} color="#4f46e5" style={{ marginRight: 8 }} />
+            <Text style={styles.dateText}>{months[selectedMonth - 1]} {selectedYear}</Text>
+          </View>
+          <TouchableOpacity style={styles.runBtn} onPress={() => navigation.navigate('PayrollRun')}>
+            <Play size={16} color="#fff" />
+            <Text style={styles.runBtnText}>Run Payroll</Text>
           </TouchableOpacity>
-        }
-      />
-
-      <View style={styles.content}>
-        {/* Month/Year Selectors */}
-        <View style={styles.dateSelectorsRow}>
-          <View style={styles.dateSelectorWrapper}>
-            <SafeSelector
-              options={[
-                "January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"
-              ].map((m, i) => ({ label: m, value: i + 1 }))}
-              selectedValue={selectedMonth}
-              onValueChange={(v) => setSelectedMonth(v)}
-              visible={activeSelector === 'month'}
-              onOpen={() => setActiveSelector('month')}
-              onClose={() => setActiveSelector(null)}
-              style={styles.dateSafeSelector}
-            />
-          </View>
-          <View style={styles.dateSelectorWrapper}>
-            <SafeSelector
-              options={[2024, 2025, 2026].map(y => ({ label: String(y), value: y }))}
-              selectedValue={selectedYear}
-              onValueChange={(v) => setSelectedYear(v)}
-              visible={activeSelector === 'year'}
-              onOpen={() => setActiveSelector('year')}
-              onClose={() => setActiveSelector(null)}
-              style={styles.dateSafeSelector}
-            />
-          </View>
         </View>
 
-
-
-
-        {/* KPI Grid */}
-        <View style={styles.kpiGrid}>
-          <KPICard
-            label="Total Earnings"
-            value={`${currencySymbol}${formatCurrency(stats.totalPayout)}`}
-            icon={Wallet}
-            color={COLORS.primary}
-            bgColor={COLORS.primary + '10'}
-            onPress={() => { }}
-            isActive={false}
-          />
-          <KPICard
-            label="Net Pay Disbursed"
-            value={`${currencySymbol}${formatCurrency(stats.netPay)}`}
-            icon={CreditCard}
-            color={COLORS.success}
-            bgColor={COLORS.success + '10'}
-            onPress={() => { }}
-            isActive={false}
-          />
-          <KPICard
-            label="Total Deductions"
-            value={`${currencySymbol}${formatCurrency(stats.totalDeductions)}`}
-            icon={TrendingDown}
-            color={COLORS.error}
-            bgColor={COLORS.error + '10'}
-            onPress={() => { }}
-            isActive={false}
-          />
-          <KPICard
-            label="Active Employees"
-            value={stats.activeEmployees}
-            icon={Users}
-            color={COLORS.info}
-            bgColor={COLORS.info + '10'}
-            onPress={() => navigation.navigate('Employees')}
-            isActive={false}
-          />
-        </View>
-
-        {/* Status & Alerts Section */}
-        <View style={styles.statusCard}>
-          <View style={styles.statusHeader}>
-            <Text style={styles.sectionTitle}>Payroll Cycle Status</Text>
-            <View style={[
-              styles.statusBadge,
-              kpis.status === 'Completed' ? styles.statusBadgeCompleted :
-                kpis.status === 'Processed' ? styles.statusBadgeProcessed :
-                  styles.statusBadgeDraft
-            ]}>
-              <Text style={styles.statusBadgeText}>{kpis.status || 'Draft'}</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#4f46e5" style={{ marginTop: 50 }} />
+        ) : (
+          <View style={styles.content}>
+            {/* KPIs */}
+            <View style={styles.kpiGrid}>
+              {renderKpiCard('Total Payout', dash?.summary?.totalGross || 0, Wallet, '#4f46e5', '#eef2ff')}
+              {renderKpiCard('Net Disbursed', dash?.summary?.totalPayroll || 0, CreditCard, '#10b981', '#ecfdf5')}
+              {renderKpiCard('Deductions', dash?.summary?.totalDeductions || 0, TrendingDown, '#f43f5e', '#fff1f2')}
+              {renderKpiCard('Employees', dash?.summary?.activeEmployees || 0, Users, '#3b82f6', '#eff6ff', true)}
             </View>
-          </View>
 
-          <View style={styles.statusStats}>
-            <View style={styles.statusStat}>
-              <Text style={styles.statusStatLabel}>Processed</Text>
-              <Text style={styles.statusStatValue}>{kpis.totalProcessed || 0}</Text>
+            {/* Status Section */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Cycle Status</Text>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusBadgeText}>{dash?.summary?.status || 'Draft'}</Text>
+                </View>
+              </View>
+              <View style={styles.statusBox}>
+                <Text style={styles.statusLabel}>Last Execution</Text>
+                <Text style={styles.statusValue}>{dash?.summary?.lastRunDate ? new Date(dash.summary.lastRunDate).toLocaleDateString() : 'No recent runs'}</Text>
+              </View>
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Processed</Text>
+                  <Text style={[styles.statValue, { color: '#4f46e5' }]}>{dash?.summary?.totalProcessed || 0}</Text>
+                </View>
+                <View style={[styles.statBox, { backgroundColor: '#ecfdf5', borderColor: '#d1fae5' }]}>
+                  <Text style={[styles.statLabel, { color: '#10b981' }]}>Paid</Text>
+                  <Text style={[styles.statValue, { color: '#10b981' }]}>{dash?.summary?.totalPaid || 0}</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.statusDivider} />
-            <View style={styles.statusStat}>
-              <Text style={styles.statusStatLabel}>Paid</Text>
-              <Text style={styles.statusStatValue}>{kpis.totalPaid || 0}</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertsSection}>
-            <Text style={styles.alertsTitle}>Critical Alerts</Text>
-            {alerts.map((alert, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={styles.alertRow}
-                onPress={() => alert.count > 0 && navigation.navigate(alert.route)}
-              >
-                <Text style={styles.alertLabel}>{alert.label}</Text>
-                <View style={[
-                  styles.alertBadge,
-                  alert.count > 0 ? styles.alertBadgeError : styles.alertBadgeSuccess
-                ]}>
-                  <Text style={styles.alertBadgeText}>{alert.count}</Text>
+            {/* Critical Alerts */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <AlertCircle size={18} color="#ef4444" />
+                <Text style={[styles.cardTitle, { marginLeft: 8 }]}>Critical Alerts</Text>
+              </View>
+              <TouchableOpacity style={styles.alertRow} onPress={() => navigation.navigate('EmployeePayrollProfiles')}>
+                <Text style={styles.alertLabel}>Missing Bank Details</Text>
+                <View style={[styles.alertCount, dash?.compliance?.missingBankDetails > 0 && styles.alertCountDanger]}>
+                  <Text style={[styles.alertCountText, dash?.compliance?.missingBankDetails > 0 && styles.alertCountTextDanger]}>
+                    {dash?.compliance?.missingBankDetails || 0}
+                  </Text>
                 </View>
               </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Department Distribution */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Cost by Department</Text>
-          <Text style={styles.sectionSubtitle}>Organizational Payroll Weight</Text>
-
-          <View style={styles.deptList}>
-            {deptData.map((dept, idx) => (
-              <DepartmentItem
-                key={idx}
-                name={dept.name}
-                percentage={totalDeptValue > 0 ? ((dept.value / totalDeptValue) * 100).toFixed(1) : '0'}
-                color={COLORS_PIE[idx % COLORS_PIE.length]}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Component Breakdown */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Payroll Component Breakdown</Text>
-          <Text style={styles.sectionSubtitle}>Top Components</Text>
-
-          {breakdownData.map((item, idx) => (
-            <View key={idx} style={styles.breakdownItem}>
-              <View style={styles.breakdownLeft}>
-                <View style={[
-                  styles.breakdownDot,
-                  { backgroundColor: item.type === 'Earning' ? COLORS.primary : COLORS.error }
-                ]} />
-                <Text style={styles.breakdownName}>{item.name}</Text>
-              </View>
-              <Text style={styles.breakdownValue}>
-                {currencySymbol}{formatCurrency(item.value)}
-              </Text>
+              <TouchableOpacity style={styles.alertRow} onPress={() => navigation.navigate('EmployeePayrollProfiles')}>
+                <Text style={styles.alertLabel}>Pending Structures</Text>
+                <View style={[styles.alertCount, dash?.compliance?.missingSalaryStructure > 0 && styles.alertCountDanger]}>
+                  <Text style={[styles.alertCountText, dash?.compliance?.missingSalaryStructure > 0 && styles.alertCountTextDanger]}>
+                    {dash?.compliance?.missingSalaryStructure || 0}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
 
-        {/* Insights */}
-        <View style={styles.insightsContainer}>
-          {insights.map((insight, idx) => (
-            <InsightCard
-              key={idx}
-              title={insight.title}
-              message={insight.message}
-              icon={insight.icon}
-              color={insight.color}
-              bgColor={COLORS.dark}
-            />
-          ))}
-        </View>
+            {/* Analytics Section */}
+            {analytics && (
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>Cost by Department</Text>
+                </View>
+                {analytics.departmentDistribution?.length > 0 ? (
+                  analytics.departmentDistribution.map((dept: any, idx: number) => {
+                    const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+                    const color = colors[idx % colors.length];
+                    const totalGross = dash?.summary?.totalGross || 1; // Prevent division by zero
+                    const percent = Math.min(100, (dept.value / totalGross) * 100);
+                    return (
+                      <View key={idx} style={{ marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: '#334155' }}>{dept.name}</Text>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>{currencySymbol}{Math.round(dept.value).toLocaleString()}</Text>
+                        </View>
+                        <View style={{ height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                          <View style={{ width: `${percent}%`, height: '100%', backgroundColor: color, borderRadius: 4 }} />
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <Text style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 16 }}>No department data</Text>
+                )}
+              </View>
+            )}
 
-        {/* Recent Payroll Runs */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Payroll Batches</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('PayrollHistory')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
+            {/* Payroll Component Breakdown Section */}
+            {analytics && (
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>Payroll Component Breakdown</Text>
+                </View>
+                {analytics.breakdown?.length > 0 ? (
+                  analytics.breakdown.sort((a: any, b: any) => b.value - a.value).slice(0, 8).map((comp: any, idx: number) => {
+                    const colors = ['#3b82f6', '#14b8a6', '#f97316', '#a855f7', '#ec4899', '#6366f1', '#10b981', '#f43f5e'];
+                    const color = colors[idx % colors.length];
+                    const isDeduction = comp.type === 'deduction';
+                    return (
+                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+                        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color, marginRight: 12 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a' }}>{comp.name}</Text>
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>{comp.type}</Text>
+                        </View>
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: isDeduction ? '#ef4444' : '#10b981' }}>
+                          {isDeduction ? '-' : '+'}{currencySymbol}{Math.round(comp.value).toLocaleString()}
+                        </Text>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <Text style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 16 }}>No component data</Text>
+                )}
+              </View>
+            )}
+
+            {/* Recent Batches */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Recent Batches</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('PayrollHistory')}>
+                  <ExternalLink size={16} color="#4f46e5" />
+                </TouchableOpacity>
+              </View>
+              {history.length > 0 ? history.map((run, i) => (
+                <View key={i} style={styles.batchRow}>
+                  <View>
+                    <Text style={styles.batchMonth}>{months[run.month - 1]} {run.year}</Text>
+                    <Text style={styles.batchCount}>{run.totalEmployees} employees</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.batchTotal}>{currencySymbol}{run.totalNet?.toLocaleString()}</Text>
+                    <Text style={styles.batchStatus}>{run.status}</Text>
+                  </View>
+                </View>
+              )) : (
+                <Text style={styles.emptyText}>No recent payroll history found</Text>
+              )}
+            </View>
           </View>
-
-          {historyData.map((batch, idx) => (
-            <RecentBatchRow
-              key={idx}
-              batch={batch}
-              currencySymbol={currencySymbol}
-              onPress={() => navigation.navigate('PayrollHistory', { batchId: batch._id })}
-            />
-          ))}
-
-          {historyData.length === 0 && (
-            <Text style={styles.emptyText}>No recent payroll history found</Text>
-          )}
-        </View>
-      </View>
+        )}
+      </ScrollView>
     </Layout>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.light,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.light,
-  },
-  headerSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: COLORS.gray,
-    marginTop: 4,
-  },
-  runButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  runButtonText: {
-    color: COLORS.white,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  dateSelectorsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  dateSelectorWrapper: {
-    flex: 1,
-  },
-  dateSafeSelector: {
-    backgroundColor: COLORS.white,
-    height: 48,
-  },
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
-  },
-  kpiCard: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  kpiCardActive: {
-    borderColor: COLORS.primary,
-    borderWidth: 2,
-  },
-
-  kpiIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  kpiLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.gray,
-    textTransform: 'uppercase',
-  },
-  kpiValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  statusCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 20,
-  },
-  statusHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  statusBadgeDraft: {
-    backgroundColor: COLORS.warning + '20',
-  },
-  statusBadgeProcessed: {
-    backgroundColor: COLORS.primary + '20',
-  },
-  statusBadgeCompleted: {
-    backgroundColor: COLORS.success + '20',
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  statusStats: {
-    flexDirection: 'row',
-    gap: 20,
-    marginBottom: 20,
-  },
-  statusStat: {
-    flex: 1,
-    backgroundColor: COLORS.light,
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  statusStatLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.gray,
-    textTransform: 'uppercase',
-  },
-  statusStatValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-    marginTop: 4,
-  },
-  statusDivider: {
-    width: 1,
-    backgroundColor: COLORS.border,
-  },
-  alertsSection: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 16,
-  },
-  alertsTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-    marginBottom: 12,
-  },
-  alertRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  alertLabel: {
-    fontSize: 13,
-    color: COLORS.gray,
-  },
-  alertBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  alertBadgeError: {
-    backgroundColor: COLORS.error + '20',
-  },
-  alertBadgeSuccess: {
-    backgroundColor: COLORS.success + '20',
-  },
-  alertBadgeText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.error,
-  },
-  sectionCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 20,
-  },
-  sectionSubtitle: {
-    fontSize: 10,
-    color: COLORS.gray,
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  viewAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  deptList: {
-    gap: 12,
-  },
-  deptItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  deptItemActive: {
-    backgroundColor: COLORS.light,
-    paddingHorizontal: 12,
-    marginHorizontal: -12,
-    borderRadius: 8,
-  },
-  deptLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  deptDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  deptName: {
-    fontSize: 13,
-    color: COLORS.dark,
-  },
-  deptPercentage: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  breakdownItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  breakdownLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  breakdownDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  breakdownName: {
-    fontSize: 13,
-    color: COLORS.dark,
-  },
-  breakdownValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  insightsContainer: {
-    gap: 12,
-    marginBottom: 20,
-  },
-  insightCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-  },
-  insightIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  insightContent: {
-    flex: 1,
-  },
-  insightTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORS.gray,
-    textTransform: 'uppercase',
-  },
-  insightMessage: {
-    fontSize: 12,
-    color: COLORS.white,
-    marginTop: 4,
-  },
-  batchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  batchPeriod: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  batchEmployees: {
-    fontSize: 11,
-    color: COLORS.gray,
-    marginTop: 2,
-  },
-  batchRight: {
-    alignItems: 'flex-end',
-  },
-  batchAmount: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  batchStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  statusCompleted: {
-    backgroundColor: COLORS.success + '20',
-  },
-  statusProcessed: {
-    backgroundColor: COLORS.primary + '20',
-  },
-  statusDraft: {
-    backgroundColor: COLORS.warning + '20',
-  },
-  batchStatusText: {
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: COLORS.gray,
-    paddingVertical: 20,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  pickerModal: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  pickerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.dark,
-  },
-  pickerContainer: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  picker: {
-    flex: 1,
-    height: 150,
-  },
-  pickerButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  pickerButtonText: {
-    color: COLORS.white,
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  statCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  statIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statContent: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.gray,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  statSubtitle: {
-    fontSize: 9,
-    color: COLORS.gray,
-    marginTop: 2,
-  },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16 },
+  headerControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  dateSelector: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  dateText: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+  runBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4f46e5', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, gap: 6 },
+  runBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  content: { gap: 16, paddingBottom: 40 },
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  kpiCard: { flex: 1, minWidth: '45%', backgroundColor: '#fff', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  kpiIconBox: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  kpiContent: { flex: 1 },
+  kpiLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' },
+  kpiValue: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginTop: 2 },
+  card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#f1f5f9' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  statusBadge: { backgroundColor: '#eef2ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  statusBadgeText: { fontSize: 10, fontWeight: '800', color: '#4f46e5', textTransform: 'uppercase' },
+  statusBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' },
+  statusLabel: { fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' },
+  statusValue: { fontSize: 14, fontWeight: '700', color: '#334155', marginTop: 4 },
+  statsRow: { flexDirection: 'row', gap: 12 },
+  statBox: { flex: 1, backgroundColor: '#eef2ff', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e0e7ff', alignItems: 'center' },
+  statLabel: { fontSize: 10, fontWeight: '800', color: '#6366f1', textTransform: 'uppercase' },
+  statValue: { fontSize: 20, fontWeight: '800', marginTop: 4 },
+  alertRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  alertLabel: { fontSize: 13, fontWeight: '600', color: '#475569' },
+  alertCount: { backgroundColor: '#ecfdf5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  alertCountText: { fontSize: 11, fontWeight: '800', color: '#10b981' },
+  alertCountDanger: { backgroundColor: '#fef2f2' },
+  alertCountTextDanger: { color: '#ef4444' },
+  batchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  batchMonth: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  batchCount: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  batchTotal: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  batchStatus: { fontSize: 11, fontWeight: '600', color: '#64748b', marginTop: 2 },
+  emptyText: { textAlign: 'center', color: '#94a3b8', paddingVertical: 20 }
 });

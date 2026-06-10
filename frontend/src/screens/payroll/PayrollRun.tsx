@@ -1,1052 +1,534 @@
-// screens/payroll/RunPayrollScreen.tsx
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  RefreshControl,
   ActivityIndicator,
   Alert,
-  Modal,
-  Platform,
+  Animated,
   Dimensions,
+  Modal
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Play,
   CheckCircle2,
   AlertCircle,
-  ChevronRight,
-  Calculator,
-  Check,
-  X,
-  Users,
-  DollarSign,
-  ShieldAlert,
-  BarChart3,
-  PieChart as PieChartIcon,
-  RefreshCw,
-  Clock,
-  Activity,
-  Send,
   Calendar,
   ArrowRight,
-  ArrowLeft,
-  Loader2,
   Info,
-  Lock,
+  DollarSign,
   Receipt,
-  TrendingUp,
-  UserCheck,
-  ShieldCheck,
+  ChevronRight,
+  Check,
+  ShieldCheck
 } from 'lucide-react-native';
+import { useAuthStore } from '../../store/authStore';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
-import { formatCurrency, getCurrencySymbol } from './payrollFormatters';
-import { useSocketEvent } from '../../services/socket';
-import { useSettingsStore } from '../../store/settingsStore';
 import Layout from '../../components/common/Layout';
-import PageHeader from '../../components/common/PageHeader';
-import SafeSelector from '../../components/common/SafeSelector';
+import { useNavigation } from '@react-navigation/native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const COLORS = {
-  primary: '#6366f1',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
-  dark: '#1e293b',
-  light: '#f8fafc',
-  gray: '#64748b',
-  white: '#ffffff',
-  border: '#e2e8f0',
-  indigo: '#6366f1',
-  emerald: '#10b981',
-  amber: '#f59e0b',
-  rose: '#ef4444',
-};
+const { width } = Dimensions.get('window');
 
 const months = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
 ];
-const years = [2024, 2025, 2026];
 
-// Helper to extract data from API response
-const extractData = (response: any, defaultValue: any = null): any => {
-  if (!response) return defaultValue;
-  if (response.data?.data) return response.data.data;
-  if (response.data) return response.data;
-  return response;
-};
+// Reusable Animated Button
+const AnimatedButton = ({ onPress, style, children, disabled }: any) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
-// Progress Stepper Component
-const ProgressStepper = ({ step, setStep }: { step: number; setStep: (step: number) => void }) => (
-  <View style={styles.stepperContainer}>
-    <View style={styles.stepperTrack}>
-      <View style={[styles.stepperProgress, { width: `${((step - 1) / 3) * 100}%` }]} />
-    </View>
-    <View style={styles.stepperSteps}>
-      {[1, 2, 3, 4].map((s) => (
-        <TouchableOpacity
-          key={s}
-          style={styles.stepperStep}
-          onPress={() => step >= s && setStep(s)}
-          disabled={step < s}
-        >
-          <View style={[styles.stepperDot, step >= s && styles.stepperDotActive]}>
-            {step > s ? (
-              <Check size={16} color={COLORS.white} />
-            ) : (
-              <Text style={[styles.stepperDotText, step >= s && styles.stepperDotTextActive]}>{s}</Text>
-            )}
-          </View>
-          <Text style={[styles.stepperLabel, step >= s && styles.stepperLabelActive]}>
-            {s === 1 && 'Period'}
-            {s === 2 && 'Readiness'}
-            {s === 3 && 'Preview'}
-            {s === 4 && 'Execute'}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  </View>
-);
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
 
-// KPI Card Component
-const KPICard = ({ title, value, icon: Icon, color, bgColor }: any) => (
-  <View style={[styles.kpiCard, { borderBottomColor: color }]}>
-    <View style={[styles.kpiIcon, { backgroundColor: bgColor || `${color}15` }]}>
-      <Icon size={20} color={color} />
-    </View>
-    <View>
-      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-      <Text style={styles.kpiTitle}>{title}</Text>
-    </View>
-  </View>
-);
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
 
-// Readiness Card Component
-const ReadinessCard = ({ title, value, icon: Icon, color, bgColor, description }: any) => (
-  <View style={[styles.readinessCard, { borderBottomColor: color }]}>
-    <View style={[styles.readinessIcon, { backgroundColor: bgColor || `${color}15` }]}>
-      <Icon size={24} color={color} />
-    </View>
-    <View>
-      <Text style={[styles.readinessValue, { color }]}>{value}</Text>
-      <Text style={styles.readinessTitle}>{title}</Text>
-      <Text style={styles.readinessDesc}>{description}</Text>
-    </View>
-  </View>
-);
-
-// Employee Row Component
-const EmployeeRow = ({ employee, currencySymbol, index, onPress }: any) => {
-  const isError = employee.status === 'ERROR';
   return (
-    <TouchableOpacity 
-      style={[styles.employeeRow, isError && styles.employeeRowError]}
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       onPress={onPress}
-      disabled={isError}
+      disabled={disabled}
     >
-      <View style={styles.employeeInfo}>
-        <View style={[styles.employeeAvatar, isError && styles.employeeAvatarError]}>
-          <Text style={[styles.employeeInitial, isError && styles.employeeInitialError]}>
-            {employee.name?.charAt(0) || '?'}
-          </Text>
-        </View>
-        <View>
-          <Text style={styles.employeeName}>{employee.name}</Text>
-          <Text style={styles.employeeId}>{employee.employeeId}</Text>
-        </View>
-      </View>
-
-      {isError ? (
-        <View style={styles.errorBadge}>
-          <AlertCircle size={12} color={COLORS.error} />
-          <Text style={styles.errorText}>{employee.error || 'Calculation Failed'}</Text>
-        </View>
-      ) : (
-        <View style={styles.employeeStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Net Pay</Text>
-            <Text style={[styles.statValue, { color: COLORS.primary, fontWeight: 'bold' }]}>
-              {currencySymbol}{formatCurrency(employee.net || 0)}
-            </Text>
-          </View>
-          <ChevronRight size={16} color={COLORS.gray} />
-        </View>
-      )}
+      <Animated.View style={[style, { transform: [{ scale: scaleAnim }] }]}>
+        {children}
+      </Animated.View>
     </TouchableOpacity>
   );
 };
 
-export function PayrollRun({ navigation }: { navigation: any }) {
-  const { organization: orgSettings } = useSettingsStore();
-  const [user, setUser] = useState<any>(null);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
+export default function PayrollRun() {
+  const { user } = useAuthStore();
+  const navigation = useNavigation<any>();
   const [step, setStep] = useState(1);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [activeSelector, setActiveSelector] = useState<string | null>(null);
   const [overtimeEnabled, setOvertimeEnabled] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isGeneratingPayslips, setIsGeneratingPayslips] = useState(false);
+  
   const [readinessData, setReadinessData] = useState<any>(null);
   const [previewData, setPreviewData] = useState<any>(null);
-  const [settings, setSettings] = useState<any>(null);
+  const { data: settingsRes } = useQuery<any>({
+    queryKey: ['settings'],
+    queryFn: () => settingsAPI.getSettings()
+  });
+  const settings = settingsRes?.data?.data || settingsRes?.data;
+  const currencySymbol = settings?.payroll?.currencySymbol || '$';
+
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [simProgress, setSimProgress] = useState(0);
-  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
+  const [yearPickerVisible, setYearPickerVisible] = useState(false);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'hr';
+  const years = [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
 
-  const currencySymbol = getCurrencySymbol(orgSettings?.currency || settings?.organization?.currency || 'INR');
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
-  const fetchSettings = async () => {
-    try {
-      const response = await settingsAPI.getSettings();
-      const data = extractData(response);
-      setSettings(data);
-    } catch (error) {
-      console.error('Error fetching settings:', error);
-    }
-  };
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, [step]);
 
   const fetchReadiness = async () => {
-    setLoading(true);
     try {
-      const response = await payrollAPI.getReadiness({ month, year });
-      const dashboardData = extractData(response);
-      
-      // Map dashboard compliance data to readiness state
-      // Use readyEmployees if available from backend, otherwise calculate locally
-      const activeCount = dashboardData.summary?.activeEmployees || 0;
-      const readyCount = dashboardData.summary?.readyEmployees !== undefined 
-        ? dashboardData.summary.readyEmployees 
-        : Math.max(0, activeCount - (dashboardData.compliance?.missingSalaryStructure || 0));
-
-      setReadinessData({
-        summary: {
-          readyCount: readyCount,
-          missingProfileCount: dashboardData.compliance?.missingSalaryStructure || 0,
-          missingBankCount: dashboardData.compliance?.missingBankDetails || 0
-        }
-      });
-    } catch (error) {
-      console.error('Error fetching readiness:', error);
-      Alert.alert('Error', 'Failed to fetch readiness data');
+      setLoading(true);
+      const res: any = await payrollAPI.getReadiness({ month, year });
+      if (res?.success) {
+        setReadinessData(res.data);
+        setStep(2);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to check readiness');
     } finally {
       setLoading(false);
     }
   };
 
   const fetchPreview = async () => {
-    setLoading(true);
     try {
-      console.log('[PayrollRun] Fetching preview for:', { month, year, overtimeEnabled });
-      const response: any = await payrollAPI.getPreview({ month, year, overtimeEnabled });
-      
-      // Flexible extraction to handle different backend response shapes
-      let simulations = [];
-      if (Array.isArray(response)) {
-        simulations = response;
-      } else if (response?.data && Array.isArray(response.data)) {
-        simulations = response.data;
-      } else if (response?.data?.data && Array.isArray(response.data.data)) {
-        simulations = response.data.data;
-      } else if (response?.simulations && Array.isArray(response.simulations)) {
-        simulations = response.simulations;
+      setLoading(true);
+      const res: any = await payrollAPI.getPreview({ month, year, overtimeEnabled });
+      if (res?.success) {
+        setPreviewData(res.data);
+        setStep(3);
       }
-
-      if (simulations.length > 0) {
-        // Aggregate simulation results with safety checks for numeric values
-        const totalGross = simulations.reduce((acc: number, s: any) => {
-          const val = 
-            s.breakdown?.summary?.gross || 
-            s.breakdown?.grossEarnings || 
-            s.breakdown?.totalEarnings || 
-            s.breakdown?.grossPay || 
-            s.grossYield || 
-            s.totalEarnings || 
-            s.breakdown?.earnings?.grossEarnings ||
-            0;
-          return acc + (Number(val) || 0);
-        }, 0);
-
-        const totalDeductions = simulations.reduce((acc: number, s: any) => {
-          const val = 
-            s.breakdown?.summary?.deductions || 
-            s.breakdown?.totalDeductions || 
-            s.breakdown?.deductions?.totalDeductions || 
-            s.liability || 
-            s.totalDeductions || 
-            0;
-          return acc + (Number(val) || 0);
-        }, 0);
-
-        const totalNetPay = simulations.reduce((acc: number, s: any) => {
-          const val = s.breakdown?.summary?.net || s.breakdown?.netPay || s.breakdown?.netPayout || s.netPay || 0;
-          return acc + (Number(val) || 0);
-        }, 0);
-        
-        const aggregatedData = {
-          summary: {
-            totalEmployees: simulations.length,
-            totalGross,
-            totalDeductions,
-            totalNetPay
-          },
-          breakdown: simulations.map((s: any) => ({
-            name: s.user?.name || 'Unknown Employee',
-            employeeId: s.user?.employeeId || 'N/A',
-            present: s.attendance?.workedDays || 0,
-            totalOrgWorkingDays: s.attendance?.workingDays || s.attendance?.payableDays || 0,
-            adjustedGross: s.breakdown?.summary?.gross || s.breakdown?.grossEarnings || s.breakdown?.grossPay || s.grossYield || 0,
-            net: s.breakdown?.summary?.net || s.breakdown?.netPay || s.breakdown?.netPayout || s.netPay || 0,
-            status: s.error ? 'ERROR' : 'SUCCESS',
-            error: s.error,
-            // Keep full breakdown for detail view
-            earnings: s.breakdown?.earnings?.components || [],
-            deductions: s.breakdown?.deductions?.components || [],
-            attendance: s.attendance || {}
-          }))
-        };
-        console.log('[PayrollRun] Aggregated Preview:', aggregatedData.summary);
-        setPreviewData(aggregatedData);
-      } else {
-        console.warn('[PayrollRun] No simulations returned from backend');
-        setPreviewData({
-          summary: { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNetPay: 0 },
-          breakdown: []
-        });
-      }
-    } catch (error: any) {
-      console.error('Error fetching preview:', error);
-      Alert.alert('Calculation Error', error?.message || 'Failed to aggregate payroll preview data. Please check employee profiles.');
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to fetch preview');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadUserData = async () => {
+  const executePayroll = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setUser(JSON.parse(userData));
+      setLoading(true);
+      const res: any = await payrollAPI.run({ month, year, overtimeEnabled });
+      if (res?.success) {
+        setStep(4);
       }
-    } catch (error) {
-      console.error('Error loading user data:', error);
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to run payroll');
+    } finally {
+      setLoading(false);
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadUserData();
-      fetchSettings();
-    }, [])
+  const renderStepIndicator = () => (
+    <View style={styles.stepContainer}>
+      {[1, 2, 3, 4].map(s => {
+        const isActive = step >= s;
+        const isCurrent = step === s;
+        return (
+          <View key={s} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={[styles.stepDot, isActive && styles.stepDotActive, isCurrent && styles.stepDotCurrent]}>
+              {isActive && !isCurrent ? (
+                <Check size={14} color="#fff" />
+              ) : (
+                <Text style={[styles.stepText, isActive && styles.stepTextActive]}>{s}</Text>
+              )}
+            </View>
+            {s < 4 && (
+              <View style={[styles.stepLine, isActive && styles.stepLineActive]} />
+            )}
+          </View>
+        );
+      })}
+    </View>
   );
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchSettings();
-    if (step === 2) await fetchReadiness();
-    if (step === 3) await fetchPreview();
-    setRefreshing(false);
-  };
-
-  // Real-time synchronization
-  useSocketEvent('PAYROLL_UPDATED', (data) => {
-    console.log('[PayrollRun] Real-time update received:', data);
-    if (data.organizationId === user?.organizationId) {
-      onRefresh();
-    }
-  });
-
-  const handleNextStep = () => {
-    if (step === 1) {
-      setStep(2);
-      fetchReadiness();
-    } else if (step === 2) {
-      if (readinessData?.summary?.readyCount === 0) {
-        Alert.alert('Warning', 'No employees are ready for payroll processing');
-        return;
-      }
-      setStep(3);
-      fetchPreview();
-    }
-  };
-
-  const handlePrevStep = () => {
-    setStep(step - 1);
-  };
-
-  const handleRunPayroll = async () => {
-    setIsProcessing(true);
-    setSimProgress(0);
-
-    const interval = setInterval(() => {
-      setSimProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 200);
-
-    try {
-      await payrollAPI.run({ month, year, overtimeEnabled });
-      setShowSuccess(true);
-      setStep(4);
-    } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to process payroll');
-    } finally {
-      clearInterval(interval);
-      setIsProcessing(false);
-    }
-  };
-
-  const handleGeneratePayslips = async () => {
-    setIsGeneratingPayslips(true);
-    
-    // Simulate generation process as requested by workflow
-    setTimeout(() => {
-      setIsGeneratingPayslips(false);
-      navigation.navigate('PayrollPayslip');
-    }, 2000);
-  };
-
-  const formatCurrencyValue = (value: number) => {
-    return formatCurrency(value);
-  };
-
-  if (step === 4 && showSuccess) {
-    return (
-      <Layout
-        title="Payroll Engine"
-        user={user}
-        sidebarVisible={sidebarVisible}
-        setSidebarVisible={setSidebarVisible}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-      >
-        <View style={styles.container}>
-          <PageHeader
-            title="Payroll Engine"
-            subtitle="Guided workforce compensation processing"
-            icon={Calculator}
-            iconColor={COLORS.primary}
-            iconBgColor={`${COLORS.primary}15`}
-          />
-
-          <View style={styles.successContainer}>
-            <View style={styles.successIcon}>
-              <View style={styles.successCircle}>
-                <Check size={48} color={COLORS.white} strokeWidth={3} />
-              </View>
-              <View style={styles.successBadge}>
-                <DollarSign size={20} color={COLORS.white} />
-              </View>
-            </View>
-
-            <Text style={styles.successTitle}>Payroll Processed!</Text>
-            <Text style={styles.successMessage}>
-              The payroll for {months[month - 1]} {year} has been calculated and processed successfully. You can now generate payslips for your employees.
-            </Text>
-
-            <View style={styles.successButtons}>
-              <TouchableOpacity
-                style={styles.successButtonSecondary}
-                onPress={() => navigation.navigate('PayrollDashboard')}
-                disabled={isGeneratingPayslips}
-              >
-                <Text style={styles.successButtonSecondaryText}>Dashboard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.successButtonPrimary, isGeneratingPayslips && { opacity: 0.8 }]}
-                onPress={handleGeneratePayslips}
-                disabled={isGeneratingPayslips}
-              >
-                {isGeneratingPayslips ? (
-                  <ActivityIndicator size="small" color={COLORS.white} style={{ marginRight: 8 }} />
-                ) : (
-                  <Receipt size={16} color={COLORS.white} />
-                )}
-                <Text style={styles.successButtonPrimaryText}>
-                  {isGeneratingPayslips ? 'Generating...' : 'Generate Payslips'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.footerInfo}>
-              <View style={styles.footerItem}>
-                <ShieldCheck size={12} color={COLORS.gray} />
-                <Text style={styles.footerText}>Secure Trace</Text>
-              </View>
-              <View style={styles.footerItem}>
-                <Lock size={12} color={COLORS.gray} />
-                <Text style={styles.footerText}>Encrypted Snapshot</Text>
-              </View>
-              <View style={styles.footerItem}>
-                <BarChart3 size={12} color={COLORS.gray} />
-                <Text style={styles.footerText}>Audit Compliant</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Layout>
-    );
-  }
-
   return (
-    <Layout
-      title="Payroll Engine"
-      user={user}
-      sidebarVisible={sidebarVisible}
-      setSidebarVisible={setSidebarVisible}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-    >
-      <View style={styles.container}>
-        <PageHeader
-          title="Payroll Engine"
-          subtitle="Guided workforce compensation processing"
-          icon={Calculator}
-          iconColor={COLORS.primary}
-          iconBgColor={`${COLORS.primary}15`}
-        />
+    <Layout title="Payroll Engine" user={user} sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {renderStepIndicator()}
 
-        <View style={styles.content}>
-          {/* Progress Stepper */}
-          <ProgressStepper step={step} setStep={setStep} />
-
-          {/* Step 1: Period Selection */}
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {step === 1 && (
-            <View style={styles.stepContainer}>
-              <View style={styles.periodCard}>
-                <View style={styles.periodIcon}>
-                  <Calendar size={32} color={COLORS.primary} />
-                </View>
-                <Text style={styles.periodTitle}>Select Payroll Period</Text>
-                <Text style={styles.periodSubtitle}>
-                  Choose the month and year you wish to process payroll for.
-                </Text>
-
-                <View style={styles.periodSelectors}>
-                  <View style={styles.periodSelector}>
-                    <Text style={styles.selectorLabel}>Salary Month</Text>
-                    <View style={styles.pickerWrapper}>
-                      <SafeSelector
-                        options={months.map((m, i) => ({ label: m, value: i + 1 }))}
-                        selectedValue={month}
-                        onValueChange={(v) => setMonth(v)}
-                        visible={activeSelector === 'month'}
-                        onOpen={() => setActiveSelector('month')}
-                        onClose={() => setActiveSelector(null)}
-                        style={styles.safeSelector}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.periodSelector}>
-                    <Text style={styles.selectorLabel}>Salary Year</Text>
-                    <View style={styles.pickerWrapper}>
-                      <SafeSelector
-                        options={years.map((y) => ({ label: String(y), value: y }))}
-                        selectedValue={year}
-                        onValueChange={(v) => setYear(v)}
-                        visible={activeSelector === 'year'}
-                        onOpen={() => setActiveSelector('year')}
-                        onClose={() => setActiveSelector(null)}
-                        style={styles.safeSelector}
-                      />
-                    </View>
-                  </View>
-                </View>
-
-                <TouchableOpacity style={styles.continueButton} onPress={handleNextStep}>
-                  <Text style={styles.continueButtonText}>Continue to Readiness</Text>
-                  <ArrowRight size={18} color={COLORS.white} />
+            <View style={styles.card}>
+              <View style={styles.iconWrapper}>
+                <Calendar size={32} color="#6366f1" />
+              </View>
+              <Text style={styles.cardTitle}>Select Payroll Period</Text>
+              <Text style={styles.cardSubtitle}>Choose the operational month to begin processing workforce compensation.</Text>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Month</Text>
+                <TouchableOpacity style={styles.pickerFake} onPress={() => setMonthPickerVisible(true)}>
+                  <Text style={styles.pickerFakeText}>{months[month - 1]}</Text>
+                  <ChevronRight size={16} color="#94a3b8" />
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
-
-          {/* Step 2: Readiness Check */}
-          {step === 2 && (
-            <View style={styles.stepContainer}>
-              <View style={styles.readinessHeader}>
-                <Text style={styles.readinessHeaderTitle}>System Readiness Check</Text>
-                <Text style={styles.readinessSubtitle}>
-                  Auto-verifying employee profiles and bank details...
-                </Text>
-                <TouchableOpacity onPress={fetchReadiness} style={styles.refreshButton}>
-                  <RefreshCw size={16} color={COLORS.gray} />
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Year</Text>
+                <TouchableOpacity style={styles.pickerFake} onPress={() => setYearPickerVisible(true)}>
+                  <Text style={styles.pickerFakeText}>{year}</Text>
+                  <ChevronRight size={16} color="#94a3b8" />
                 </TouchableOpacity>
               </View>
-
-              {loading ? (
-                <View style={styles.loadingCard}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                  <Text style={styles.loadingText}>Simulating Lifecycle Nodes...</Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.readinessGrid}>
-                    <ReadinessCard
-                      title="Ready Employees"
-                      value={readinessData?.summary?.readyCount || 0}
-                      icon={UserCheck}
-                      color={COLORS.success}
-                      description="Fully configured and validated for processing."
-                    />
-                    <ReadinessCard
-                      title="Missing Profiles"
-                      value={readinessData?.summary?.missingProfileCount || 0}
-                      icon={Users}
-                      color={COLORS.warning}
-                      description="These employees will be automatically skipped."
-                    />
-                    <ReadinessCard
-                      title="Missing Bank Details"
-                      value={readinessData?.summary?.missingBankCount || 0}
-                      icon={ShieldAlert}
-                      color={COLORS.error}
-                      description="Critical for disbursement. Will be skipped."
-                    />
-                  </View>
-
-                  <View style={styles.readinessFooter}>
-                    <View style={styles.readinessInfo}>
-                      <Info size={16} color={COLORS.primary} />
-                      <Text style={styles.readinessInfoText}>
-                        Only {readinessData?.summary?.readyCount} employees meet the criteria for selection.
-                      </Text>
-                    </View>
-                    <View style={styles.readinessButtons}>
-                      <TouchableOpacity style={styles.backButton} onPress={handlePrevStep}>
-                        <Text style={styles.backButtonText}>Back</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.nextButton, readinessData?.summary?.readyCount === 0 && styles.nextButtonDisabled]}
-                        onPress={handleNextStep}
-                        disabled={readinessData?.summary?.readyCount === 0}
-                      >
-                        <Text style={styles.nextButtonText}>Generate Preview</Text>
-                        <ArrowRight size={16} color={COLORS.white} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </>
-              )}
+              
+              <AnimatedButton style={styles.primaryBtn} onPress={fetchReadiness} disabled={loading}>
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Initialize Engine</Text>}
+              </AnimatedButton>
             </View>
           )}
 
-          {/* Step 3: Preview */}
-          {step === 3 && (
-            <View style={styles.stepContainer}>
-              <View style={styles.previewHeader}>
-                <Text style={styles.previewTitle}>Preview Payroll</Text>
-                <Text style={styles.previewSubtitle}>Aggregated calculation for valid employees.</Text>
+          {step === 2 && readinessData && (
+            <View style={styles.card}>
+              <View style={[styles.iconWrapper, { backgroundColor: '#f0fdf4' }]}>
+                <ShieldCheck size={32} color="#10b981" />
               </View>
-
-              {/* Overtime Toggle */}
-              <View style={styles.overtimeCard}>
-                <View>
-                  <Text style={styles.overtimeLabel}>Overtime</Text>
-                  <Text style={[styles.overtimeStatus, overtimeEnabled && styles.overtimeStatusEnabled]}>
-                    {overtimeEnabled ? 'Enabled' : 'Disabled'}
-                  </Text>
+              <Text style={styles.cardTitle}>System Readiness</Text>
+              <Text style={styles.cardSubtitle}>Verifying employee profiles and banking details before calculation.</Text>
+              
+              <View style={styles.readinessGrid}>
+                <View style={[styles.readinessBox, { borderLeftColor: '#10b981', backgroundColor: '#ecfdf5' }]}>
+                  <View style={styles.readinessHeader}>
+                    <CheckCircle2 color="#10b981" size={20} />
+                    <Text style={[styles.readinessLabel, { color: '#059669' }]}>Ready</Text>
+                  </View>
+                  <Text style={[styles.readinessValue, { color: '#064e3b' }]}>{readinessData.summary.readyCount}</Text>
                 </View>
-                <TouchableOpacity
-                  style={[styles.toggle, overtimeEnabled && styles.toggleActive]}
-                  onPress={() => setOvertimeEnabled(!overtimeEnabled)}
-                >
-                  <View style={[styles.toggleKnob, overtimeEnabled && styles.toggleKnobActive]} />
-                </TouchableOpacity>
-              </View>
-
-              {loading ? (
-                <View style={styles.loadingCard}>
-                  <Activity size={40} color={COLORS.primary} />
-                  <Text style={styles.loadingTitle}>Aggregating Financial Metrics</Text>
-                  <Text style={styles.loadingSubtext}>Calculating gross, deductions, and net tax implications...</Text>
+                <View style={[styles.readinessBox, { borderLeftColor: '#f59e0b', backgroundColor: '#fffbeb' }]}>
+                  <View style={styles.readinessHeader}>
+                    <AlertCircle color="#f59e0b" size={20} />
+                    <Text style={[styles.readinessLabel, { color: '#d97706' }]}>Missing Profiles</Text>
+                  </View>
+                  <Text style={[styles.readinessValue, { color: '#78350f' }]}>{readinessData.summary.missingProfileCount}</Text>
                 </View>
-              ) : (
-                <>
-                  {/* Summary Cards */}
-                  <View style={styles.summaryGrid}>
-                    <View style={styles.summaryCard}>
-                      <Text style={styles.summaryLabel}>Employees</Text>
-                      <Text style={styles.summaryValue}>{previewData?.summary?.totalEmployees || 0}</Text>
-                    </View>
-                    <View style={[styles.summaryCard, styles.summaryCardIndigo]}>
-                      <Text style={styles.summaryLabel}>Total Earnings</Text>
-                      <Text style={[styles.summaryValue, { color: COLORS.primary }]}>
-                        {currencySymbol}{formatCurrencyValue(previewData?.summary?.totalGross || 0)}
-                      </Text>
-                    </View>
-                    <View style={[styles.summaryCard, styles.summaryCardRose]}>
-                      <Text style={styles.summaryLabel}>Total Deductions</Text>
-                      <Text style={[styles.summaryValue, { color: COLORS.error }]}>
-                        -{currencySymbol}{formatCurrencyValue(previewData?.summary?.totalDeductions || 0)}
-                      </Text>
-                    </View>
-                    <View style={[styles.summaryCard, styles.summaryCardEmerald]}>
-                      <Text style={styles.summaryLabel}>Net Payout</Text>
-                      <Text style={[styles.summaryValue, { color: COLORS.success }]}>
-                        {currencySymbol}{formatCurrencyValue(previewData?.summary?.totalNetPay || 0)}
-                      </Text>
-                    </View>
+                <View style={[styles.readinessBox, { borderLeftColor: '#ef4444', backgroundColor: '#fef2f2' }]}>
+                  <View style={styles.readinessHeader}>
+                    <AlertCircle color="#ef4444" size={20} />
+                    <Text style={[styles.readinessLabel, { color: '#dc2626' }]}>Missing Bank</Text>
                   </View>
-
-                  {/* Employee Breakdown */}
-                  <View style={styles.breakdownCard}>
-                    <Text style={styles.breakdownTitle}>Employee Breakdown</Text>
-                    <ScrollView style={styles.breakdownList}>
-                      {(previewData?.breakdown || []).map((emp: any, idx: number) => (
-                        <EmployeeRow
-                          key={idx}
-                          employee={emp}
-                          currencySymbol={currencySymbol}
-                          index={idx}
-                          onPress={() => {
-                            setSelectedEmployee(emp);
-                            setShowDetailModal(true);
-                          }}
-                        />
-                      ))}
-                    </ScrollView>
-                  </View>
-
-                  {/* Action Buttons */}
-                  <View style={styles.previewButtons}>
-                    <TouchableOpacity style={styles.backButton} onPress={handlePrevStep}>
-                      <Text style={styles.backButtonText}>Back</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.runButton, isProcessing && styles.runButtonDisabled]}
-                      onPress={handleRunPayroll}
-                      disabled={isProcessing}
-                    >
-                      {isProcessing ? (
-                        <>
-                          <ActivityIndicator size="small" color={COLORS.white} />
-                          <Text style={styles.runButtonText}>Processing {simProgress}%</Text>
-                        </>
-                      ) : (
-                        <>
-                          <Play size={16} color={COLORS.white} fill={COLORS.white} />
-                          <Text style={styles.runButtonText}>Run Payroll</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Processing Progress */}
-                  {isProcessing && (
-                    <View style={styles.progressContainer}>
-                      <View style={styles.progressBar}>
-                        <View style={[styles.progressFill, { width: `${simProgress}%` }]} />
-                      </View>
-                      <Text style={styles.progressText}>Processing payroll transactions...</Text>
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
-          )}
-
-          {/* Footer Info */}
-          {step < 4 && (
-            <View style={styles.footerInfo}>
-              <View style={styles.footerItem}>
-                <ShieldCheck size={12} color={COLORS.gray} />
-                <Text style={styles.footerText}>Secure Trace</Text>
+                  <Text style={[styles.readinessValue, { color: '#7f1d1d' }]}>{readinessData.summary.missingBankCount}</Text>
+                </View>
               </View>
-              <View style={styles.footerItem}>
-                <Lock size={12} color={COLORS.gray} />
-                <Text style={styles.footerText}>Encrypted Snapshot</Text>
-              </View>
-              <View style={styles.footerItem}>
-                <BarChart3 size={12} color={COLORS.gray} />
-                <Text style={styles.footerText}>Audit Compliant</Text>
+              
+              <View style={styles.actions}>
+                <AnimatedButton style={styles.secondaryBtn} onPress={() => setStep(1)}>
+                  <Text style={styles.secondaryBtnText}>Back</Text>
+                </AnimatedButton>
+                <AnimatedButton style={[styles.primaryBtn, { flex: 2 }]} onPress={fetchPreview} disabled={loading || readinessData.summary.readyCount === 0}>
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Generate Preview</Text>}
+                </AnimatedButton>
               </View>
             </View>
           )}
 
-          {/* Employee Detail Modal */}
-          <Modal
-            visible={showDetailModal}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={() => setShowDetailModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <View>
-                    <Text style={styles.modalTitle}>{selectedEmployee?.name}</Text>
-                    <Text style={styles.modalSubtitle}>{selectedEmployee?.employeeId}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setShowDetailModal(false)}>
-                    <X size={24} color={COLORS.dark} />
-                  </TouchableOpacity>
+          {step === 3 && previewData && (
+            <View style={[styles.card, { paddingHorizontal: 16 }]}>
+              <View style={styles.previewHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.cardTitle, { textAlign: 'left', marginBottom: 4 }]}>Preview Payroll</Text>
+                  <Text style={[styles.cardSubtitle, { textAlign: 'left', paddingHorizontal: 0, marginBottom: 0 }]}>Aggregated calculation for valid employees.</Text>
                 </View>
+                <View style={styles.overtimeSwitchContainer}>
+                  <Text style={styles.overtimeSwitchLabel}>OVERTIME</Text>
+                  <Text style={[styles.overtimeSwitchValue, overtimeEnabled ? { color: '#6366f1' } : {}]}>{overtimeEnabled ? 'ENABLED' : 'DISABLED'}</Text>
+                </View>
+              </View>
 
-                <ScrollView style={styles.modalBody}>
-                  {/* Attendance Section */}
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>Attendance & Period</Text>
-                    <View style={styles.detailGrid}>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Working Days</Text>
-                        <Text style={styles.detailValue}>{selectedEmployee?.totalOrgWorkingDays || 0}</Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Payable Days</Text>
-                        <Text style={styles.detailValue}>{selectedEmployee?.present || 0}</Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>LOP Days</Text>
-                        <Text style={[styles.detailValue, { color: COLORS.error }]}>
-                          {selectedEmployee?.attendance?.lopDays || 0}
-                        </Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Overtime</Text>
-                        <Text style={styles.detailValue}>{selectedEmployee?.attendance?.overtimeHours || 0} hrs</Text>
-                      </View>
-                    </View>
-                  </View>
+              <View style={styles.topActionsRow}>
+                 <AnimatedButton style={styles.headerBackBtn} onPress={() => setStep(2)}>
+                  <Text style={styles.headerBackBtnText}>Back</Text>
+                 </AnimatedButton>
+                 <AnimatedButton style={styles.headerRunBtn} onPress={executePayroll} disabled={loading}>
+                   {loading ? <ActivityIndicator color="#fff" size="small" /> : (
+                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                       <Play size={14} color="#fff" fill="#fff" />
+                       <Text style={styles.headerRunBtnText}>Run Payroll</Text>
+                     </View>
+                   )}
+                 </AnimatedButton>
+              </View>
+              
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statCardsScroll}>
+                <View style={[styles.statCardInline, { backgroundColor: '#f8fafc' }]}>
+                  <Text style={styles.statCardInlineLabel}>EMPLOYEES</Text>
+                  <Text style={[styles.statCardInlineValue, { color: '#0f172a' }]}>{previewData.summary.totalEmployees}</Text>
+                </View>
+                <View style={[styles.statCardInline, { backgroundColor: '#eef2ff' }]}>
+                  <Text style={styles.statCardInlineLabel}>TOTAL EARNINGS</Text>
+                  <Text style={[styles.statCardInlineValue, { color: '#4f46e5' }]}>{currencySymbol}{previewData.summary.totalGross?.toLocaleString() || '0.00'}</Text>
+                </View>
+                <View style={[styles.statCardInline, { backgroundColor: '#fef2f2' }]}>
+                  <Text style={styles.statCardInlineLabel}>TOTAL DEDUCTIONS</Text>
+                  <Text style={[styles.statCardInlineValue, { color: '#e11d48' }]}>-{currencySymbol}{previewData.summary.totalDeductions?.toLocaleString() || '0.00'}</Text>
+                </View>
+                <View style={[styles.statCardInline, { backgroundColor: '#ecfdf5' }]}>
+                  <Text style={styles.statCardInlineLabel}>NET PAYOUT</Text>
+                  <Text style={[styles.statCardInlineValue, { color: '#059669' }]}>{currencySymbol}{previewData.summary.totalNetPay?.toLocaleString() || '0.00'}</Text>
+                </View>
+              </ScrollView>
 
-                  {/* Earnings Section */}
-                  <View style={styles.detailSection}>
-                    <View style={styles.detailSectionHeader}>
-                      <Text style={styles.detailSectionTitle}>Earnings</Text>
-                      <Text style={[styles.detailTotal, { color: COLORS.success }]}>
-                        {currencySymbol}{formatCurrency(selectedEmployee?.adjustedGross || 0)}
-                      </Text>
+              <View style={styles.breakdownContainer}>
+                <Text style={styles.breakdownHeader}>EMPLOYEE BREAKDOWN</Text>
+                
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ minWidth: 600 }}>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.tableCol, { flex: 2 }]}>EMPLOYEE</Text>
+                      <Text style={styles.tableCol}>TOTAL DAYS</Text>
+                      <Text style={styles.tableCol}>ADJ. WORKING</Text>
+                      <Text style={styles.tableCol}>PRESENT</Text>
+                      <Text style={styles.tableCol}>LOP</Text>
+                      <Text style={styles.tableCol}>OT HRS</Text>
+                      <Text style={[styles.tableCol, { flex: 1.5, textAlign: 'right' }]}>ADJUSTED GROSS</Text>
+                      <Text style={[styles.tableCol, { flex: 1.5, textAlign: 'right', color: '#6366f1' }]}>FINAL NET</Text>
                     </View>
-                    {(selectedEmployee?.earnings || []).map((comp: any, idx: number) => (
-                      <View key={idx} style={styles.compRow}>
-                        <Text style={styles.compName}>{comp.name}</Text>
-                        <Text style={styles.compValue}>{currencySymbol}{formatCurrency(comp.value)}</Text>
+
+                    {previewData.breakdown && previewData.breakdown.map((row: any, idx: number) => (
+                      <View key={idx} style={[styles.tableRow, idx % 2 !== 0 && { backgroundColor: '#f8fafc' }]}>
+                        <View style={[styles.tableCell, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+                          <View style={styles.avatarMini}>
+                            <Text style={styles.avatarMiniText}>{row.name ? row.name[0].toUpperCase() : 'U'}</Text>
+                          </View>
+                          <View>
+                            <Text style={styles.employeeName}>{row.name}</Text>
+                            <Text style={styles.employeeId}>{row.employeeId}</Text>
+                          </View>
+                        </View>
+                        
+                        {row.status === 'ERROR' ? (
+                          <View style={{ flex: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                             <AlertCircle size={14} color="#ef4444" style={{ marginRight: 6 }} />
+                             <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700' }}>Calculation Failed: {row.error}</Text>
+                          </View>
+                        ) : (
+                          <>
+                            <Text style={[styles.tableCell, { color: '#64748b' }]}>{row.standardMonthlyDays || 0}</Text>
+                            <Text style={[styles.tableCell, { color: '#4f46e5' }]}>{row.working || 0}</Text>
+                            <Text style={[styles.tableCell, { color: '#059669' }]}>{row.present || 0}</Text>
+                            <Text style={[styles.tableCell, { color: '#ef4444' }]}>{row.lop || 0}</Text>
+                            <Text style={[styles.tableCell, { color: '#64748b' }]}>{row.overtimeHours || 0}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{row.adjustedGross?.toLocaleString() || '0.00'}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>{currencySymbol}{row.net?.toLocaleString() || '0.00'}</Text>
+                          </>
+                        )}
                       </View>
                     ))}
-                  </View>
-
-                  {/* Deductions Section */}
-                  <View style={styles.detailSection}>
-                    <View style={styles.detailSectionHeader}>
-                      <Text style={styles.detailSectionTitle}>Deductions</Text>
-                      <Text style={[styles.detailTotal, { color: COLORS.error }]}>
-                        -{currencySymbol}{formatCurrency((selectedEmployee?.adjustedGross || 0) - (selectedEmployee?.net || 0))}
-                      </Text>
-                    </View>
-                    {(selectedEmployee?.deductions || []).map((comp: any, idx: number) => (
-                      <View key={idx} style={styles.compRow}>
-                        <Text style={styles.compName}>{comp.name}</Text>
-                        <Text style={[styles.compValue, { color: COLORS.error }]}>
-                          -{currencySymbol}{formatCurrency(comp.value)}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* Net Pay */}
-                  <View style={[styles.detailSection, styles.netPaySection]}>
-                    <Text style={styles.netPayLabel}>Net Payout</Text>
-                    <Text style={styles.netPayValue}>
-                      {currencySymbol}{formatCurrency(selectedEmployee?.net || 0)}
-                    </Text>
                   </View>
                 </ScrollView>
+              </View>
 
-                <TouchableOpacity 
-                  style={styles.closeModalButton}
-                  onPress={() => setShowDetailModal(false)}
-                >
-                  <Text style={styles.closeModalButtonText}>Close Details</Text>
-                </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 4 && (
+            <View style={[styles.card, { alignItems: 'center', paddingVertical: 48, backgroundColor: '#f8fafc', borderColor: 'transparent', shadowOpacity: 0 }]}>
+              <View style={{ position: 'relative', marginBottom: 32 }}>
+                <View style={[styles.successIconWrapper, { backgroundColor: '#10b981', width: 96, height: 96, borderRadius: 48, padding: 0, justifyContent: 'center', alignItems: 'center', shadowColor: '#10b981', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8 }]}>
+                  <Check size={48} color="#fff" strokeWidth={4} />
+                </View>
+                <View style={{ position: 'absolute', top: -8, right: -8, backgroundColor: '#4f46e5', width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 4 }}>
+                  <DollarSign size={20} color="#fff" />
+                </View>
+              </View>
+
+              <Text style={[styles.cardTitle, { fontSize: 28, color: '#0f172a', marginBottom: 12 }]}>Payroll Executed!</Text>
+              <Text style={[styles.successDesc, { paddingHorizontal: 40, marginBottom: 40 }]}>
+                Workforce compensation for {months[month - 1]} {year} has been committed to the ledger successfully.
+              </Text>
+
+              <View style={styles.successActionsRow}>
+                <AnimatedButton style={styles.successGhostBtn} onPress={() => navigation.navigate('PayrollDashboard')}>
+                  <Text style={styles.successGhostBtnText}>Dashboard</Text>
+                </AnimatedButton>
+                
+                <AnimatedButton style={styles.successPrimaryBtn} onPress={() => navigation.navigate('PayrollPayslips')}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Receipt size={16} color="#fff" />
+                    <Text style={styles.successPrimaryBtnText}>Generate Payslips</Text>
+                  </View>
+                </AnimatedButton>
+                
+                <AnimatedButton style={styles.successOutlineBtn} onPress={() => navigation.navigate('PayrollHistory')}>
+                  <Text style={styles.successOutlineBtnText}>View Ledger</Text>
+                </AnimatedButton>
               </View>
             </View>
-          </Modal>
-        </View>
-      </View>
+          )}
+        </Animated.View>
+      </ScrollView>
+
+      {/* Month Picker Modal */}
+      <Modal visible={monthPickerVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMonthPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Month</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {months.map((m, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={[styles.modalItem, month === index + 1 && styles.modalItemActive]}
+                  onPress={() => { setMonth(index + 1); setMonthPickerVisible(false); }}
+                >
+                  <Text style={[styles.modalItemText, month === index + 1 && styles.modalItemTextActive]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Year Picker Modal */}
+      <Modal visible={yearPickerVisible} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setYearPickerVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Year</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {years.map((y, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={[styles.modalItem, year === y && styles.modalItemActive]}
+                  onPress={() => { setYear(y); setYearPickerVisible(false); }}
+                >
+                  <Text style={[styles.modalItemText, year === y && styles.modalItemTextActive]}>{y}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Layout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.light },
-  content: { paddingHorizontal: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16 },
+  stepContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
+  stepDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  stepDotActive: { backgroundColor: '#6366f1' },
+  stepDotCurrent: { shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  stepText: { color: '#64748b', fontWeight: '800', fontSize: 14 },
+  stepTextActive: { color: '#fff' },
+  stepLine: { height: 3, width: (width - 160) / 3, backgroundColor: '#e2e8f0', marginHorizontal: -4, zIndex: 1 },
+  stepLineActive: { backgroundColor: '#6366f1' },
+  
+  card: { 
+    backgroundColor: '#fff', 
+    borderRadius: 24, 
+    padding: 24, 
+    borderWidth: 1, 
+    borderColor: '#f1f5f9',
+    shadowColor: '#64748b',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 4
+  },
+  iconWrapper: { alignSelf: 'center', backgroundColor: '#eef2ff', padding: 20, borderRadius: 24, marginBottom: 20 },
+  cardTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 8 },
+  cardSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20, paddingHorizontal: 16 },
+  
+  inputGroup: { marginBottom: 20 },
+  label: { fontSize: 12, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 },
+  pickerFake: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  pickerFakeText: { fontSize: 16, color: '#1e293b', fontWeight: '600' },
+  
+  primaryBtn: { backgroundColor: '#6366f1', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, flex: 1, shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  secondaryBtn: { backgroundColor: '#f1f5f9', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, flex: 1 },
+  secondaryBtnText: { color: '#475569', fontSize: 16, fontWeight: '700' },
+  executeBtn: { backgroundColor: '#10b981', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, flex: 1, shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  executeBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  
+  readinessGrid: { gap: 12, marginBottom: 24 },
+  readinessBox: { padding: 16, borderRadius: 16, borderLeftWidth: 4 },
+  readinessHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  readinessLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  readinessValue: { fontSize: 28, fontWeight: '800' },
+  
+  previewHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
+  overtimeSwitchContainer: { alignItems: 'flex-end', backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  overtimeSwitchLabel: { fontSize: 9, fontWeight: '800', color: '#94a3b8', marginBottom: 2 },
+  overtimeSwitchValue: { fontSize: 11, fontWeight: '800', color: '#64748b' },
+  
+  topActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginBottom: 24 },
+  headerBackBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
+  headerBackBtnText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  headerRunBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 2 },
+  headerRunBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
-  // Stepper Styles
-  stepperContainer: { marginBottom: 32, marginTop: 8 },
-  stepperTrack: { height: 4, backgroundColor: COLORS.border, borderRadius: 2, marginBottom: 16 },
-  stepperProgress: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 2 },
-  stepperSteps: { flexDirection: 'row', justifyContent: 'space-between' },
-  stepperStep: { alignItems: 'center', flex: 1 },
-  stepperDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.white, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  stepperDotActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  stepperDotText: { fontSize: 12, fontWeight: 'bold', color: COLORS.gray },
-  stepperDotTextActive: { color: COLORS.white },
-  stepperLabel: { fontSize: 9, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase' },
-  stepperLabelActive: { color: COLORS.primary },
+  statCardsScroll: { gap: 12, paddingBottom: 16, marginBottom: 8 },
+  statCardInline: { padding: 16, borderRadius: 16, minWidth: 140 },
+  statCardInlineLabel: { fontSize: 10, fontWeight: '800', color: '#94a3b8', marginBottom: 8 },
+  statCardInlineValue: { fontSize: 20, fontWeight: '800' },
 
-  // Step Container
-  stepContainer: { flex: 1 },
+  breakdownContainer: { marginTop: 16, borderWidth: 1, borderColor: '#f1f5f9', borderRadius: 16, overflow: 'hidden' },
+  breakdownHeader: { fontSize: 11, fontWeight: '800', color: '#94a3b8', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  tableCol: { flex: 1, fontSize: 9, fontWeight: '800', color: '#94a3b8', textAlign: 'center' },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
+  tableCell: { flex: 1, fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  
+  avatarMini: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
+  avatarMiniText: { fontSize: 12, fontWeight: '800', color: '#4f46e5' },
+  employeeName: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
+  employeeId: { fontSize: 9, fontWeight: '700', color: '#94a3b8' },
 
-  // Step 1 - Period Card
-  periodCard: { backgroundColor: COLORS.white, borderRadius: 32, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
-  periodIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: `${COLORS.primary}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  periodTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.dark, marginBottom: 8, textAlign: 'center' },
-  periodSubtitle: { fontSize: 13, color: COLORS.gray, textAlign: 'center', marginBottom: 24 },
-  periodSelectors: { flexDirection: 'row', gap: 16, marginBottom: 32, width: '100%' },
-  periodSelector: { flex: 1 },
-  selectorLabel: { fontSize: 10, fontWeight: 'bold', color: COLORS.gray, marginBottom: 8, textTransform: 'uppercase' },
-  pickerWrapper: { backgroundColor: COLORS.light, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden' },
-  safeSelector: { height: 44, width: '100%', backgroundColor: 'transparent' },
-  continueButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 16, borderRadius: 24 },
-  continueButtonText: { fontSize: 16, fontWeight: 'bold', color: COLORS.white },
-
-  // Step 2 - Readiness
-  readinessHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  readinessHeaderTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.dark },
-  readinessSubtitle: { fontSize: 12, color: COLORS.gray, marginTop: 4, flex: 1 },
-  refreshButton: { padding: 8, backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border },
-  readinessGrid: { gap: 16, marginBottom: 24 },
-  readinessCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: COLORS.white, borderRadius: 24, padding: 16, borderWidth: 1, borderColor: COLORS.border, borderBottomWidth: 4 },
-  readinessIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  readinessValue: { fontSize: 24, fontWeight: 'bold' },
-  readinessTitle: { fontSize: 12, fontWeight: 'bold', color: COLORS.gray, marginTop: 2 },
-  readinessDesc: { fontSize: 10, color: COLORS.gray, marginTop: 4 },
-  readinessFooter: { gap: 16 },
-  readinessInfo: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${COLORS.primary}10`, padding: 12, borderRadius: 16 },
-  readinessInfoText: { fontSize: 12, color: COLORS.primary, flex: 1 },
-  readinessButtons: { flexDirection: 'row', gap: 12 },
-  backButton: { flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
-  backButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.gray },
-  nextButton: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 16 },
-  nextButtonDisabled: { opacity: 0.5 },
-  nextButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.white },
-
-  // Loading Card
-  loadingCard: { backgroundColor: COLORS.white, borderRadius: 32, padding: 40, alignItems: 'center', gap: 16, borderWidth: 1, borderColor: COLORS.border },
-  loadingText: { fontSize: 12, color: COLORS.gray, fontWeight: 'bold', textTransform: 'uppercase' },
-  loadingTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.dark, marginTop: 16 },
-  loadingSubtext: { fontSize: 12, color: COLORS.gray, textAlign: 'center' },
-
-  // Step 3 - Preview
-  previewHeader: { marginBottom: 20 },
-  previewTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.dark },
-  previewSubtitle: { fontSize: 12, color: COLORS.gray, marginTop: 4 },
-  overtimeCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.white, padding: 16, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, marginBottom: 20 },
-  overtimeLabel: { fontSize: 12, fontWeight: 'bold', color: COLORS.dark },
-  overtimeStatus: { fontSize: 10, color: COLORS.gray, marginTop: 2 },
-  overtimeStatusEnabled: { color: COLORS.primary },
-  toggle: { width: 44, height: 24, backgroundColor: COLORS.border, borderRadius: 12, padding: 2 },
-  toggleActive: { backgroundColor: COLORS.primary },
-  toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.white },
-  toggleKnobActive: { transform: [{ translateX: 20 }] },
-
-  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  summaryCard: { flex: 1, minWidth: '45%', backgroundColor: COLORS.white, padding: 16, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border },
-  summaryCardIndigo: { backgroundColor: `${COLORS.primary}10` },
-  summaryCardRose: { backgroundColor: `${COLORS.error}10` },
-  summaryCardEmerald: { backgroundColor: `${COLORS.success}10` },
-  summaryLabel: { fontSize: 10, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase', marginBottom: 8 },
-  summaryValue: { fontSize: 18, fontWeight: 'bold', color: COLORS.dark },
-
-  breakdownCard: { backgroundColor: COLORS.white, borderRadius: 24, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', marginBottom: 20 },
-  breakdownTitle: { fontSize: 12, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  breakdownList: { maxHeight: 400 },
-  employeeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border, flexWrap: 'wrap' },
-  employeeRowError: { backgroundColor: `${COLORS.error}10` },
-  employeeInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  employeeAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: `${COLORS.primary}15`, alignItems: 'center', justifyContent: 'center' },
-  employeeAvatarError: { backgroundColor: `${COLORS.error}15` },
-  employeeInitial: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary },
-  employeeInitialError: { color: COLORS.error },
-  employeeName: { fontSize: 13, fontWeight: 'bold', color: COLORS.dark },
-  employeeId: { fontSize: 10, color: COLORS.gray, marginTop: 2 },
-  employeeStats: { flexDirection: 'row', gap: 16 },
-  statItem: { alignItems: 'center' },
-  statLabel: { fontSize: 9, color: COLORS.gray },
-  statValue: { fontSize: 11, fontWeight: 'bold', color: COLORS.dark, marginTop: 2 },
-  errorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: `${COLORS.error}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-  errorText: { fontSize: 10, color: COLORS.error, fontWeight: 'bold' },
-
-  previewButtons: { flexDirection: 'row', gap: 12 },
-  runButton: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.success, paddingVertical: 14, borderRadius: 16 },
-  runButtonDisabled: { opacity: 0.5 },
-  runButtonText: { fontSize: 14, fontWeight: 'bold', color: COLORS.white },
-
-  progressContainer: { marginTop: 16, gap: 8 },
-  progressBar: { height: 6, backgroundColor: COLORS.border, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 3 },
-  progressText: { fontSize: 11, color: COLORS.gray, textAlign: 'center' },
-
-  // Success Screen
-  successContainer: { alignItems: 'center', paddingVertical: 40 },
-  successIcon: { position: 'relative', marginBottom: 24 },
-  successCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center' },
-  successBadge: { position: 'absolute', bottom: -8, right: -8, width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  successTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.dark, marginBottom: 8, textAlign: 'center' },
-  successMessage: { fontSize: 13, color: COLORS.gray, textAlign: 'center', marginBottom: 32 },
-  successButtons: { flexDirection: 'row', gap: 12, marginBottom: 40 },
-  successButtonSecondary: { flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
-  successButtonSecondaryText: { fontSize: 14, fontWeight: 'bold', color: COLORS.gray },
-  successButtonPrimary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.primary, paddingVertical: 14, borderRadius: 16 },
-  successButtonPrimaryText: { fontSize: 14, fontWeight: 'bold', color: COLORS.white },
-
-  // Footer Info
-  footerInfo: { flexDirection: 'row', justifyContent: 'center', gap: 24, paddingVertical: 24, borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: 16 },
-  footerItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  footerText: { fontSize: 10, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase' },
-
-  // KPI Card
-  kpiCard: { flex: 1, backgroundColor: COLORS.white, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: COLORS.border, borderBottomWidth: 3 },
-  kpiIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  kpiValue: { fontSize: 16, fontWeight: 'bold' },
-  kpiTitle: { fontSize: 10, color: COLORS.gray, marginTop: 2 },
-
-  // Modal Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: COLORS.white, borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '80%', padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.dark },
-  modalSubtitle: { fontSize: 14, color: COLORS.gray, marginTop: 2 },
-  modalBody: { flex: 1 },
-  detailSection: { marginBottom: 24, backgroundColor: COLORS.light, padding: 16, borderRadius: 20 },
-  detailSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  detailSectionTitle: { fontSize: 12, fontWeight: 'bold', color: COLORS.gray, textTransform: 'uppercase' },
-  detailTotal: { fontSize: 16, fontWeight: 'bold' },
-  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  detailItem: { flex: 1, minWidth: '45%' },
-  detailLabel: { fontSize: 10, color: COLORS.gray, marginBottom: 4 },
-  detailValue: { fontSize: 14, fontWeight: 'bold', color: COLORS.dark },
-  compRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  compName: { fontSize: 13, color: COLORS.dark },
-  compValue: { fontSize: 13, fontWeight: 'bold', color: COLORS.dark },
-  netPaySection: { backgroundColor: `${COLORS.primary}10`, borderBottomWidth: 0 },
-  netPayLabel: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary, marginBottom: 4 },
-  netPayValue: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary },
-  closeModalButton: { backgroundColor: COLORS.dark, paddingVertical: 16, borderRadius: 16, alignItems: 'center', marginTop: 16 },
-  closeModalButtonText: { color: COLORS.white, fontWeight: 'bold', fontSize: 14 },
+  successIconWrapper: { backgroundColor: '#ecfdf5', padding: 24, borderRadius: 64 },
+  successDesc: { textAlign: 'center', color: '#64748b', marginTop: 12, fontSize: 14, lineHeight: 22, paddingHorizontal: 20 },
+  
+  successActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 12 },
+  successGhostBtn: { paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16 },
+  successGhostBtnText: { fontSize: 14, fontWeight: '800', color: '#475569' },
+  successPrimaryBtn: { backgroundColor: '#4f46e5', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  successPrimaryBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  successOutlineBtn: { backgroundColor: '#fff', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  successOutlineBtnText: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' },
+  modalItem: { paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, marginBottom: 8, backgroundColor: '#f8fafc' },
+  modalItemActive: { backgroundColor: '#eef2ff' },
+  modalItemText: { fontSize: 16, fontWeight: '700', color: '#475569', textAlign: 'center' },
+  modalItemTextActive: { color: '#4f46e5', fontWeight: '800' }
 });
-
-// Helper component for ShieldAlert icon
-const ShieldAlertIcon = ({ size, color }: any) => (
-  <View style={{ width: size, height: size }}>
-    <ShieldAlert size={size} color={color} />
-  </View>
-);

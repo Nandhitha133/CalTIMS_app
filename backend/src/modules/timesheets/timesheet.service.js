@@ -1006,6 +1006,35 @@ const timesheetService = {
 
     const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+    // Helper: parse a month identifier (full name, 3-letter abbrev, numeric string/number)
+    const parseMonthIndex = (val) => {
+      if (val === undefined || val === null) return -1;
+      const s = String(val).trim();
+      if (!s) return -1;
+
+      // numeric month (1-12 or 01-12)
+      if (/^\d{1,2}$/.test(s)) {
+        const n = parseInt(s, 10);
+        if (n >= 1 && n <= 12) return n - 1;
+      }
+
+      const lower = s.toLowerCase();
+
+      // exact full name
+      for (let i = 0; i < MONTHS.length; i++) {
+        if (MONTHS[i].toLowerCase() === lower) return i;
+      }
+
+      // 3-letter abbreviation or startsWith
+      for (let i = 0; i < MONTHS.length; i++) {
+        const m = MONTHS[i].toLowerCase();
+        if (m.startsWith(lower) || m.startsWith(lower.slice(0, 3))) return i;
+        if (lower.startsWith(m.slice(0, 3))) return i;
+      }
+
+      return -1;
+    };
+
     if (query.status && query.status !== 'All Status') {
       filter.status = query.status;
     }
@@ -1021,7 +1050,7 @@ const timesheetService = {
         { status: searchRegex }
       ];
 
-      const monthIndex = MONTHS.findIndex(m => m.toLowerCase().startsWith(searchTerm.toLowerCase()));
+      const monthIndex = parseMonthIndex(searchTerm);
       
       if (monthIndex !== -1 && searchTerm.length >= 3) {
         let searchYear = new Date().getUTCFullYear();
@@ -1082,7 +1111,7 @@ const timesheetService = {
     if (query.year && query.year !== 'All Years') {
       const year = parseInt(query.year);
       if (query.month && query.month !== 'All Months') {
-        const monthIndex = MONTHS.indexOf(query.month);
+        const monthIndex = parseMonthIndex(query.month);
         if (monthIndex !== -1) {
           filter.weekStartDate = {
             $gte: new Date(Date.UTC(year, monthIndex, 1)),
@@ -1096,7 +1125,7 @@ const timesheetService = {
         };
       }
     } else if (query.month && query.month !== 'All Months') {
-      const monthIndex = MONTHS.indexOf(query.month);
+      const monthIndex = parseMonthIndex(query.month);
       if (monthIndex !== -1) {
         const now = new Date();
         const year = now.getUTCFullYear();
