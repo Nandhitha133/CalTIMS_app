@@ -153,7 +153,6 @@ export default function AppNavigator() {
       <Stack.Screen name="AuditLogs" component={AuditLogScreen} />
       <Stack.Screen name="OrganizationTab" component={OrganizationTab} />
       <Stack.Screen name="SubscriptionTab" component={SubscriptionTab} />
-      //<Stack.Screen name="NotificationsTab" component={NotificationsTab} />
       <Stack.Screen name="BrandingTab" component={BrandingTab} />
       <Stack.Screen name="ComplianceLocksTab" component={ComplianceLocksTab} />
       <Stack.Screen name="IntegrationsTab" component={IntegrationsTab} />
