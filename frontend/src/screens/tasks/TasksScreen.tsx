@@ -435,7 +435,7 @@ const DropdownModal = memo(({ visible, onClose, options, selectedValue, onSelect
         </View>
         <ScrollView showsVerticalScrollIndicator={false}>
           {options.map((option) => (
-            <TouchableOpacity key={option.value} style={[dropdownStyles.option, selectedValue === option.value && dropdownStyles.optionSelected]} onPress={() => { onSelect(option.value); onClose(); }}>
+            <TouchableOpacity key={option.value} style={[dropdownStyles.option, selectedValue === option.value && dropdownStyles.optionSelected]} onPress={() => { onSelect(selectedValue === option.value ? '' : option.value); onClose(); }}>
               <Text style={[dropdownStyles.optionText, selectedValue === option.value && dropdownStyles.optionTextSelected]}>{option.label}</Text>
               {selectedValue === option.value && <View style={dropdownStyles.checkmark} />}
             </TouchableOpacity>
@@ -1281,6 +1281,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
+          minimumDate={new Date()}
         />
       )}
 

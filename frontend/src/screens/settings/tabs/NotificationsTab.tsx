@@ -96,26 +96,6 @@ const ToggleRow = ({
   </View>
 );
 
-const ReminderInput = ({
-  label,
-  value,
-  onChangeText,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-}) => (
-  <View style={styles.inputGroup}>
-    <Text style={styles.inputLabel}>{label}</Text>
-    <TextInput
-      style={styles.textInput}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder="e.g. Friday 18:00"
-      placeholderTextColor="#94a3b8"
-    />
-  </View>
-);
 
 // ---------- Main Component ----------
 export default function NotificationsTab() {
@@ -336,28 +316,7 @@ export default function NotificationsTab() {
           </View>
         </SectionCard>
 
-        {/* ----- Reminder Cadence ----- */}
-        <SectionCard
-          title="Reminder Cadence"
-          subtitle="Schedule for automated pings"
-          icon={Calendar}
-        >
-          <ReminderInput
-            label="Timesheet Deadline"
-            value={notifications.timesheetReminder}
-            onChangeText={(text) => update('timesheetReminder', text)}
-          />
-          <ReminderInput
-            label="Freeze Warning"
-            value={notifications.freezeReminder}
-            onChangeText={(text) => update('freezeReminder', text)}
-          />
-          <ReminderInput
-            label="Approval Digest"
-            value={notifications.approvalReminder}
-            onChangeText={(text) => update('approvalReminder', text)}
-          />
-        </SectionCard>
+
       </ScrollView>
 
       {/* ----- Sticky Save Button ----- */}

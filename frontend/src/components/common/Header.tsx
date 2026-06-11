@@ -14,7 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Menu, Bell, X, User, LayoutDashboard, Calendar, ClipboardList, Briefcase, Users, FileText, Settings, LogOut, ChevronRight, ReceiptText, ShieldAlert, History } from 'lucide-react-native';
-import { notificationAPI } from '../../services/endpoints';
+import { notificationAPI, settingsAPI } from '../../services/endpoints';
 import TrialBanner from './TrialBanner';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
@@ -129,8 +129,46 @@ export default function Header({
         createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
       }));
 
-      setNotifications(formattedNotifications);
-      setUnreadCount(formattedNotifications.filter(n => !n.read).length);
+      let settingsObj: any = null;
+      try {
+        if (settingsAPI?.getSettings) {
+          const settingsRes: any = await settingsAPI.getSettings();
+          settingsObj = settingsRes.data?.data?.notifications || settingsRes.data?.notifications || settingsRes.notifications || settingsRes.data?.data?.settings?.notifications;
+        }
+      } catch (err) {
+        console.warn('Could not fetch settings for notification filtering', err);
+      }
+
+      let filteredNotifications = formattedNotifications;
+      if (settingsObj) {
+        filteredNotifications = formattedNotifications.filter(n => {
+          const typeLower = (n.type || '').toLowerCase();
+          const titleLower = (n.title || '').toLowerCase();
+          const msgLower = (n.message || '').toLowerCase();
+          
+          const isTimesheet = typeLower.includes('timesheet') || titleLower.includes('timesheet') || msgLower.includes('timesheet');
+          const isLeave = typeLower.includes('leave') || titleLower.includes('leave') || msgLower.includes('leave');
+          const isSupport = typeLower.includes('incident') || typeLower.includes('ticket') || titleLower.includes('incident') || titleLower.includes('ticket') || msgLower.includes('incident') || msgLower.includes('ticket');
+          
+          if (isTimesheet) {
+            if (titleLower.includes('approve') || msgLower.includes('approve')) return settingsObj.notifyOnTimesheetApproval !== false;
+            if (titleLower.includes('reject') || msgLower.includes('reject')) return settingsObj.notifyOnTimesheetRejection !== false;
+            return settingsObj.notifyOnTimesheetSubmission !== false;
+          }
+          if (isLeave) {
+            if (titleLower.includes('approve') || msgLower.includes('approve')) return settingsObj.notifyOnLeaveApproval !== false;
+            if (titleLower.includes('reject') || msgLower.includes('reject')) return settingsObj.notifyOnLeaveRejection !== false;
+            return settingsObj.notifyOnLeaveRequest !== false;
+          }
+          if (isSupport) {
+            return settingsObj.notifyOnSupportTicket !== false;
+          }
+          return true;
+        });
+      }
+
+      setNotifications(filteredNotifications);
+      setUnreadCount(filteredNotifications.filter(n => !n.read).length);
     } catch (error) {
       console.error('Error loading notifications:', error);
     }

@@ -1124,8 +1124,8 @@ export default function ProjectsScreen() {
       Alert.alert('Success', 'Project created successfully!');
       setShowCreateModal(false);
       resetForm();
-      fetchProjects();
-      fetchAllProjects();
+      await fetchProjects();
+      await fetchAllProjects();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create project');
     } finally {
@@ -1153,8 +1153,8 @@ export default function ProjectsScreen() {
       Alert.alert('Success', 'Project updated successfully!');
       setShowEditModal(false);
       setSelectedProject(null);
-      fetchProjects();
-      fetchAllProjects();
+      await fetchProjects();
+      await fetchAllProjects();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update project');
     } finally {
@@ -1170,8 +1170,8 @@ export default function ProjectsScreen() {
       Alert.alert('Success', 'Project deleted successfully!');
       setShowDeleteModal(false);
       setSelectedProject(null);
-      fetchProjects();
-      fetchAllProjects();
+      await fetchProjects();
+      await fetchAllProjects();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to delete project');
     }
@@ -1679,6 +1679,19 @@ export default function ProjectsScreen() {
                   >
                     <Text style={[modalStyles.selectButtonText, !formData.managerId && modalStyles.placeholderText]}>
                       {getManagerDisplayValue(formData.managerId)}
+                    </Text>
+                    <ChevronDown size={14} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={modalStyles.field}>
+                  <Text style={modalStyles.label}>Status *</Text>
+                  <TouchableOpacity
+                    style={modalStyles.selectButton}
+                    onPress={() => openDropdown(showEditModal ? 'edit' : 'create', 'status')}
+                  >
+                    <Text style={[modalStyles.selectButtonText, !formData.status && modalStyles.placeholderText]}>
+                      {getStatusDisplayValue(formData.status)}
                     </Text>
                     <ChevronDown size={14} color="#64748b" />
                   </TouchableOpacity>
