@@ -31,6 +31,7 @@ import { policyAPI } from '../../../services/endpoints';
 import { complianceEngine } from '../../../features/payroll/complianceEngine';
 import Layout from '../../../components/common/Layout';
 import PageHeader from '../../../components/common/PageHeader';
+import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 
 const PT_STATE_CONFIGS: any = {
   TN: {
@@ -400,7 +401,7 @@ export default function PayrollPolicyTab() {
                           <TextInput
                             style={styles.input}
                             keyboardType="numeric"
-                            value={String(policy?.statutory?.pf?.employeePercent || 0)}
+                            value={String(policy?.statutory?.pf?.employeePercent ?? 0)}
                             onChangeText={(val) => 
                               setPolicy({
                                 ...policy,
@@ -420,7 +421,7 @@ export default function PayrollPolicyTab() {
                           <TextInput
                             style={styles.input}
                             keyboardType="numeric"
-                            value={String(policy?.statutory?.pf?.employerPercent || 0)}
+                            value={String(policy?.statutory?.pf?.employerPercent ?? 0)}
                             onChangeText={(val) => 
                               setPolicy({
                                 ...policy,
@@ -492,7 +493,7 @@ export default function PayrollPolicyTab() {
                           <TextInput
                             style={styles.input}
                             keyboardType="numeric"
-                            value={String(policy?.statutory?.esi?.employeePercent || 0)}
+                            value={String(policy?.statutory?.esi?.employeePercent ?? 0)}
                             onChangeText={(val) => 
                               setPolicy({
                                 ...policy,
@@ -512,7 +513,7 @@ export default function PayrollPolicyTab() {
                           <TextInput
                             style={styles.input}
                             keyboardType="numeric"
-                            value={String(policy?.statutory?.esi?.threshold || 0)}
+                            value={String(policy?.statutory?.esi?.threshold ?? 0)}
                             onChangeText={(val) => 
                               setPolicy({
                                 ...policy,
@@ -731,7 +732,7 @@ export default function PayrollPolicyTab() {
                     <TextInput
                       style={styles.smallInput}
                       keyboardType="numeric"
-                      value={String(policy?.attendance?.workingDaysPerMonth)}
+                      value={String(policy?.attendance?.workingDaysPerMonth ?? 30)}
                       onChangeText={(val) => setPolicy({...policy, attendance: {...policy.attendance, workingDaysPerMonth: parseInt(val) || 0}})}
                     />
                   </View>
@@ -778,7 +779,7 @@ export default function PayrollPolicyTab() {
                     <TextInput
                       style={styles.smallInput}
                       keyboardType="numeric"
-                      value={String(policy?.overtime?.multiplier)}
+                      value={String(policy?.overtime?.multiplier ?? 1.5)}
                       onChangeText={(val) => setPolicy({...policy, overtime: {...policy.overtime, multiplier: parseFloat(val) || 1}})}
                     />
                   </View>
@@ -857,59 +858,59 @@ export default function PayrollPolicyTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  errorText: { fontSize: 16, color: '#64748b', marginVertical: 12 },
-  retryButton: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#6366f1', borderRadius: 8 },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: moderateScale(20) },
+  errorText: { fontSize: moderateScale(16), color: '#64748b', marginVertical: verticalScale(12) },
+  retryButton: { paddingHorizontal: scale(20), paddingVertical: verticalScale(10), backgroundColor: '#6366f1', borderRadius: moderateScale(8) },
   retryButtonText: { color: '#fff', fontWeight: 'bold' },
-  tabContainer: { flexDirection: 'row', padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  tabButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, gap: 6, borderRadius: 8 },
+  tabContainer: { flexDirection: 'row', padding: moderateScale(12), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  tabButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(8), gap: moderateScale(6), borderRadius: moderateScale(8) },
   activeTabButton: { backgroundColor: '#f5f3ff' },
-  tabText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  tabText: { fontSize: moderateScale(12), fontWeight: '600', color: '#64748b' },
   activeTabText: { color: '#6366f1' },
-  content: { padding: 16 },
-  section: { gap: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  cardTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBox: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
-  cardSubtitle: { fontSize: 9, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 },
-  cardBody: { padding: 16, gap: 16 },
-  inputRow: { flexDirection: 'row', gap: 12 },
-  inputGroup: { flex: 1, gap: 6 },
-  inputLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12 },
-  input: { flex: 1, height: 40, fontSize: 14, fontWeight: '600', color: '#1e293b' },
-  inputIcon: { marginLeft: 8 },
-  checkboxRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f5f3ff', padding: 10, borderRadius: 12 },
-  checkboxLabel: { fontSize: 12, fontWeight: '600', color: '#6366f1' },
-  selector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 40 },
-  selectorText: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
-  slabsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
-  addButton: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  addButtonText: { fontSize: 11, fontWeight: '700', color: '#6366f1' },
-  slabRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc', padding: 8, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  content: { padding: moderateScale(16) },
+  section: { gap: moderateScale(16) },
+  card: { backgroundColor: '#fff', borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: moderateScale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  cardTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(12) },
+  iconBox: { width: scale(40), height: verticalScale(40), borderRadius: moderateScale(12), alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: moderateScale(15), fontWeight: '700', color: '#1e293b' },
+  cardSubtitle: { fontSize: moderateScale(9), fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 },
+  cardBody: { padding: moderateScale(16), gap: moderateScale(16) },
+  inputRow: { flexDirection: 'row', gap: moderateScale(12) },
+  inputGroup: { flex: 1, gap: moderateScale(6) },
+  inputLabel: { fontSize: moderateScale(10), fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: moderateScale(10), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12) },
+  input: { flex: 1, height: verticalScale(40), fontSize: moderateScale(14), fontWeight: '600', color: '#1e293b' },
+  inputIcon: { marginLeft: scale(8) },
+  checkboxRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f5f3ff', padding: moderateScale(10), borderRadius: moderateScale(12) },
+  checkboxLabel: { fontSize: moderateScale(12), fontWeight: '600', color: '#6366f1' },
+  selector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: moderateScale(10), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), height: verticalScale(40) },
+  selectorText: { fontSize: moderateScale(13), fontWeight: '600', color: '#1e293b' },
+  slabsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: verticalScale(8) },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(4) },
+  addButtonText: { fontSize: moderateScale(11), fontWeight: '700', color: '#6366f1' },
+  slabRow: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8), backgroundColor: '#f8fafc', padding: moderateScale(8), borderRadius: moderateScale(10), borderWidth: 1, borderColor: '#e2e8f0' },
   slabInputGroup: { flex: 1 },
-  slabInput: { height: 32, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 8, fontSize: 12, fontWeight: '600', color: '#1e293b' },
+  slabInput: { height: verticalScale(32), backgroundColor: '#fff', borderRadius: moderateScale(6), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(8), fontSize: moderateScale(12), fontWeight: '600', color: '#1e293b' },
   slabSeparator: { color: '#94a3b8' },
   slabAmountInput: { backgroundColor: '#f5f3ff', borderColor: '#ddd6fe', color: '#6366f1' },
-  sandbox: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#e2e8f0', marginTop: 8 },
-  sandboxHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  sandboxTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-  sandboxInputGroup: { gap: 8, marginBottom: 20 },
-  sandboxLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
-  sandboxInputWrapper: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  sandboxInput: { flex: 1, height: 48, fontSize: 20, fontWeight: '800', color: '#1e293b' },
-  previewGrid: { flexDirection: 'row', gap: 10 },
-  previewCard: { flex: 1, backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
-  previewLabel: { fontSize: 9, fontWeight: '700', color: '#94a3b8', marginBottom: 6 },
-  previewValue: { fontSize: 14, fontWeight: '800', color: '#1e293b' },
-  previewSubtext: { fontSize: 8, color: '#64748b', marginTop: 2 },
-  settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  settingLabel: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  settingDesc: { fontSize: 11, color: '#64748b' },
-  smallInput: { width: 60, height: 36, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', textAlign: 'center', fontSize: 16, fontWeight: '800', color: '#6366f1' },
-  saveButton: { margin: 16, height: 52, backgroundColor: '#1e293b', borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  sandbox: { backgroundColor: '#fff', borderRadius: moderateScale(20), padding: moderateScale(20), borderWidth: 1, borderColor: '#e2e8f0', marginTop: verticalScale(8) },
+  sandboxHeader: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(10), marginBottom: verticalScale(16) },
+  sandboxTitle: { fontSize: moderateScale(16), fontWeight: '700', color: '#1e293b' },
+  sandboxInputGroup: { gap: moderateScale(8), marginBottom: verticalScale(20) },
+  sandboxLabel: { fontSize: moderateScale(11), fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
+  sandboxInputWrapper: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(12), backgroundColor: '#f8fafc', paddingHorizontal: scale(16), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0' },
+  sandboxInput: { flex: 1, height: verticalScale(48), fontSize: moderateScale(20), fontWeight: '800', color: '#1e293b' },
+  previewGrid: { flexDirection: 'row', gap: moderateScale(10) },
+  previewCard: { flex: 1, backgroundColor: '#f8fafc', padding: moderateScale(12), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+  previewLabel: { fontSize: moderateScale(9), fontWeight: '700', color: '#94a3b8', marginBottom: verticalScale(6) },
+  previewValue: { fontSize: moderateScale(14), fontWeight: '800', color: '#1e293b' },
+  previewSubtext: { fontSize: moderateScale(8), color: '#64748b', marginTop: verticalScale(2) },
+  settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: verticalScale(4) },
+  settingLabel: { fontSize: moderateScale(13), fontWeight: '700', color: '#1e293b' },
+  settingDesc: { fontSize: moderateScale(11), color: '#64748b' },
+  smallInput: { width: scale(60), height: verticalScale(36), backgroundColor: '#f8fafc', borderRadius: moderateScale(8), borderWidth: 1, borderColor: '#e2e8f0', textAlign: 'center', fontSize: moderateScale(16), fontWeight: '800', color: '#6366f1' },
+  saveButton: { margin: moderateScale(16), height: verticalScale(52), backgroundColor: '#1e293b', borderRadius: moderateScale(16), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: moderateScale(10), shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
   disabledButton: { opacity: 0.6 },
-  saveButtonText: { color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  saveButtonText: { color: '#fff', fontSize: moderateScale(14), fontWeight: '800', letterSpacing: 1 },
 });

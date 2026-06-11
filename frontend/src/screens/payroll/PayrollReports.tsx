@@ -30,6 +30,7 @@ import Layout from '../../components/common/Layout';
 import { useNavigation } from '@react-navigation/native';
 import { exportFile, convertToCSV } from '../../utils/exportHelper';
 import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 const { width } = Dimensions.get('window');
 
@@ -540,41 +541,41 @@ export default function PayrollReports() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16 },
-  controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  metricTabs: { flexDirection: 'row', backgroundColor: '#e2e8f0', borderRadius: 12, padding: 4 },
-  metricTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: moderateScale(16) },
+  controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(20) },
+  metricTabs: { flexDirection: 'row', backgroundColor: '#e2e8f0', borderRadius: moderateScale(12), padding: moderateScale(4) },
+  metricTab: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8), borderRadius: moderateScale(8) },
   metricTabActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  metricTabText: { fontSize: 12, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
+  metricTabText: { fontSize: moderateScale(12), fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
   metricTabTextActive: { color: '#4f46e5' },
-  actionsBox: { flexDirection: 'row', gap: 8 },
-  actionBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' },
+  actionsBox: { flexDirection: 'row', gap: moderateScale(8) },
+  actionBtn: { width: scale(40), height: verticalScale(40), borderRadius: moderateScale(12), backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' },
   actionBtnOutline: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1' },
 
-  kpiScroll: { paddingBottom: 24, gap: 16 },
-  kpiCard: { width: 160, backgroundColor: '#fff', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  kpiIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  kpiLabel: { fontSize: 10, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  kpiValue: { fontSize: 18, fontWeight: '900', color: '#0f172a', marginBottom: 4 },
-  kpiSub: { fontSize: 9, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' },
+  kpiScroll: { paddingBottom: verticalScale(24), gap: moderateScale(16) },
+  kpiCard: { width: scale(160), backgroundColor: '#fff', borderRadius: moderateScale(20), padding: moderateScale(16), borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  kpiIconBox: { width: scale(40), height: verticalScale(40), borderRadius: moderateScale(12), justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(12) },
+  kpiLabel: { fontSize: moderateScale(10), fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: verticalScale(4) },
+  kpiValue: { fontSize: moderateScale(18), fontWeight: '900', color: '#0f172a', marginBottom: verticalScale(4) },
+  kpiSub: { fontSize: moderateScale(9), fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' },
 
-  card: { backgroundColor: '#fff', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
-  cardHeader: { marginBottom: 24 },
-  cardTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardSubtitle: { fontSize: 11, fontWeight: '600', color: '#64748b', marginTop: 4, textTransform: 'uppercase' },
+  card: { backgroundColor: '#fff', borderRadius: moderateScale(24), padding: moderateScale(20), borderWidth: 1, borderColor: '#f1f5f9', marginBottom: verticalScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 },
+  cardHeader: { marginBottom: verticalScale(24) },
+  cardTitle: { fontSize: moderateScale(14), fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardSubtitle: { fontSize: moderateScale(11), fontWeight: '600', color: '#64748b', marginTop: verticalScale(4), textTransform: 'uppercase' },
 
-  chartContainer: { height: 200, width: '100%', marginTop: 8 },
-  barsWrapper: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingTop: 20 },
+  chartContainer: { height: verticalScale(200), width: '100%', marginTop: verticalScale(8) },
+  barsWrapper: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingTop: verticalScale(20) },
   barColumn: { alignItems: 'center', width: `${100 / 6}%` },
-  barTrack: { height: 140, width: 24, backgroundColor: '#f1f5f9', borderRadius: 12, justifyContent: 'flex-end', overflow: 'hidden' },
-  barFill: { width: '100%', borderRadius: 12 },
-  barLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', marginTop: 12, textTransform: 'uppercase' },
+  barTrack: { height: verticalScale(140), width: scale(24), backgroundColor: '#f1f5f9', borderRadius: moderateScale(12), justifyContent: 'flex-end', overflow: 'hidden' },
+  barFill: { width: '100%', borderRadius: moderateScale(12) },
+  barLabel: { fontSize: moderateScale(10), fontWeight: '700', color: '#64748b', marginTop: verticalScale(12), textTransform: 'uppercase' },
 
-  deptList: { gap: 16 },
-  deptRow: { marginBottom: 4 },
-  deptInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  deptName: { fontSize: 12, fontWeight: '700', color: '#334155' },
-  deptValue: { fontSize: 12, fontWeight: '800', color: '#0f172a' },
-  deptProgressTrack: { height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' },
-  deptProgressFill: { height: '100%', borderRadius: 4 },
+  deptList: { gap: moderateScale(16) },
+  deptRow: { marginBottom: verticalScale(4) },
+  deptInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: verticalScale(8) },
+  deptName: { fontSize: moderateScale(12), fontWeight: '700', color: '#334155' },
+  deptValue: { fontSize: moderateScale(12), fontWeight: '800', color: '#0f172a' },
+  deptProgressTrack: { height: verticalScale(8), backgroundColor: '#f1f5f9', borderRadius: moderateScale(4), overflow: 'hidden' },
+  deptProgressFill: { height: '100%', borderRadius: moderateScale(4) },
 });

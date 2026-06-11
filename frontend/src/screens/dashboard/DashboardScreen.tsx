@@ -916,13 +916,13 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
             <View style={[styles.chartCard, { backgroundColor: preferences.theme === 'dark' ? COLORS.dark : COLORS.white }]}>
               <View style={styles.chartHeader}>
                 <View style={styles.chartHeaderTop}>
-                  <View style={styles.chartTitleRow}>
+                  <View style={[styles.chartTitleRow, { flexShrink: 1, paddingRight: scale(8) }]}>
                     <View style={styles.chartIconContainer}>
                       <Activity size={20} color={COLORS.primary} />
                     </View>
-                    <View>
-                      <Text style={[styles.chartTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]}>Hourly Productivity</Text>
-                      <Text style={styles.chartSubtitle}>ORGANIZATION PERFORMANCE</Text>
+                    <View style={{ flexShrink: 1 }}>
+                      <Text style={[styles.chartTitle, { color: preferences.theme === 'dark' ? COLORS.white : COLORS.dark }]} numberOfLines={1} adjustsFontSizeToFit>Hourly Productivity</Text>
+                      <Text style={styles.chartSubtitle} numberOfLines={1} adjustsFontSizeToFit>ORGANIZATION PERFORMANCE</Text>
                     </View>
                   </View>
 
@@ -1116,7 +1116,7 @@ const styles = StyleSheet.create({
   statSubtitle: { fontSize: moderateScale(11), color: COLORS.gray, marginTop: verticalScale(4) },
   chartCard: { borderRadius: scale(24), padding: scale(20), marginBottom: verticalScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.05, shadowRadius: scale(12), elevation: 3 },
   chartHeader: { marginBottom: verticalScale(20) },
-  chartHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: verticalScale(16) },
+  chartHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: verticalScale(16), flexWrap: 'wrap', gap: scale(8) },
   chartTitleRow: { flexDirection: 'row', alignItems: 'center', gap: scale(12) },
   chartIconContainer: { width: scale(36), height: verticalScale(36), borderRadius: scale(10), backgroundColor: '#f5f3ff', alignItems: 'center', justifyContent: 'center' },
   chartTitle: { fontSize: moderateScale(18), fontWeight: '800', letterSpacing: -0.5 },
@@ -1136,8 +1136,8 @@ const styles = StyleSheet.create({
   chartArea: { flex: 1, position: 'relative' },
   gridLines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: verticalScale(25), justifyContent: 'space-between' },
   gridLine: { height: 1, backgroundColor: '#f1f5f9', width: '100%' },
-  barsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', paddingBottom: verticalScale(25), zIndex: 1 },
-  barWrapper: { alignItems: 'center', width: scale(40) },
+  barsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: verticalScale(25), zIndex: 1 },
+  barWrapper: { flex: 1, alignItems: 'center' },
   barStack: { flex: 1, justifyContent: 'flex-end', width: '100%', alignItems: 'center' },
   bar: { width: scale(20) },
   barDayLabel: { fontSize: moderateScale(12), fontWeight: '700', color: '#94a3b8', marginTop: verticalScale(12) },

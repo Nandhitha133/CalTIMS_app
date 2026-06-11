@@ -34,6 +34,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { payrollAPI, userAPI, policyAPI, settingsAPI } from '../../services/endpoints';
 import { ROLE_TEMPLATES, calculateSalaryBreakdown } from './payrollUtils';
 import Toast from 'react-native-toast-message';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 const steps = [
   { id: 1, name: 'Breakdown', icon: Calculator },
@@ -173,8 +174,13 @@ export default function PayrollSetupWizard() {
     mutationFn: (data: any) => payrollAPI.setupFullProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payrollProfiles'] });
-      Toast.show({ type: 'success', text1: 'Saved successfully!' });
-      navigation.goBack();
+      Alert.alert(
+        'Success',
+        'Profile successfully saved!',
+        [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]
+      );
     },
     onError: (err: any) => {
       Alert.alert('Error', err.response?.data?.message || 'Failed to save configuration');
@@ -296,6 +302,7 @@ export default function PayrollSetupWizard() {
         style={{ flex: 1 }}
         bounces={false}
         overScrollMode="never"
+        scrollEnabled={false}
       >
         {/* Step 1: Salary Breakdown */}
         <ScrollView style={[styles.page, { width }]}>
@@ -467,6 +474,27 @@ export default function PayrollSetupWizard() {
               <Text style={[styles.summaryValue, styles.textRed]}>{currencySymbol}{breakdown.totalDeductions?.toFixed(2) || '0.00'}</Text>
             </View>
 
+            <TouchableOpacity
+              style={[styles.submitBtn, { marginBottom: 40 }]}
+              onPress={() => {
+                if (!selectedUser) {
+                  Alert.alert('Validation Error', 'Please select an employee');
+                  return;
+                }
+                if (!ctcValue || parseFloat(ctcValue) <= 0) {
+                  Alert.alert('Validation Error', 'Please enter CTC value');
+                  return;
+                }
+                setCurrentStep(2);
+                scrollViewRef.current?.scrollTo({ x: width, animated: true });
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Text style={[styles.submitBtnText, { fontSize: 12 }]}>NEXT STEP</Text>
+                <ChevronRight size={16} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
           </View>
         </ScrollView>
 
@@ -495,23 +523,23 @@ export default function PayrollSetupWizard() {
 
             <View style={styles.complianceInputGroup}>
               <Text style={styles.complianceLabel}>BANK NAME</Text>
-              <TextInput style={styles.complianceInput} value={bankDetails.bankName} onChangeText={v => setBankDetails({ ...bankDetails, bankName: v })} placeholder="HDFC" placeholderTextColor="#cbd5e1" />
+              <TextInput style={[styles.complianceInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]} editable={false} value={bankDetails.bankName} onChangeText={v => setBankDetails({ ...bankDetails, bankName: v })} placeholder="HDFC" placeholderTextColor="#cbd5e1" />
             </View>
 
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <View style={[styles.complianceInputGroup, { flex: 1 }]}>
                 <Text style={styles.complianceLabel}>ACCOUNT NUMBER</Text>
-                <TextInput style={styles.complianceInput} value={bankDetails.accountNumber} onChangeText={v => setBankDetails({ ...bankDetails, accountNumber: v })} keyboardType="numeric" placeholder="38749080939885" placeholderTextColor="#cbd5e1" />
+                <TextInput style={[styles.complianceInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]} editable={false} value={bankDetails.accountNumber} onChangeText={v => setBankDetails({ ...bankDetails, accountNumber: v })} keyboardType="numeric" placeholder="38749080939885" placeholderTextColor="#cbd5e1" />
               </View>
               <View style={[styles.complianceInputGroup, { flex: 1 }]}>
                 <Text style={styles.complianceLabel}>IFSC CODE</Text>
-                <TextInput style={styles.complianceInput} value={bankDetails.ifscCode} onChangeText={v => setBankDetails({ ...bankDetails, ifscCode: v })} autoCapitalize="characters" placeholder="HDFC0002333" placeholderTextColor="#cbd5e1" />
+                <TextInput style={[styles.complianceInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]} editable={false} value={bankDetails.ifscCode} onChangeText={v => setBankDetails({ ...bankDetails, ifscCode: v })} autoCapitalize="characters" placeholder="HDFC0002333" placeholderTextColor="#cbd5e1" />
               </View>
             </View>
 
             <View style={styles.complianceInputGroup}>
               <Text style={styles.complianceLabel}>BRANCH NAME</Text>
-              <TextInput style={styles.complianceInput} value={(bankDetails as any).branchName || ''} onChangeText={v => setBankDetails({ ...bankDetails, branchName: v } as any)} placeholder="Hosur" placeholderTextColor="#cbd5e1" />
+              <TextInput style={[styles.complianceInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]} editable={false} value={(bankDetails as any).branchName || ''} onChangeText={v => setBankDetails({ ...bankDetails, branchName: v } as any)} placeholder="Hosur" placeholderTextColor="#cbd5e1" />
             </View>
           </View>
 
@@ -524,12 +552,12 @@ export default function PayrollSetupWizard() {
 
             <View style={styles.complianceInputGroup}>
               <Text style={styles.complianceLabel}>PAN CARD NUMBER</Text>
-              <TextInput style={styles.complianceInput} value={bankDetails.pan} onChangeText={v => setBankDetails({ ...bankDetails, pan: v })} autoCapitalize="characters" placeholder="ABCDE7282C" placeholderTextColor="#cbd5e1" />
+              <TextInput style={[styles.complianceInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]} editable={false} value={bankDetails.pan} onChangeText={v => setBankDetails({ ...bankDetails, pan: v })} autoCapitalize="characters" placeholder="ABCDE7282C" placeholderTextColor="#cbd5e1" />
             </View>
 
             <View style={styles.complianceInputGroup}>
               <Text style={styles.complianceLabel}>UNIVERSAL ACCOUNT NUMBER</Text>
-              <TextInput style={styles.complianceInput} value={bankDetails.uan} onChangeText={v => setBankDetails({ ...bankDetails, uan: v })} keyboardType="numeric" placeholder="738390474792" placeholderTextColor="#cbd5e1" />
+              <TextInput style={[styles.complianceInput, { backgroundColor: '#f8fafc', color: '#94a3b8' }]} editable={false} value={bankDetails.uan} onChangeText={v => setBankDetails({ ...bankDetails, uan: v })} keyboardType="numeric" placeholder="738390474792" placeholderTextColor="#cbd5e1" />
             </View>
           </View>
 
@@ -550,7 +578,7 @@ export default function PayrollSetupWizard() {
               </View>
               <View style={styles.overrideToggleGroup}>
                 {['default', 'enabled', 'disabled'].map(mode => (
-                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.pf.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pf: { mode, enabled: mode !== 'disabled' } })}>
+                  <TouchableOpacity key={mode} disabled={true} style={[styles.overrideToggleBtn, statutoryConfig.pf.mode === mode && styles.overrideToggleBtnActive, { opacity: 0.6 }]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pf: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.pf.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
@@ -566,7 +594,7 @@ export default function PayrollSetupWizard() {
               </View>
               <View style={styles.overrideToggleGroup}>
                 {['default', 'enabled', 'disabled'].map(mode => (
-                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.esi.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, esi: { mode, enabled: mode !== 'disabled' } })}>
+                  <TouchableOpacity key={mode} disabled={true} style={[styles.overrideToggleBtn, statutoryConfig.esi.mode === mode && styles.overrideToggleBtnActive, { opacity: 0.6 }]} onPress={() => setStatutoryConfig({ ...statutoryConfig, esi: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.esi.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
@@ -582,7 +610,7 @@ export default function PayrollSetupWizard() {
               </View>
               <View style={styles.overrideToggleGroup}>
                 {['default', 'enabled', 'disabled'].map(mode => (
-                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.pt.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pt: { mode, enabled: mode !== 'disabled' } })}>
+                  <TouchableOpacity key={mode} disabled={true} style={[styles.overrideToggleBtn, statutoryConfig.pt.mode === mode && styles.overrideToggleBtnActive, { opacity: 0.6 }]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pt: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.pt.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
@@ -603,12 +631,41 @@ export default function PayrollSetupWizard() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.overrideTitle, { color: '#0f172a' }]}>CALCULATION MODE</Text>
               </View>
-              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => setAttendanceConfig({ mode: attendanceConfig.mode === 'POLICY_DEFAULT' ? 'FIXED_DAYS' : 'POLICY_DEFAULT', workingDays: 26 })}>
+              <TouchableOpacity disabled={true} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: 0.6 }} onPress={() => setAttendanceConfig({ mode: attendanceConfig.mode === 'POLICY_DEFAULT' ? 'FIXED_DAYS' : 'POLICY_DEFAULT', workingDays: 26 })}>
                 <Text style={{ fontSize: 10, fontWeight: '800', color: '#4f46e5' }}>{attendanceConfig.mode.replace('_', ' ')}</Text>
                 <ChevronDown size={14} color="#4f46e5" />
               </TouchableOpacity>
             </View>
           </View>
+
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 40 }}>
+            <TouchableOpacity
+              style={[styles.submitBtn, { flex: 1, backgroundColor: '#f1f5f9' }]}
+              onPress={() => {
+                setCurrentStep(1);
+                scrollViewRef.current?.scrollTo({ x: 0, animated: true });
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <ChevronLeft size={16} color="#475569" />
+                <Text style={[styles.submitBtnText, { color: '#475569', fontSize: 12 }]}>PREVIOUS</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.submitBtn, { flex: 2 }]}
+              onPress={() => {
+                setCurrentStep(3);
+                scrollViewRef.current?.scrollTo({ x: width * 2, animated: true });
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Text style={[styles.submitBtnText, { fontSize: 12 }]}>NEXT STEP</Text>
+                <ChevronRight size={16} color="#fff" />
+              </View>
+            </TouchableOpacity>
+          </View>
+
           <View style={{ height: 40 }} />
         </ScrollView>
 
@@ -726,7 +783,10 @@ export default function PayrollSetupWizard() {
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 40 }}>
             <TouchableOpacity
               style={[styles.submitBtn, { flex: 1, backgroundColor: '#f1f5f9' }]}
-              onPress={() => scrollViewRef.current?.scrollTo({ x: width, animated: true })}
+              onPress={() => {
+                setCurrentStep(2);
+                scrollViewRef.current?.scrollTo({ x: width, animated: true });
+              }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <ChevronLeft size={16} color="#475569" />
@@ -803,92 +863,92 @@ export default function PayrollSetupWizard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 20, paddingTop: 40, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#0f172a' },
-  headerSub: { fontSize: 14, color: '#64748b', marginTop: 4 },
-  stepIndicator: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+  header: { padding: moderateScale(20), paddingTop: verticalScale(40), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  headerTitle: { fontSize: moderateScale(24), fontWeight: '800', color: '#0f172a' },
+  headerSub: { fontSize: moderateScale(14), color: '#64748b', marginTop: verticalScale(4) },
+  stepIndicator: { flexDirection: 'row', alignItems: 'center', marginTop: verticalScale(16) },
   stepDotContainer: { flexDirection: 'row', alignItems: 'center' },
-  stepDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
+  stepDot: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(16), backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
   stepDotActive: { backgroundColor: '#4f46e5' },
-  stepLine: { width: 40, height: 2, backgroundColor: '#f1f5f9', marginHorizontal: 8 },
+  stepLine: { width: scale(40), height: verticalScale(2), backgroundColor: '#f1f5f9', marginHorizontal: scale(8) },
   stepLineActive: { backgroundColor: '#4f46e5' },
-  page: { flex: 1, padding: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, marginBottom: 40 },
-  cardTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 20 },
-  templateRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  templateBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  page: { flex: 1, padding: moderateScale(16) },
+  card: { backgroundColor: '#fff', borderRadius: moderateScale(24), padding: moderateScale(20), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, marginBottom: verticalScale(40) },
+  cardTitle: { fontSize: moderateScale(20), fontWeight: '800', color: '#1e293b', marginBottom: verticalScale(20) },
+  templateRow: { flexDirection: 'row', gap: moderateScale(8), marginBottom: verticalScale(20) },
+  templateBtn: { paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: moderateScale(8), backgroundColor: '#f1f5f9' },
   templateBtnActive: { backgroundColor: '#eef2ff' },
-  templateBtnText: { fontSize: 12, fontWeight: '700', color: '#64748b' },
+  templateBtnText: { fontSize: moderateScale(12), fontWeight: '700', color: '#64748b' },
   templateBtnTextActive: { color: '#4f46e5' },
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '700', color: '#64748b', marginBottom: 6 },
-  row: { flexDirection: 'row', gap: 8 },
-  input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, fontSize: 14, color: '#0f172a' },
-  toggleBtn: { backgroundColor: '#eef2ff', padding: 12, borderRadius: 12, justifyContent: 'center' },
-  toggleBtnText: { fontSize: 12, fontWeight: '700', color: '#4f46e5' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#334155' },
-  componentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  typeToggle: { backgroundColor: '#f1f5f9', padding: 10, borderRadius: 8 },
-  typeToggleText: { fontSize: 10, fontWeight: '800', color: '#475569' },
-  summaryBox: { backgroundColor: '#ecfdf5', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 },
+  inputGroup: { marginBottom: verticalScale(16) },
+  label: { fontSize: moderateScale(12), fontWeight: '700', color: '#64748b', marginBottom: verticalScale(6) },
+  row: { flexDirection: 'row', gap: moderateScale(8) },
+  input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: moderateScale(12), padding: moderateScale(12), fontSize: moderateScale(14), color: '#0f172a' },
+  toggleBtn: { backgroundColor: '#eef2ff', padding: moderateScale(12), borderRadius: moderateScale(12), justifyContent: 'center' },
+  toggleBtnText: { fontSize: moderateScale(12), fontWeight: '700', color: '#4f46e5' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: verticalScale(20), marginBottom: verticalScale(12) },
+  sectionTitle: { fontSize: moderateScale(16), fontWeight: '700', color: '#334155' },
+  componentRow: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8), marginBottom: verticalScale(12) },
+  typeToggle: { backgroundColor: '#f1f5f9', padding: moderateScale(10), borderRadius: moderateScale(8) },
+  typeToggleText: { fontSize: moderateScale(10), fontWeight: '800', color: '#475569' },
+  summaryBox: { backgroundColor: '#ecfdf5', padding: moderateScale(16), borderRadius: moderateScale(16), flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: verticalScale(16) },
   summaryBoxRed: { backgroundColor: '#fef2f2' },
-  summaryLabel: { fontSize: 14, fontWeight: '700', color: '#065f46' },
+  summaryLabel: { fontSize: moderateScale(14), fontWeight: '700', color: '#065f46' },
   textRed: { color: '#991b1b' },
-  summaryValue: { fontSize: 18, fontWeight: '800', color: '#065f46' },
-  submitBtn: { backgroundColor: '#4f46e5', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 20 },
+  summaryValue: { fontSize: moderateScale(18), fontWeight: '800', color: '#065f46' },
+  submitBtn: { backgroundColor: '#4f46e5', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(20) },
   submitBtnDisabled: { opacity: 0.5 },
 
-  reviewCard: { backgroundColor: '#fff', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9' },
-  reviewCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
-  reviewCardIconBox: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
-  reviewCardTitle: { fontSize: 11, fontWeight: '800', color: '#64748b', letterSpacing: 1 },
-  reviewCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  reviewCardLabel: { fontSize: 9, fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
-  reviewCardValue: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  reviewCard: { backgroundColor: '#fff', borderRadius: moderateScale(24), padding: moderateScale(20), marginBottom: verticalScale(16), borderWidth: 1, borderColor: '#f1f5f9' },
+  reviewCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(20), gap: moderateScale(12) },
+  reviewCardIconBox: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(8), backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
+  reviewCardTitle: { fontSize: moderateScale(11), fontWeight: '800', color: '#64748b', letterSpacing: 1 },
+  reviewCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) },
+  reviewCardLabel: { fontSize: moderateScale(9), fontWeight: '800', color: '#94a3b8', letterSpacing: 1 },
+  reviewCardValue: { fontSize: moderateScale(13), fontWeight: '800', color: '#0f172a' },
 
-  darkEstimateCard: { backgroundColor: '#0f172a', borderRadius: 24, padding: 24, marginBottom: 24 },
-  darkEstimateSubtitle: { fontSize: 9, fontWeight: '800', color: '#64748b', letterSpacing: 1, marginBottom: 8 },
-  darkEstimateTotal: { fontSize: 32, fontWeight: '900', color: '#fff', marginBottom: 24 },
-  darkDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginVertical: 16 },
-  darkSectionTitle: { fontSize: 9, fontWeight: '800', color: '#475569', letterSpacing: 1, marginBottom: 12 },
-  darkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  darkRowLabel: { fontSize: 11, fontWeight: '600', color: '#94a3b8' },
-  darkRowValueEarning: { fontSize: 12, fontWeight: '800', color: '#10b981' },
-  darkRowValueDeduction: { fontSize: 12, fontWeight: '800', color: '#ef4444' },
-  darkRowValueNeutral: { fontSize: 12, fontWeight: '800', color: '#94a3b8' },
+  darkEstimateCard: { backgroundColor: '#0f172a', borderRadius: moderateScale(24), padding: moderateScale(24), marginBottom: verticalScale(24) },
+  darkEstimateSubtitle: { fontSize: moderateScale(9), fontWeight: '800', color: '#64748b', letterSpacing: 1, marginBottom: verticalScale(8) },
+  darkEstimateTotal: { fontSize: moderateScale(32), fontWeight: '900', color: '#fff', marginBottom: verticalScale(24) },
+  darkDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginVertical: verticalScale(16) },
+  darkSectionTitle: { fontSize: moderateScale(9), fontWeight: '800', color: '#475569', letterSpacing: 1, marginBottom: verticalScale(12) },
+  darkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(12) },
+  darkRowLabel: { fontSize: moderateScale(11), fontWeight: '600', color: '#94a3b8' },
+  darkRowValueEarning: { fontSize: moderateScale(12), fontWeight: '800', color: '#10b981' },
+  darkRowValueDeduction: { fontSize: moderateScale(12), fontWeight: '800', color: '#ef4444' },
+  darkRowValueNeutral: { fontSize: moderateScale(12), fontWeight: '800', color: '#94a3b8' },
 
-  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  selectorBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12 },
-  selectorText: { fontSize: 14, color: '#0f172a', fontWeight: '500' },
-  selectorPlaceholder: { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
+  submitBtnText: { color: '#fff', fontSize: moderateScale(16), fontWeight: '700' },
+  selectorBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: moderateScale(12), padding: moderateScale(12) },
+  selectorText: { fontSize: moderateScale(14), color: '#0f172a', fontWeight: '500' },
+  selectorPlaceholder: { fontSize: moderateScale(14), color: '#94a3b8', fontWeight: '500' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '80%', padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', paddingHorizontal: 12, borderRadius: 12, marginBottom: 16 },
-  searchInput: { flex: 1, padding: 12, fontSize: 16, color: '#0f172a' },
-  employeeOption: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  modalContainer: { backgroundColor: '#fff', borderTopLeftRadius: moderateScale(24), borderTopRightRadius: moderateScale(24), height: '80%', padding: moderateScale(20) },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(20) },
+  modalTitle: { fontSize: moderateScale(18), fontWeight: '800', color: '#0f172a' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', paddingHorizontal: scale(12), borderRadius: moderateScale(12), marginBottom: verticalScale(16) },
+  searchInput: { flex: 1, padding: moderateScale(12), fontSize: moderateScale(16), color: '#0f172a' },
+  employeeOption: { flexDirection: 'row', alignItems: 'center', padding: moderateScale(16), borderRadius: moderateScale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   employeeOptionSelected: { backgroundColor: '#eef2ff', borderColor: '#eef2ff' },
-  employeeAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  employeeAvatarText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  employeeName: { fontSize: 16, fontWeight: '700', color: '#1e293b' },
-  employeeMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  employeeAvatar: { width: scale(40), height: verticalScale(40), borderRadius: moderateScale(20), backgroundColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center', marginRight: scale(12) },
+  employeeAvatarText: { color: '#fff', fontWeight: '700', fontSize: moderateScale(16) },
+  employeeName: { fontSize: moderateScale(16), fontWeight: '700', color: '#1e293b' },
+  employeeMeta: { fontSize: moderateScale(12), color: '#64748b', marginTop: verticalScale(2) },
 
-  complianceCard: { backgroundColor: '#fff', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9' },
-  complianceCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  complianceIconBox: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center' },
-  complianceCardTitle: { fontSize: 11, fontWeight: '800', color: '#64748b', letterSpacing: 1 },
-  complianceInputGroup: { marginBottom: 12 },
-  complianceLabel: { fontSize: 9, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, marginBottom: 6 },
-  complianceInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#f1f5f9', borderRadius: 12, padding: 12, fontSize: 13, color: '#0f172a', fontWeight: '700' },
-  overrideRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 8 },
-  overrideIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  overrideTitle: { fontSize: 10, fontWeight: '800', color: '#334155', letterSpacing: 0.5 },
-  overrideSub: { fontSize: 8, fontWeight: '600', color: '#94a3b8', marginTop: 2, letterSpacing: 0.5 },
-  overrideToggleGroup: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 20, padding: 2 },
-  overrideToggleBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 16 },
+  complianceCard: { backgroundColor: '#fff', borderRadius: moderateScale(24), padding: moderateScale(20), marginBottom: verticalScale(16), borderWidth: 1, borderColor: '#f1f5f9' },
+  complianceCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(16), gap: moderateScale(12) },
+  complianceIconBox: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(8), backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center' },
+  complianceCardTitle: { fontSize: moderateScale(11), fontWeight: '800', color: '#64748b', letterSpacing: 1 },
+  complianceInputGroup: { marginBottom: verticalScale(12) },
+  complianceLabel: { fontSize: moderateScale(9), fontWeight: '800', color: '#94a3b8', letterSpacing: 1, marginBottom: verticalScale(6) },
+  complianceInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#f1f5f9', borderRadius: moderateScale(12), padding: moderateScale(12), fontSize: moderateScale(13), color: '#0f172a', fontWeight: '700' },
+  overrideRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: moderateScale(12), padding: moderateScale(12), borderWidth: 1, borderColor: '#f1f5f9', marginBottom: verticalScale(8) },
+  overrideIconWrap: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(8), backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center', marginRight: scale(12) },
+  overrideTitle: { fontSize: moderateScale(10), fontWeight: '800', color: '#334155', letterSpacing: 0.5 },
+  overrideSub: { fontSize: moderateScale(8), fontWeight: '600', color: '#94a3b8', marginTop: verticalScale(2), letterSpacing: 0.5 },
+  overrideToggleGroup: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: moderateScale(20), padding: moderateScale(2) },
+  overrideToggleBtn: { paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: moderateScale(16) },
   overrideToggleBtnActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  overrideToggleText: { fontSize: 8, fontWeight: '800', color: '#94a3b8' },
+  overrideToggleText: { fontSize: moderateScale(8), fontWeight: '800', color: '#94a3b8' },
   overrideToggleTextActive: { color: '#4f46e5' }
 });

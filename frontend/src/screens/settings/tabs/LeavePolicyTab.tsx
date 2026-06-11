@@ -38,6 +38,7 @@ import { useSocketEvent } from '../../../services/socket';
 import { useAuthStore } from '../../../store/authStore';
 import Layout from '../../../components/common/Layout';
 import PageHeader from '../../../components/common/PageHeader';
+import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

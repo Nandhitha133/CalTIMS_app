@@ -29,6 +29,7 @@ import { useAuthStore } from '../../store/authStore';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import { useNavigation } from '@react-navigation/native';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 const { width } = Dimensions.get('window');
 
@@ -266,10 +267,26 @@ export default function PayrollRun() {
                   <Text style={[styles.cardTitle, { textAlign: 'left', marginBottom: 4 }]}>Preview Payroll</Text>
                   <Text style={[styles.cardSubtitle, { textAlign: 'left', paddingHorizontal: 0, marginBottom: 0 }]}>Aggregated calculation for valid employees.</Text>
                 </View>
-                <View style={styles.overtimeSwitchContainer}>
+                <TouchableOpacity 
+                  style={styles.overtimeSwitchContainer}
+                  onPress={async () => {
+                    const newValue = !overtimeEnabled;
+                    setOvertimeEnabled(newValue);
+                    try {
+                      setLoading(true);
+                      const res: any = await payrollAPI.getPreview({ month, year, overtimeEnabled: newValue });
+                      if (res?.success) setPreviewData(res.data);
+                    } catch (err: any) {
+                      Alert.alert('Error', err.response?.data?.message || 'Failed to fetch preview');
+                      setOvertimeEnabled(overtimeEnabled); // revert on error
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                >
                   <Text style={styles.overtimeSwitchLabel}>OVERTIME</Text>
                   <Text style={[styles.overtimeSwitchValue, overtimeEnabled ? { color: '#6366f1' } : {}]}>{overtimeEnabled ? 'ENABLED' : 'DISABLED'}</Text>
-                </View>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.topActionsRow}>
@@ -309,44 +326,44 @@ export default function PayrollRun() {
                 <Text style={styles.breakdownHeader}>EMPLOYEE BREAKDOWN</Text>
                 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={{ minWidth: 600 }}>
+                  <View style={{ minWidth: 770 }}>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableCol, { flex: 2 }]}>EMPLOYEE</Text>
-                      <Text style={styles.tableCol}>TOTAL DAYS</Text>
-                      <Text style={styles.tableCol}>ADJ. WORKING</Text>
-                      <Text style={styles.tableCol}>PRESENT</Text>
-                      <Text style={styles.tableCol}>LOP</Text>
-                      <Text style={styles.tableCol}>OT HRS</Text>
-                      <Text style={[styles.tableCol, { flex: 1.5, textAlign: 'right' }]}>ADJUSTED GROSS</Text>
-                      <Text style={[styles.tableCol, { flex: 1.5, textAlign: 'right', color: '#6366f1' }]}>FINAL NET</Text>
+                      <Text style={[styles.tableCol, { width: 180, flex: 0, textAlign: 'left' }]}>EMPLOYEE</Text>
+                      <Text style={[styles.tableCol, { width: 80, flex: 0 }]}>TOTAL DAYS</Text>
+                      <Text style={[styles.tableCol, { width: 90, flex: 0 }]}>ADJ. WORKING</Text>
+                      <Text style={[styles.tableCol, { width: 80, flex: 0 }]}>PRESENT</Text>
+                      <Text style={[styles.tableCol, { width: 60, flex: 0 }]}>LOP</Text>
+                      <Text style={[styles.tableCol, { width: 70, flex: 0 }]}>OT HRS</Text>
+                      <Text style={[styles.tableCol, { width: 110, flex: 0, textAlign: 'right' }]}>ADJUSTED GROSS</Text>
+                      <Text style={[styles.tableCol, { width: 100, flex: 0, textAlign: 'right', color: '#6366f1' }]}>FINAL NET</Text>
                     </View>
 
                     {previewData.breakdown && previewData.breakdown.map((row: any, idx: number) => (
                       <View key={idx} style={[styles.tableRow, idx % 2 !== 0 && { backgroundColor: '#f8fafc' }]}>
-                        <View style={[styles.tableCell, { flex: 2, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+                        <View style={[styles.tableCell, { width: 180, flex: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
                           <View style={styles.avatarMini}>
                             <Text style={styles.avatarMiniText}>{row.name ? row.name[0].toUpperCase() : 'U'}</Text>
                           </View>
-                          <View>
-                            <Text style={styles.employeeName}>{row.name}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.employeeName} numberOfLines={1}>{row.name}</Text>
                             <Text style={styles.employeeId}>{row.employeeId}</Text>
                           </View>
                         </View>
                         
                         {row.status === 'ERROR' ? (
-                          <View style={{ flex: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={{ width: 590, flex: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                              <AlertCircle size={14} color="#ef4444" style={{ marginRight: 6 }} />
                              <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700' }}>Calculation Failed: {row.error}</Text>
                           </View>
                         ) : (
                           <>
-                            <Text style={[styles.tableCell, { color: '#64748b' }]}>{row.standardMonthlyDays || 0}</Text>
-                            <Text style={[styles.tableCell, { color: '#4f46e5' }]}>{row.working || 0}</Text>
-                            <Text style={[styles.tableCell, { color: '#059669' }]}>{row.present || 0}</Text>
-                            <Text style={[styles.tableCell, { color: '#ef4444' }]}>{row.lop || 0}</Text>
-                            <Text style={[styles.tableCell, { color: '#64748b' }]}>{row.overtimeHours || 0}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{row.adjustedGross?.toLocaleString() || '0.00'}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>{currencySymbol}{row.net?.toLocaleString() || '0.00'}</Text>
+                            <Text style={[styles.tableCell, { width: 80, flex: 0, color: '#64748b' }]}>{row.standardMonthlyDays || 0}</Text>
+                            <Text style={[styles.tableCell, { width: 90, flex: 0, color: '#4f46e5' }]}>{row.working || 0}</Text>
+                            <Text style={[styles.tableCell, { width: 80, flex: 0, color: '#059669' }]}>{row.present || 0}</Text>
+                            <Text style={[styles.tableCell, { width: 60, flex: 0, color: '#ef4444' }]}>{row.lop || 0}</Text>
+                            <Text style={[styles.tableCell, { width: 70, flex: 0, color: '#64748b' }]}>{row.overtimeHours || 0}</Text>
+                            <Text style={[styles.tableCell, { width: 110, flex: 0, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{row.adjustedGross?.toLocaleString() || '0.00'}</Text>
+                            <Text style={[styles.tableCell, { width: 100, flex: 0, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>{currencySymbol}{row.net?.toLocaleString() || '0.00'}</Text>
                           </>
                         )}
                       </View>
@@ -439,20 +456,20 @@ export default function PayrollRun() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16 },
-  stepContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
-  stepDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: moderateScale(16) },
+  stepContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(32) },
+  stepDot: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(16), backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   stepDotActive: { backgroundColor: '#6366f1' },
   stepDotCurrent: { shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
-  stepText: { color: '#64748b', fontWeight: '800', fontSize: 14 },
+  stepText: { color: '#64748b', fontWeight: '800', fontSize: moderateScale(14) },
   stepTextActive: { color: '#fff' },
-  stepLine: { height: 3, width: (width - 160) / 3, backgroundColor: '#e2e8f0', marginHorizontal: -4, zIndex: 1 },
+  stepLine: { height: verticalScale(3), width: (width - scale(160)) / 3, backgroundColor: '#e2e8f0', marginHorizontal: scale(-4), zIndex: 1 },
   stepLineActive: { backgroundColor: '#6366f1' },
   
   card: { 
     backgroundColor: '#fff', 
-    borderRadius: 24, 
-    padding: 24, 
+    borderRadius: moderateScale(24), 
+    padding: moderateScale(24), 
     borderWidth: 1, 
     borderColor: '#f1f5f9',
     shadowColor: '#64748b',
@@ -461,74 +478,74 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 4
   },
-  iconWrapper: { alignSelf: 'center', backgroundColor: '#eef2ff', padding: 20, borderRadius: 24, marginBottom: 20 },
-  cardTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 8 },
-  cardSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20, paddingHorizontal: 16 },
+  iconWrapper: { alignSelf: 'center', backgroundColor: '#eef2ff', padding: moderateScale(20), borderRadius: moderateScale(24), marginBottom: verticalScale(20) },
+  cardTitle: { fontSize: moderateScale(22), fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: verticalScale(8) },
+  cardSubtitle: { fontSize: moderateScale(13), color: '#64748b', textAlign: 'center', marginBottom: verticalScale(24), lineHeight: verticalScale(20), paddingHorizontal: scale(16) },
   
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 12, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 },
-  pickerFake: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
-  pickerFakeText: { fontSize: 16, color: '#1e293b', fontWeight: '600' },
+  inputGroup: { marginBottom: verticalScale(20) },
+  label: { fontSize: moderateScale(12), fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: verticalScale(8), letterSpacing: 0.5 },
+  pickerFake: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: moderateScale(16), borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0' },
+  pickerFakeText: { fontSize: moderateScale(16), color: '#1e293b', fontWeight: '600' },
   
-  primaryBtn: { backgroundColor: '#6366f1', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, flex: 1, shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
-  secondaryBtn: { backgroundColor: '#f1f5f9', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, flex: 1 },
-  secondaryBtnText: { color: '#475569', fontSize: 16, fontWeight: '700' },
-  executeBtn: { backgroundColor: '#10b981', padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8, flex: 1, shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  executeBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  primaryBtn: { backgroundColor: '#6366f1', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1, shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  primaryBtnText: { color: '#fff', fontSize: moderateScale(16), fontWeight: '700', letterSpacing: 0.5 },
+  secondaryBtn: { backgroundColor: '#f1f5f9', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1 },
+  secondaryBtnText: { color: '#475569', fontSize: moderateScale(16), fontWeight: '700' },
+  executeBtn: { backgroundColor: '#10b981', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1, shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  executeBtnText: { color: '#fff', fontSize: moderateScale(16), fontWeight: '700', letterSpacing: 0.5 },
+  actions: { flexDirection: 'row', gap: moderateScale(12), marginTop: verticalScale(8) },
   
-  readinessGrid: { gap: 12, marginBottom: 24 },
-  readinessBox: { padding: 16, borderRadius: 16, borderLeftWidth: 4 },
-  readinessHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  readinessLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  readinessValue: { fontSize: 28, fontWeight: '800' },
+  readinessGrid: { gap: moderateScale(12), marginBottom: verticalScale(24) },
+  readinessBox: { padding: moderateScale(16), borderRadius: moderateScale(16), borderLeftWidth: 4 },
+  readinessHeader: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8), marginBottom: verticalScale(8) },
+  readinessLabel: { fontSize: moderateScale(12), fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  readinessValue: { fontSize: moderateScale(28), fontWeight: '800' },
   
-  previewHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
-  overtimeSwitchContainer: { alignItems: 'flex-end', backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  overtimeSwitchLabel: { fontSize: 9, fontWeight: '800', color: '#94a3b8', marginBottom: 2 },
-  overtimeSwitchValue: { fontSize: 11, fontWeight: '800', color: '#64748b' },
+  previewHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: verticalScale(16) },
+  overtimeSwitchContainer: { alignItems: 'flex-end', backgroundColor: '#f8fafc', paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0' },
+  overtimeSwitchLabel: { fontSize: moderateScale(9), fontWeight: '800', color: '#94a3b8', marginBottom: verticalScale(2) },
+  overtimeSwitchValue: { fontSize: moderateScale(11), fontWeight: '800', color: '#64748b' },
   
-  topActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginBottom: 24 },
-  headerBackBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
-  headerBackBtnText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
-  headerRunBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 2 },
-  headerRunBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  topActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: moderateScale(12), marginBottom: verticalScale(24) },
+  headerBackBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
+  headerBackBtnText: { fontSize: moderateScale(13), fontWeight: '700', color: '#64748b' },
+  headerRunBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: moderateScale(12), backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 2 },
+  headerRunBtnText: { fontSize: moderateScale(13), fontWeight: '700', color: '#fff' },
 
-  statCardsScroll: { gap: 12, paddingBottom: 16, marginBottom: 8 },
-  statCardInline: { padding: 16, borderRadius: 16, minWidth: 140 },
-  statCardInlineLabel: { fontSize: 10, fontWeight: '800', color: '#94a3b8', marginBottom: 8 },
-  statCardInlineValue: { fontSize: 20, fontWeight: '800' },
+  statCardsScroll: { gap: moderateScale(12), paddingBottom: verticalScale(16), marginBottom: verticalScale(8) },
+  statCardInline: { padding: moderateScale(16), borderRadius: moderateScale(16), minWidth: scale(140) },
+  statCardInlineLabel: { fontSize: moderateScale(10), fontWeight: '800', color: '#94a3b8', marginBottom: verticalScale(8) },
+  statCardInlineValue: { fontSize: moderateScale(20), fontWeight: '800' },
 
-  breakdownContainer: { marginTop: 16, borderWidth: 1, borderColor: '#f1f5f9', borderRadius: 16, overflow: 'hidden' },
-  breakdownHeader: { fontSize: 11, fontWeight: '800', color: '#94a3b8', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  breakdownContainer: { marginTop: verticalScale(16), borderWidth: 1, borderColor: '#f1f5f9', borderRadius: moderateScale(16), overflow: 'hidden' },
+  breakdownHeader: { fontSize: moderateScale(11), fontWeight: '800', color: '#94a3b8', padding: moderateScale(16), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  tableCol: { flex: 1, fontSize: 9, fontWeight: '800', color: '#94a3b8', textAlign: 'center' },
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
-  tableCell: { flex: 1, fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  tableCol: { flex: 1, fontSize: moderateScale(9), fontWeight: '800', color: '#94a3b8', textAlign: 'center' },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
+  tableCell: { flex: 1, fontSize: moderateScale(12), fontWeight: '700', textAlign: 'center' },
   
-  avatarMini: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
-  avatarMiniText: { fontSize: 12, fontWeight: '800', color: '#4f46e5' },
-  employeeName: { fontSize: 11, fontWeight: '800', color: '#0f172a' },
-  employeeId: { fontSize: 9, fontWeight: '700', color: '#94a3b8' },
+  avatarMini: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(10), backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
+  avatarMiniText: { fontSize: moderateScale(12), fontWeight: '800', color: '#4f46e5' },
+  employeeName: { fontSize: moderateScale(11), fontWeight: '800', color: '#0f172a' },
+  employeeId: { fontSize: moderateScale(9), fontWeight: '700', color: '#94a3b8' },
 
-  successIconWrapper: { backgroundColor: '#ecfdf5', padding: 24, borderRadius: 64 },
-  successDesc: { textAlign: 'center', color: '#64748b', marginTop: 12, fontSize: 14, lineHeight: 22, paddingHorizontal: 20 },
+  successIconWrapper: { backgroundColor: '#ecfdf5', padding: moderateScale(24), borderRadius: moderateScale(64) },
+  successDesc: { textAlign: 'center', color: '#64748b', marginTop: verticalScale(12), fontSize: moderateScale(14), lineHeight: verticalScale(22), paddingHorizontal: scale(20) },
   
-  successActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 12 },
-  successGhostBtn: { paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16 },
-  successGhostBtnText: { fontSize: 14, fontWeight: '800', color: '#475569' },
-  successPrimaryBtn: { backgroundColor: '#4f46e5', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  successPrimaryBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  successOutlineBtn: { backgroundColor: '#fff', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' },
-  successOutlineBtnText: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  successActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: moderateScale(12) },
+  successGhostBtn: { paddingHorizontal: scale(20), paddingVertical: verticalScale(14), borderRadius: moderateScale(16) },
+  successGhostBtnText: { fontSize: moderateScale(14), fontWeight: '800', color: '#475569' },
+  successPrimaryBtn: { backgroundColor: '#4f46e5', paddingHorizontal: scale(24), paddingVertical: verticalScale(14), borderRadius: moderateScale(16), shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  successPrimaryBtnText: { fontSize: moderateScale(14), fontWeight: '800', color: '#fff' },
+  successOutlineBtn: { backgroundColor: '#fff', paddingHorizontal: scale(24), paddingVertical: verticalScale(14), borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0' },
+  successOutlineBtnText: { fontSize: moderateScale(14), fontWeight: '800', color: '#0f172a' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' },
-  modalItem: { paddingVertical: 16, paddingHorizontal: 24, borderRadius: 16, marginBottom: 8, backgroundColor: '#f8fafc' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: moderateScale(24), borderTopRightRadius: moderateScale(24), padding: moderateScale(24), paddingBottom: verticalScale(40) },
+  modalTitle: { fontSize: moderateScale(18), fontWeight: '800', color: '#0f172a', marginBottom: verticalScale(16), textAlign: 'center' },
+  modalItem: { paddingVertical: verticalScale(16), paddingHorizontal: scale(24), borderRadius: moderateScale(16), marginBottom: verticalScale(8), backgroundColor: '#f8fafc' },
   modalItemActive: { backgroundColor: '#eef2ff' },
-  modalItemText: { fontSize: 16, fontWeight: '700', color: '#475569', textAlign: 'center' },
+  modalItemText: { fontSize: moderateScale(16), fontWeight: '700', color: '#475569', textAlign: 'center' },
   modalItemTextActive: { color: '#4f46e5', fontWeight: '800' }
 });

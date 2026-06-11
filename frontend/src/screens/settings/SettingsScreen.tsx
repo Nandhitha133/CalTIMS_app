@@ -36,6 +36,7 @@ import {
 } from 'lucide-react-native';
 import Layout from '../../components/common/Layout';
 import PageHeader from '../../components/common/PageHeader';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 // Types
 interface NavItem {
@@ -339,208 +340,45 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  layout: {
-    flex: 1,
-    flexDirection: 'column',
-    padding: 16,
-    gap: 16,
-  },
-  layoutDesktop: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  sidebarDesktop: {
-    width: 280,
-    backgroundColor: 'white',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  mobileScrollContent: {
-    paddingBottom: 20,
-  },
-  mobileSection: {
-    marginBottom: 24,
-  },
-  mobileSectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  mobileGrid: {
-    gap: 8,
-  },
-  mobileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    gap: 12,
-  },
-  mobileIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#eef2ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mobileCardLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#111827',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    gap: 16,
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#9ca3af',
-  },
-  emptyButton: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6366f1',
-  },
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  layout: { flex: 1, flexDirection: 'column', padding: moderateScale(16), gap: moderateScale(16) },
+  layoutDesktop: { flexDirection: 'row', gap: moderateScale(24) },
+  sidebarDesktop: { width: scale(280), backgroundColor: 'white', borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e5e7eb', overflow: 'hidden' },
+  mobileScrollContent: { paddingBottom: verticalScale(20) },
+  mobileSection: { marginBottom: verticalScale(24) },
+  mobileSectionTitle: { fontSize: moderateScale(13), fontWeight: '600', color: '#6b7280', letterSpacing: 0.5, marginBottom: verticalScale(12), paddingHorizontal: scale(4) },
+  mobileGrid: { gap: moderateScale(8) },
+  mobileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', paddingHorizontal: scale(16), paddingVertical: verticalScale(14), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e5e7eb', gap: moderateScale(12) },
+  mobileIconContainer: { width: scale(40), height: verticalScale(40), borderRadius: moderateScale(10), backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
+  mobileCardLabel: { flex: 1, fontSize: moderateScale(15), fontWeight: '500', color: '#111827' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(60), gap: moderateScale(16) },
+  emptyTitle: { fontSize: moderateScale(14), fontWeight: '500', color: '#9ca3af' },
+  emptyButton: { fontSize: moderateScale(13), fontWeight: '600', color: '#6366f1' },
 });
 
 const sidebarStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  searchContainer: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    paddingHorizontal: 12,
-    height: 40,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    color: '#111827',
-    padding: 0,
-  },
-  scrollContent: {
-    paddingBottom: 16,
-  },
-  section: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  navItems: {
-    gap: 4,
-  },
-  navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  navIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  navLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    gap: 12,
-  },
-  emptyTitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#9ca3af',
-  },
-  emptyButton: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#6366f1',
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 10,
-    color: '#9ca3af',
-  },
+  container: { flex: 1 },
+  searchContainer: { padding: moderateScale(16), borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderRadius: moderateScale(10), borderWidth: 1, borderColor: '#e5e7eb', paddingHorizontal: scale(12), height: verticalScale(40), gap: moderateScale(8) },
+  searchInput: { flex: 1, fontSize: moderateScale(13), color: '#111827', padding: 0 },
+  scrollContent: { paddingBottom: verticalScale(16) },
+  section: { paddingHorizontal: scale(16), paddingTop: verticalScale(20) },
+  sectionTitle: { fontSize: moderateScale(11), fontWeight: '600', color: '#6b7280', letterSpacing: 0.5, marginBottom: verticalScale(12) },
+  navItems: { gap: moderateScale(4) },
+  navItem: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(12), paddingHorizontal: scale(12), paddingVertical: verticalScale(12), borderRadius: moderateScale(8) },
+  navIconContainer: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(8), backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  navLabel: { flex: 1, fontSize: moderateScale(13), fontWeight: '500', color: '#374151' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(40), gap: moderateScale(12) },
+  emptyTitle: { fontSize: moderateScale(12), fontWeight: '500', color: '#9ca3af' },
+  emptyButton: { fontSize: moderateScale(11), fontWeight: '500', color: '#6366f1' },
+  footer: { padding: moderateScale(16), borderTopWidth: 1, borderTopColor: '#f3f4f6', alignItems: 'center' },
+  footerText: { fontSize: moderateScale(10), color: '#9ca3af' },
 });
 
 const modalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  container: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
-    minHeight: '70%',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  closeButton: {
-    padding: 4,
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  container: { backgroundColor: 'white', borderTopLeftRadius: moderateScale(20), borderTopRightRadius: moderateScale(20), maxHeight: '90%', minHeight: '70%' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: moderateScale(20), borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  title: { fontSize: moderateScale(18), fontWeight: '600', color: '#111827' },
+  closeButton: { padding: moderateScale(4) },
 });
