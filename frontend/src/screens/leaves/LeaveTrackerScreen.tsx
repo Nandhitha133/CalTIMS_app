@@ -16,6 +16,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, differenceInCalendarDays } from 'date-fns';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
     Plus,
@@ -250,13 +251,13 @@ const LeaveDetailModal = ({
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContainer, styles.detailModal]}>
                     <View style={styles.modalHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <View style={{ backgroundColor: '#8b5cf6', padding: 10, borderRadius: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(12) }}>
+                            <View style={{ backgroundColor: '#8b5cf6', padding: scale(10), borderRadius: scale(12) }}>
                                 <Eye size={24} color="white" />
                             </View>
                             <View>
                                 <Text style={styles.modalTitle}>Leave Details</Text>
-                                <Text style={{ fontSize: 13, color: '#94a3b8' }}>{leave.leaveType} Leave</Text>
+                                <Text style={{ fontSize: moderateScale(13), color: '#94a3b8' }}>{leave.leaveType} Leave</Text>
                             </View>
                         </View>
                         <TouchableOpacity onPress={onClose}>
@@ -303,22 +304,22 @@ const LeaveDetailModal = ({
 
                     <View style={styles.modalFooter}>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <View style={{ backgroundColor: leave.status === 'approved' ? '#ecfdf5' : leave.status === 'pending' ? '#fffbeb' : '#fef2f2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: leave.status === 'approved' ? '#10b981' : leave.status === 'pending' ? '#f59e0b' : '#ef4444' }} />
-                                    <Text style={{ fontSize: 13, fontWeight: '600', color: leave.status === 'approved' ? '#10b981' : leave.status === 'pending' ? '#f59e0b' : '#ef4444', textTransform: 'capitalize' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
+                                <View style={{ backgroundColor: leave.status === 'approved' ? '#ecfdf5' : leave.status === 'pending' ? '#fffbeb' : '#fef2f2', paddingHorizontal: scale(12), paddingVertical: verticalScale(6), borderRadius: scale(20), flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                                    <View style={{ width: scale(6), height: verticalScale(6), borderRadius: scale(3), backgroundColor: leave.status === 'approved' ? '#10b981' : leave.status === 'pending' ? '#f59e0b' : '#ef4444' }} />
+                                    <Text style={{ fontSize: moderateScale(13), fontWeight: '600', color: leave.status === 'approved' ? '#10b981' : leave.status === 'pending' ? '#f59e0b' : '#ef4444', textTransform: 'capitalize' }}>
                                         {leave.status}
                                     </Text>
                                 </View>
                                 {leave.approvedBy && (
-                                    <Text style={{ fontSize: 13, color: '#64748b' }}>
+                                    <Text style={{ fontSize: moderateScale(13), color: '#64748b' }}>
                                         By <Text style={{ fontWeight: '600', color: '#1e293b' }}>{leave.approvedBy.name}</Text>
                                     </Text>
                                 )}
                             </View>
 
                             {isAdmin && leave.status === 'pending' && (
-                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <View style={{ flexDirection: 'row', gap: scale(8) }}>
                                     <TouchableOpacity 
                                         style={[styles.actionBtn, { backgroundColor: '#fef2f2' }]} 
                                         onPress={() => onReject(leave.id, '')}
@@ -917,49 +918,49 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
-    content: { paddingHorizontal: 16, paddingBottom: 100 },
-    applyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 },
-    applyButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
+    content: { paddingHorizontal: scale(16), paddingBottom: verticalScale(100) },
+    applyButton: { flexDirection: 'row', alignItems: 'center', gap: scale(6), backgroundColor: '#3b82f6', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(12) },
+    applyButtonText: { color: 'white', fontWeight: '600', fontSize: moderateScale(13) },
 
-    balanceContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-    balanceCard: { flex: 1, backgroundColor: 'white', borderRadius: 16, padding: 12, alignItems: 'center', borderTopWidth: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-    balanceValue: { fontSize: 24, fontWeight: '800' },
-    balanceTitle: { fontSize: 12, fontWeight: '600', color: '#1e293b', marginTop: 4 },
-    balanceLabel: { fontSize: 10, color: '#64748b', marginTop: 2 },
+    balanceContainer: { flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(20) },
+    balanceCard: { flex: 1, backgroundColor: 'white', borderRadius: scale(16), padding: scale(12), alignItems: 'center', borderTopWidth: 3, shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
+    balanceValue: { fontSize: moderateScale(24), fontWeight: '800' },
+    balanceTitle: { fontSize: moderateScale(12), fontWeight: '600', color: '#1e293b', marginTop: verticalScale(4) },
+    balanceLabel: { fontSize: moderateScale(10), color: '#64748b', marginTop: verticalScale(2) },
 
-    sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
+    sectionTitle: { fontSize: moderateScale(14), fontWeight: '700', color: '#1e293b', marginBottom: verticalScale(12) },
 
     requestCard: { 
         backgroundColor: 'white', 
-        borderRadius: 16, 
-        marginBottom: 12, 
+        borderRadius: scale(16), 
+        marginBottom: verticalScale(12), 
         borderWidth: 1, 
         borderColor: '#e2e8f0',
         overflow: 'hidden',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: verticalScale(2) },
         shadowOpacity: 0.05,
-        shadowRadius: 8,
+        shadowRadius: scale(8),
         elevation: 2,
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
+        padding: scale(16),
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9',
     },
     employeeInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        gap: scale(12),
         flex: 1,
     },
     employeeAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: scale(40),
+        height: verticalScale(40),
+        borderRadius: scale(20),
         backgroundColor: '#eef2ff',
         alignItems: 'center',
         justifyContent: 'center',
@@ -967,30 +968,30 @@ const styles = StyleSheet.create({
         borderColor: '#c7d2fe',
     },
     avatarText: {
-        fontSize: 16,
+        fontSize: moderateScale(16),
         fontWeight: 'bold',
         color: '#4f46e5',
     },
-    leaveType: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-    leaveId: { fontSize: 10, color: '#64748b', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-    statusContainer: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-    statusText: { fontSize: 10, fontWeight: '600' },
+    leaveType: { fontSize: moderateScale(14), fontWeight: '700', color: '#1e293b' },
+    leaveId: { fontSize: moderateScale(10), color: '#64748b', marginTop: verticalScale(2), fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+    statusContainer: { paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: scale(12) },
+    statusText: { fontSize: moderateScale(10), fontWeight: '600' },
     cardContent: {
-        padding: 16,
-        gap: 8,
+        padding: scale(16),
+        gap: scale(8),
     },
-    requestDates: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    requestDates: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(4), paddingVertical: verticalScale(8), borderTopWidth: 1, borderTopColor: '#f1f5f9', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
     dateItem: { alignItems: 'center' },
-    dateLabel: { fontSize: 10, color: '#64748b', marginBottom: 2 },
-    dateValue: { fontSize: 12, fontWeight: '500', color: '#1e293b' },
-    dateDivider: { width: 1, height: 20, backgroundColor: '#e2e8f0' },
+    dateLabel: { fontSize: moderateScale(10), color: '#64748b', marginBottom: verticalScale(2) },
+    dateValue: { fontSize: moderateScale(12), fontWeight: '500', color: '#1e293b' },
+    dateDivider: { width: 1, height: verticalScale(20), backgroundColor: '#e2e8f0' },
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: scale(8),
     },
     infoText: {
-        fontSize: 13,
+        fontSize: moderateScale(13),
         color: '#475569',
         flex: 1,
     },
@@ -998,7 +999,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 12,
+        padding: scale(12),
         borderTopWidth: 1,
         borderTopColor: '#f1f5f9',
         backgroundColor: '#fafafa',
@@ -1006,90 +1007,90 @@ const styles = StyleSheet.create({
     footerLeft: {
         flex: 1,
     },
-    actionButtons: { flexDirection: 'row', gap: 8 },
+    actionButtons: { flexDirection: 'row', gap: scale(8) },
     actionBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: scale(36),
+        height: verticalScale(36),
+        borderRadius: scale(18),
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: { width: 0, height: verticalScale(1) },
         shadowOpacity: 0.05,
-        shadowRadius: 1,
+        shadowRadius: scale(1),
         elevation: 1,
     },
 
-    loader: { padding: 40 },
+    loader: { padding: scale(40) },
 
-    emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, backgroundColor: 'white', borderRadius: 24, borderWidth: 1, borderColor: '#e2e8f0' },
-    emptyTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginTop: 16 },
-    emptyText: { fontSize: 13, color: '#64748b', marginTop: 8, textAlign: 'center' },
-    emptyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, marginTop: 16 },
-    emptyButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
+    emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(48), backgroundColor: 'white', borderRadius: scale(24), borderWidth: 1, borderColor: '#e2e8f0' },
+    emptyTitle: { fontSize: moderateScale(16), fontWeight: '700', color: '#1e293b', marginTop: verticalScale(16) },
+    emptyText: { fontSize: moderateScale(13), color: '#64748b', marginTop: verticalScale(8), textAlign: 'center' },
+    emptyButton: { flexDirection: 'row', alignItems: 'center', gap: scale(6), backgroundColor: '#3b82f6', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(12), marginTop: verticalScale(16) },
+    emptyButtonText: { color: 'white', fontWeight: '600', fontSize: moderateScale(13) },
 
-    pagination: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, paddingVertical: 20 },
-    pageButton: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'white', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+    pagination: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: scale(16), paddingVertical: verticalScale(20) },
+    pageButton: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8), backgroundColor: 'white', borderRadius: scale(8), borderWidth: 1, borderColor: '#e2e8f0' },
     pageButtonDisabled: { opacity: 0.5 },
-    pageButtonText: { fontSize: 13, fontWeight: '600', color: '#3b82f6' },
-    pageInfo: { fontSize: 13, color: '#64748b' },
+    pageButtonText: { fontSize: moderateScale(13), fontWeight: '600', color: '#3b82f6' },
+    pageInfo: { fontSize: moderateScale(13), color: '#64748b' },
 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContainer: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' },
+    modalContainer: { backgroundColor: 'white', borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), maxHeight: '90%' },
     detailModal: { maxHeight: '85%' },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-    modalTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b' },
-    modalContent: { padding: 20 },
-    modalFooter: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: scale(20), borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+    modalTitle: { fontSize: moderateScale(18), fontWeight: '700', color: '#1e293b' },
+    modalContent: { padding: scale(20) },
+    modalFooter: { flexDirection: 'row', gap: scale(12), padding: scale(20), borderTopWidth: 1, borderTopColor: '#e2e8f0' },
 
-    formField: { marginBottom: 16 },
-    formLabel: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8 },
-    formRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+    formField: { marginBottom: verticalScale(16) },
+    formLabel: { fontSize: moderateScale(13), fontWeight: '600', color: '#334155', marginBottom: verticalScale(8) },
+    formRow: { flexDirection: 'row', gap: scale(12), marginBottom: verticalScale(16) },
 
-    typeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-    typeOption: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    typeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginBottom: verticalScale(8) },
+    typeOption: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8), borderRadius: scale(20), backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
     typeOptionActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-    typeText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+    typeText: { fontSize: moderateScale(12), fontWeight: '600', color: '#64748b' },
     typeTextActive: { color: 'white' },
 
-    balanceText: { fontSize: 11, color: '#64748b', marginTop: 4 },
+    balanceText: { fontSize: moderateScale(11), color: '#64748b', marginTop: verticalScale(4) },
 
-    dateButton: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, backgroundColor: '#f8fafc' },
+    dateButton: { flexDirection: 'row', alignItems: 'center', gap: scale(8), borderWidth: 1, borderColor: '#e2e8f0', borderRadius: scale(12), padding: scale(12), backgroundColor: '#f8fafc' },
     dateButtonDisabled: { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0', opacity: 0.8 },
-    dateText: { fontSize: 14, color: '#1e293b', flex: 1 },
+    dateText: { fontSize: moderateScale(14), color: '#1e293b', flex: 1 },
 
-    halfDayButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#cbd5e1', backgroundColor: 'white' },
+    halfDayButton: { flexDirection: 'row', alignItems: 'center', gap: scale(8) },
+    checkbox: { width: scale(18), height: verticalScale(18), borderRadius: scale(4), borderWidth: 2, borderColor: '#cbd5e1', backgroundColor: 'white' },
     checkboxChecked: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-    halfDayText: { fontSize: 13, color: '#334155' },
+    halfDayText: { fontSize: moderateScale(13), color: '#334155' },
 
-    daysInfo: { backgroundColor: '#eff6ff', padding: 12, borderRadius: 12, marginBottom: 16 },
+    daysInfo: { backgroundColor: '#eff6ff', padding: scale(12), borderRadius: scale(12), marginBottom: verticalScale(16) },
     daysInfoError: { backgroundColor: '#fef2f2' },
-    daysInfoText: { fontSize: 13, fontWeight: '500', color: '#3b82f6' },
-    errorText: { fontSize: 11, color: '#ef4444', marginTop: 4 },
+    daysInfoText: { fontSize: moderateScale(13), fontWeight: '500', color: '#3b82f6' },
+    errorText: { fontSize: moderateScale(11), color: '#ef4444', marginTop: verticalScale(4) },
 
-    reasonInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, fontSize: 14, color: '#1e293b', backgroundColor: '#f8fafc', minHeight: 80, textAlignVertical: 'top' },
+    reasonInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: scale(12), padding: scale(12), fontSize: moderateScale(14), color: '#1e293b', backgroundColor: '#f8fafc', minHeight: verticalScale(80), textAlignVertical: 'top' },
 
-    cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
-    cancelButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
-    submitButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
+    cancelButton: { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#f1f5f9', alignItems: 'center' },
+    cancelButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: '#64748b' },
+    submitButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), backgroundColor: '#3b82f6', paddingVertical: verticalScale(12), borderRadius: scale(12) },
     disabledButton: { opacity: 0.5 },
-    submitButtonText: { fontSize: 14, fontWeight: '700', color: 'white' },
-    approveButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10b981', paddingVertical: 12, borderRadius: 12 },
-    approveButtonText: { fontSize: 14, fontWeight: '700', color: 'white' },
+    submitButtonText: { fontSize: moderateScale(14), fontWeight: '700', color: 'white' },
+    approveButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), backgroundColor: '#10b981', paddingVertical: verticalScale(12), borderRadius: scale(12) },
+    approveButtonText: { fontSize: moderateScale(14), fontWeight: '700', color: 'white' },
 
-    warningBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fffbeb', padding: 12, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#fef3c7' },
-    warningText: { flex: 1, fontSize: 12, color: '#f59e0b', lineHeight: 16 },
+    warningBox: { flexDirection: 'row', alignItems: 'center', gap: scale(8), backgroundColor: '#fffbeb', padding: scale(12), borderRadius: scale(12), marginBottom: verticalScale(16), borderWidth: 1, borderColor: '#fef3c7' },
+    warningText: { flex: 1, fontSize: moderateScale(12), color: '#f59e0b', lineHeight: verticalScale(16) },
 
-    detailContent: { padding: 20, gap: 12 },
-    gridItem: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 16 },
-    gridLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8', marginBottom: 4, letterSpacing: 0.5 },
-    gridValue: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
+    detailContent: { padding: scale(20), gap: scale(12) },
+    gridItem: { backgroundColor: '#f8fafc', padding: scale(16), borderRadius: scale(16) },
+    gridLabel: { fontSize: moderateScale(10), fontWeight: '700', color: '#94a3b8', marginBottom: verticalScale(4), letterSpacing: 0.5 },
+    gridValue: { fontSize: moderateScale(15), fontWeight: '600', color: '#1e293b' },
     rejectionSection: { backgroundColor: '#fef2f2' },
     rejectionLabel: { color: '#ef4444' },
-    rejectionText: { fontSize: 13, color: '#ef4444', marginTop: 4 },
+    rejectionText: { fontSize: moderateScale(13), color: '#ef4444', marginTop: verticalScale(4) },
     cancellationSection: { backgroundColor: '#fffbeb' },
     cancellationLabel: { color: '#f59e0b' },
-    cancellationText: { fontSize: 13, color: '#f59e0b', marginTop: 4 },
+    cancellationText: { fontSize: moderateScale(13), color: '#f59e0b', marginTop: verticalScale(4) },
     capitalize: { textTransform: 'capitalize' },
 });

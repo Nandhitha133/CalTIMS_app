@@ -46,9 +46,9 @@ interface HeaderProps {
   user?: any;
 }
 
-export default function Header({ 
-  title, 
-  showBackButton = false, 
+export default function Header({
+  title,
+  showBackButton = false,
   showNotification = true,
   showSidebarButton = true,
   showTrialBanner = true,
@@ -82,7 +82,7 @@ export default function Header({
     loadUserData();
     loadNotifications();
 
-    return () => {};
+    return () => { };
   }, []);
 
   const loadUserData = async () => {
@@ -91,7 +91,7 @@ export default function Header({
       if (userData && !initialUser) {
         setUser(JSON.parse(userData));
       }
-    } catch (error) { 
+    } catch (error) {
       console.error('Error loading user data:', error);
     }
   };
@@ -103,7 +103,7 @@ export default function Header({
         return;
       }
       const response: any = await notificationAPI.getAll({ limit: 20 });
-      
+
       // Robust data extraction
       let rawData = [];
       if (response) {
@@ -119,7 +119,7 @@ export default function Header({
           rawData = response;
         }
       }
-      
+
       const formattedNotifications: Notification[] = rawData.map((n: any) => ({
         id: n._id || n.id || String(Math.random()),
         title: n.title || 'Notification',
@@ -145,11 +145,11 @@ export default function Header({
           const typeLower = (n.type || '').toLowerCase();
           const titleLower = (n.title || '').toLowerCase();
           const msgLower = (n.message || '').toLowerCase();
-          
+
           const isTimesheet = typeLower.includes('timesheet') || titleLower.includes('timesheet') || msgLower.includes('timesheet');
           const isLeave = typeLower.includes('leave') || titleLower.includes('leave') || msgLower.includes('leave');
           const isSupport = typeLower.includes('incident') || typeLower.includes('ticket') || titleLower.includes('incident') || titleLower.includes('ticket') || msgLower.includes('incident') || msgLower.includes('ticket');
-          
+
           if (isTimesheet) {
             if (titleLower.includes('approve') || msgLower.includes('approve')) return settingsObj.notifyOnTimesheetApproval !== false;
             if (titleLower.includes('reject') || msgLower.includes('reject')) return settingsObj.notifyOnTimesheetRejection !== false;
@@ -219,39 +219,39 @@ export default function Header({
     try {
       // 1. Mark as read in background
       await markAsRead(notification.id);
-      
+
       // 2. Close notification modal
       setShowNotifications(false);
-      
+
       // 3. Robust routing based on type/title/message keywords
       const typeLower = (notification.type || '').toLowerCase();
       const titleLower = (notification.title || '').toLowerCase();
       const msgLower = (notification.message || '').toLowerCase();
-      
+
       if (
-        typeLower.includes('announcement') || 
-        titleLower.includes('announcement') || 
+        typeLower.includes('announcement') ||
+        titleLower.includes('announcement') ||
         msgLower.includes('announcement')
       ) {
         navigation.navigate('Announcements');
       } else if (
-        typeLower.includes('leave') || 
-        titleLower.includes('leave') || 
+        typeLower.includes('leave') ||
+        titleLower.includes('leave') ||
         msgLower.includes('leave')
       ) {
         navigation.navigate('LeaveTracker');
       } else if (
-        typeLower.includes('timesheet') || 
-        titleLower.includes('timesheet') || 
+        typeLower.includes('timesheet') ||
+        titleLower.includes('timesheet') ||
         msgLower.includes('timesheet')
       ) {
         navigation.navigate('TimesheetEntry');
       } else if (
-        typeLower.includes('incident') || 
-        typeLower.includes('ticket') || 
-        titleLower.includes('incident') || 
-        titleLower.includes('ticket') || 
-        msgLower.includes('incident') || 
+        typeLower.includes('incident') ||
+        typeLower.includes('ticket') ||
+        titleLower.includes('incident') ||
+        titleLower.includes('ticket') ||
+        msgLower.includes('incident') ||
         msgLower.includes('ticket')
       ) {
         navigation.navigate('Incidents');
@@ -277,22 +277,22 @@ export default function Header({
   const getNotificationColor = (type: string) => {
     const typeLower = (type || '').toLowerCase();
     if (
-      typeLower.includes('success') || 
-      typeLower.includes('approve') || 
+      typeLower.includes('success') ||
+      typeLower.includes('approve') ||
       typeLower.includes('resolve')
     ) {
       return '#10b981'; // Green for successes/approvals/resolutions
     }
     if (
-      typeLower.includes('warning') || 
-      typeLower.includes('reject') || 
+      typeLower.includes('warning') ||
+      typeLower.includes('reject') ||
       typeLower.includes('pending')
     ) {
       return '#f59e0b'; // Yellow/Orange for warnings/rejections/pending states
     }
     if (
-      typeLower.includes('error') || 
-      typeLower.includes('fail') || 
+      typeLower.includes('error') ||
+      typeLower.includes('fail') ||
       typeLower.includes('cancel')
     ) {
       return '#ef4444'; // Red for errors/cancellations
@@ -326,12 +326,12 @@ export default function Header({
               </TouchableOpacity>
             </View>
           </View>
-          
+
           <FlatList
             data={notifications}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.notificationItem, !item.read && styles.unreadItem]}
                 onPress={() => handleNotificationPress(item)}
               >
@@ -360,9 +360,9 @@ export default function Header({
       visible={showSidebar}
       onRequestClose={() => setShowSidebar(false)}
     >
-      <TouchableOpacity 
-        style={styles.sidebarOverlay} 
-        activeOpacity={1} 
+      <TouchableOpacity
+        style={styles.sidebarOverlay}
+        activeOpacity={1}
         onPress={() => setShowSidebar(false)}
       >
         <View style={styles.sidebarContent}>
@@ -389,8 +389,8 @@ export default function Header({
                 }
                 const IconComponent = item.icon;
                 return (
-                  <TouchableOpacity 
-                    key={item.id} 
+                  <TouchableOpacity
+                    key={item.id}
                     style={styles.sidebarItem}
                     onPress={() => handleSidebarNavigation(item.screen)}
                   >
@@ -402,10 +402,10 @@ export default function Header({
                   </TouchableOpacity>
                 );
               })}
-              
+
               <View style={styles.sidebarDivider} />
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.sidebarItem}
                 onPress={() => handleSidebarNavigation('Settings')}
               >
@@ -416,7 +416,7 @@ export default function Header({
                 <ChevronRight size={16} color="#cbd5e1" />
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.sidebarItem, styles.logoutItem]}
                 onPress={handleLogout}
               >
@@ -426,7 +426,7 @@ export default function Header({
                 </View>
               </TouchableOpacity>
             </ScrollView>
-            
+
             <View style={styles.sidebarFooter}>
               <Text style={styles.versionText}>v1.0.0</Text>
             </View>
@@ -443,15 +443,15 @@ export default function Header({
       visible={showProfile}
       onRequestClose={() => setShowProfile(false)}
     >
-      <TouchableOpacity 
-        style={styles.modalOverlay} 
-        activeOpacity={1} 
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
         onPress={() => setShowProfile(false)}
       >
         <View style={styles.profileModalContainer}>
           <TouchableOpacity activeOpacity={1} style={styles.profileModalCard}>
             {/* Close Button */}
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowProfile(false)}
               style={styles.profileCloseButton}
             >
@@ -465,10 +465,10 @@ export default function Header({
                   {(user?.name || 'U').split(' ').map((n: any) => n[0]).join('').toUpperCase().substring(0, 2)}
                 </Text>
               </View>
-              
+
               <Text style={styles.profileName}>{user?.name || 'User'}</Text>
               <Text style={styles.profileEmail}>{user?.email || 'user@example.com'}</Text>
-              
+
               <View style={styles.roleBadge}>
                 <Text style={styles.roleBadgeText}>{user?.role || 'Employee'}</Text>
               </View>
@@ -478,17 +478,17 @@ export default function Header({
 
             {/* Actions Section */}
             <View style={styles.profileActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.profileActionItem}
                 onPress={() => {
                   setShowProfile(false);
                   navigation.navigate('Profile');
                 }}
               >
-               
+
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.profileActionItem}
                 onPress={() => {
                   setShowProfile(false);
@@ -499,7 +499,7 @@ export default function Header({
                 <Text style={styles.profileActionText}>Account Settings</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.profileActionItem, styles.signOutAction]}
                 onPress={() => {
                   setShowProfile(false);
@@ -522,7 +522,7 @@ export default function Header({
       {showTrialBanner && bannerVisible && (
         <TrialBanner onClose={() => setBannerVisible(false)} />
       )}
-      
+
       <View style={styles.headerContent}>
         <View style={styles.leftSection}>
           {showBackButton ? (
@@ -534,7 +534,7 @@ export default function Header({
               <Menu size={24} color="#1e293b" />
             </TouchableOpacity>
           ) : null}
-          
+
           <Text style={styles.title} numberOfLines={1}>
             {title || 'CALTIMS'}
           </Text>
@@ -542,8 +542,8 @@ export default function Header({
 
         <View style={styles.rightSection}>
           {showNotification && (
-            <TouchableOpacity 
-              onPress={() => setShowNotifications(true)} 
+            <TouchableOpacity
+              onPress={() => setShowNotifications(true)}
               style={styles.iconButton}
             >
               <Bell size={24} color="#1e293b" />
@@ -554,8 +554,8 @@ export default function Header({
               )}
             </TouchableOpacity>
           )}
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             onPress={() => setShowProfile(true)}
             style={styles.profileButton}
           >
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
     height: verticalScale(32),
     borderRadius: scale(16),
     backgroundColor: '#6366f1',
-    alignItems: 'center', 
+    alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitial: {
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'center', 
+    alignItems: 'center',
     justifyContent: 'space-between',
     padding: scale(20),
     borderBottomWidth: 1,
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
   sidebarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', 
+    justifyContent: 'space-between',
     padding: scale(20),
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
@@ -781,14 +781,14 @@ const styles = StyleSheet.create({
   },
   sidebarItemText: {
     fontSize: moderateScale(15),
-    fontWeight: '500', 
+    fontWeight: '500',
     color: '#475569',
     marginLeft: scale(12),
   },
   sidebarDivider: {
     height: 1,
     backgroundColor: '#f1f5f9',
-    marginVertical: verticalScale(12), 
+    marginVertical: verticalScale(12),
     marginHorizontal: scale(16),
   },
   logoutItem: {

@@ -591,7 +591,7 @@ const ExportModal = memo(({ visible, onClose, onExport, isExporting }: any) => {
       <View style={exportModalStyles.overlay}>
         <View style={exportModalStyles.container}>
           <View style={exportModalStyles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10) }}>
               <Download size={24} color="#3b82f6" />
               <Text style={exportModalStyles.title}>Export Tasks</Text>
             </View>
@@ -1175,7 +1175,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
           {loading && !refreshing ? (
             <View style={[styles.loadingContainer, { backgroundColor: 'transparent', paddingVertical: 48 }]}>
               <ActivityIndicator size="large" color="#3b82f6" />
-              <Text style={{ marginTop: 12, color: '#64748b', fontSize: 13 }}>Loading tasks...</Text>
+              <Text style={{ marginTop: verticalScale(12), color: '#64748b', fontSize: moderateScale(13) }}>Loading tasks...</Text>
             </View>
           ) : tasks.length === 0 ? (
             <View style={styles.emptyContainer}>

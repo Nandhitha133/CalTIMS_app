@@ -121,60 +121,38 @@ export async function exportFile(
       } catch (writeError: any) {
         console.warn('[exportFile] Direct write to Downloads failed:', writeError);
 
-        // Android 11+ Scoped Storage fallback: Ask to go to Settings or write to Cache and open
-        Alert.alert(
-          'Storage Access Required',
-          `To save files directly to your "Download" folder, CALTIMS requires "All Files Access".\n\nWould you like to enable this in Settings, or download it to Cache and Open it instead?`,
-          [
-            {
-              text: ' Open',
-              onPress: async () => {
-                try {
-                  const cachePath = Platform.OS === 'android' && RNFS.ExternalCachesDirectoryPath
-                    ? `${RNFS.ExternalCachesDirectoryPath}/${fileName}`
-                    : `${RNFS.CachesDirectoryPath}/${fileName}`;
-                  if (isBase64) {
-                    await RNFS.writeFile(cachePath, content, 'base64');
-                  } else {
-                    await RNFS.writeFile(cachePath, finalContent, 'utf8');
-                  }
+        // Android 11+ Scoped Storage fallback: automatically write to Cache and ask to open
+        try {
+          const cachePath = Platform.OS === 'android' && RNFS.ExternalCachesDirectoryPath
+            ? `${RNFS.ExternalCachesDirectoryPath}/${fileName}`
+            : `${RNFS.CachesDirectoryPath}/${fileName}`;
+          if (isBase64) {
+            await RNFS.writeFile(cachePath, content, 'base64');
+          } else {
+            await RNFS.writeFile(cachePath, finalContent, 'utf8');
+          }
 
-                  Alert.alert(
-                    'Download Complete',
-                    `File downloaded to secure Cache storage.\n\nWould you like to open it now?`,
-                    [
-                      { text: 'Cancel' },
-                      {
-                        text: 'Open File',
-                        onPress: async () => {
-                          try {
-                            await FileViewer.openFile(cachePath, fileType);
-                          } catch (openErr) {
-                            Alert.alert('Error', 'No application found to open this file.');
-                          }
-                        }
-                      }
-                    ]
-                  );
-                } catch (e) {
-                  Alert.alert('Error', 'Failed to save file to Cache.');
+          Alert.alert(
+            'Download Complete',
+            `File downloaded to secure Cache storage.\n\nWould you like to open it now?`,
+            [
+              { text: 'Cancel' },
+              {
+                text: 'Open File',
+                onPress: async () => {
+                  try {
+                    await FileViewer.openFile(cachePath, fileType);
+                  } catch (openErr) {
+                    Alert.alert('Error', 'No application found to open this file.');
+                  }
                 }
               }
-            },
-            {
-              text: 'Go to Settings',
-              onPress: async () => {
-                const { Linking } = require('react-native');
-                try {
-                  await Linking.openSettings();
-                } catch (e) {
-                  Alert.alert('Error', 'Could not open settings page.');
-                }
-              }
-            }
-          ]
-        );
-        return false;
+            ]
+          );
+        } catch (e) {
+          Alert.alert('Error', 'Failed to save file to Cache.');
+        }
+        return true;
       }
     }
 

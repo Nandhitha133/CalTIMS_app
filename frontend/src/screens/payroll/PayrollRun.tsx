@@ -326,21 +326,21 @@ export default function PayrollRun() {
                 <Text style={styles.breakdownHeader}>EMPLOYEE BREAKDOWN</Text>
                 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={{ minWidth: 770 }}>
+                  <View style={{ minWidth: scale(800) }}>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableCol, { width: 180, flex: 0, textAlign: 'left' }]}>EMPLOYEE</Text>
-                      <Text style={[styles.tableCol, { width: 80, flex: 0 }]}>TOTAL DAYS</Text>
-                      <Text style={[styles.tableCol, { width: 90, flex: 0 }]}>ADJ. WORKING</Text>
-                      <Text style={[styles.tableCol, { width: 80, flex: 0 }]}>PRESENT</Text>
-                      <Text style={[styles.tableCol, { width: 60, flex: 0 }]}>LOP</Text>
-                      <Text style={[styles.tableCol, { width: 70, flex: 0 }]}>OT HRS</Text>
-                      <Text style={[styles.tableCol, { width: 110, flex: 0, textAlign: 'right' }]}>ADJUSTED GROSS</Text>
-                      <Text style={[styles.tableCol, { width: 100, flex: 0, textAlign: 'right', color: '#6366f1' }]}>FINAL NET</Text>
+                      <Text style={[styles.tableCol, { width: scale(180), flex: 0, textAlign: 'left' }]}>EMPLOYEE</Text>
+                      <Text style={[styles.tableCol, { width: scale(80), flex: 0 }]}>TOTAL DAYS</Text>
+                      <Text style={[styles.tableCol, { width: scale(90), flex: 0 }]}>ADJ. WORKING</Text>
+                      <Text style={[styles.tableCol, { width: scale(80), flex: 0 }]}>PRESENT</Text>
+                      <Text style={[styles.tableCol, { width: scale(60), flex: 0 }]}>LOP</Text>
+                      <Text style={[styles.tableCol, { width: scale(70), flex: 0 }]}>OT HRS</Text>
+                      <Text style={[styles.tableCol, { width: scale(110), flex: 0, textAlign: 'right' }]}>ADJUSTED GROSS</Text>
+                      <Text style={[styles.tableCol, { width: scale(100), flex: 0, textAlign: 'right', color: '#6366f1' }]}>FINAL NET</Text>
                     </View>
 
                     {previewData.breakdown && previewData.breakdown.map((row: any, idx: number) => (
                       <View key={idx} style={[styles.tableRow, idx % 2 !== 0 && { backgroundColor: '#f8fafc' }]}>
-                        <View style={[styles.tableCell, { width: 180, flex: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+                        <View style={[styles.tableCell, { width: scale(180), flex: 0, flexDirection: 'row', alignItems: 'center', gap: scale(10) }]}>
                           <View style={styles.avatarMini}>
                             <Text style={styles.avatarMiniText}>{row.name ? row.name[0].toUpperCase() : 'U'}</Text>
                           </View>
@@ -351,19 +351,19 @@ export default function PayrollRun() {
                         </View>
                         
                         {row.status === 'ERROR' ? (
-                          <View style={{ width: 590, flex: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                             <AlertCircle size={14} color="#ef4444" style={{ marginRight: 6 }} />
-                             <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '700' }}>Calculation Failed: {row.error}</Text>
+                          <View style={{ width: scale(590), flex: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                             <AlertCircle size={14} color="#ef4444" style={{ marginRight: scale(6) }} />
+                             <Text style={{ color: '#ef4444', fontSize: moderateScale(12), fontWeight: '700' }}>Calculation Failed: {row.error}</Text>
                           </View>
                         ) : (
                           <>
-                            <Text style={[styles.tableCell, { width: 80, flex: 0, color: '#64748b' }]}>{row.standardMonthlyDays || 0}</Text>
-                            <Text style={[styles.tableCell, { width: 90, flex: 0, color: '#4f46e5' }]}>{row.working || 0}</Text>
-                            <Text style={[styles.tableCell, { width: 80, flex: 0, color: '#059669' }]}>{row.present || 0}</Text>
-                            <Text style={[styles.tableCell, { width: 60, flex: 0, color: '#ef4444' }]}>{row.lop || 0}</Text>
-                            <Text style={[styles.tableCell, { width: 70, flex: 0, color: '#64748b' }]}>{row.overtimeHours || 0}</Text>
-                            <Text style={[styles.tableCell, { width: 110, flex: 0, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{row.adjustedGross?.toLocaleString() || '0.00'}</Text>
-                            <Text style={[styles.tableCell, { width: 100, flex: 0, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>{currencySymbol}{row.net?.toLocaleString() || '0.00'}</Text>
+                            <Text style={[styles.tableCell, { width: scale(80), flex: 0, color: '#64748b' }]}>{row.standardMonthlyDays || 0}</Text>
+                            <Text style={[styles.tableCell, { width: scale(90), flex: 0, color: '#4f46e5' }]}>{row.working || 0}</Text>
+                            <Text style={[styles.tableCell, { width: scale(80), flex: 0, color: '#059669' }]}>{row.present || 0}</Text>
+                            <Text style={[styles.tableCell, { width: scale(60), flex: 0, color: '#ef4444' }]}>{row.lop || 0}</Text>
+                            <Text style={[styles.tableCell, { width: scale(70), flex: 0, color: '#64748b' }]}>{row.overtimeHours || 0}</Text>
+                            <Text style={[styles.tableCell, { width: scale(110), flex: 0, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{row.adjustedGross?.toLocaleString() || '0.00'}</Text>
+                            <Text style={[styles.tableCell, { width: scale(100), flex: 0, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>{currencySymbol}{row.net?.toLocaleString() || '0.00'}</Text>
                           </>
                         )}
                       </View>
@@ -456,11 +456,11 @@ export default function PayrollRun() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc', padding: moderateScale(16) },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: scale(16) },
   stepContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(32) },
-  stepDot: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(16), backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  stepDot: { width: scale(32), height: verticalScale(32), borderRadius: scale(16), backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   stepDotActive: { backgroundColor: '#6366f1' },
-  stepDotCurrent: { shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  stepDotCurrent: { shadowColor: '#6366f1', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.3, shadowRadius: scale(8), elevation: 6 },
   stepText: { color: '#64748b', fontWeight: '800', fontSize: moderateScale(14) },
   stepTextActive: { color: '#fff' },
   stepLine: { height: verticalScale(3), width: (width - scale(160)) / 3, backgroundColor: '#e2e8f0', marginHorizontal: scale(-4), zIndex: 1 },
@@ -468,83 +468,83 @@ const styles = StyleSheet.create({
   
   card: { 
     backgroundColor: '#fff', 
-    borderRadius: moderateScale(24), 
-    padding: moderateScale(24), 
+    borderRadius: scale(24), 
+    padding: scale(24), 
     borderWidth: 1, 
     borderColor: '#f1f5f9',
     shadowColor: '#64748b',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: verticalScale(10) },
     shadowOpacity: 0.05,
-    shadowRadius: 20,
+    shadowRadius: scale(20),
     elevation: 4
   },
-  iconWrapper: { alignSelf: 'center', backgroundColor: '#eef2ff', padding: moderateScale(20), borderRadius: moderateScale(24), marginBottom: verticalScale(20) },
+  iconWrapper: { alignSelf: 'center', backgroundColor: '#eef2ff', padding: scale(20), borderRadius: scale(24), marginBottom: verticalScale(20) },
   cardTitle: { fontSize: moderateScale(22), fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: verticalScale(8) },
   cardSubtitle: { fontSize: moderateScale(13), color: '#64748b', textAlign: 'center', marginBottom: verticalScale(24), lineHeight: verticalScale(20), paddingHorizontal: scale(16) },
   
   inputGroup: { marginBottom: verticalScale(20) },
   label: { fontSize: moderateScale(12), fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: verticalScale(8), letterSpacing: 0.5 },
-  pickerFake: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: moderateScale(16), borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0' },
+  pickerFake: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: scale(16), borderRadius: scale(16), borderWidth: 1, borderColor: '#e2e8f0' },
   pickerFakeText: { fontSize: moderateScale(16), color: '#1e293b', fontWeight: '600' },
   
-  primaryBtn: { backgroundColor: '#6366f1', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1, shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  primaryBtn: { backgroundColor: '#6366f1', padding: scale(16), borderRadius: scale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1, shadowColor: '#6366f1', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.3, shadowRadius: scale(8), elevation: 4 },
   primaryBtnText: { color: '#fff', fontSize: moderateScale(16), fontWeight: '700', letterSpacing: 0.5 },
-  secondaryBtn: { backgroundColor: '#f1f5f9', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1 },
+  secondaryBtn: { backgroundColor: '#f1f5f9', padding: scale(16), borderRadius: scale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1 },
   secondaryBtnText: { color: '#475569', fontSize: moderateScale(16), fontWeight: '700' },
-  executeBtn: { backgroundColor: '#10b981', padding: moderateScale(16), borderRadius: moderateScale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1, shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  executeBtn: { backgroundColor: '#10b981', padding: scale(16), borderRadius: scale(16), alignItems: 'center', marginTop: verticalScale(8), flex: 1, shadowColor: '#10b981', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.3, shadowRadius: scale(8), elevation: 4 },
   executeBtnText: { color: '#fff', fontSize: moderateScale(16), fontWeight: '700', letterSpacing: 0.5 },
-  actions: { flexDirection: 'row', gap: moderateScale(12), marginTop: verticalScale(8) },
+  actions: { flexDirection: 'row', gap: scale(12), marginTop: verticalScale(8) },
   
-  readinessGrid: { gap: moderateScale(12), marginBottom: verticalScale(24) },
-  readinessBox: { padding: moderateScale(16), borderRadius: moderateScale(16), borderLeftWidth: 4 },
-  readinessHeader: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8), marginBottom: verticalScale(8) },
+  readinessGrid: { gap: scale(12), marginBottom: verticalScale(24) },
+  readinessBox: { padding: scale(16), borderRadius: scale(16), borderLeftWidth: 4 },
+  readinessHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: verticalScale(8) },
   readinessLabel: { fontSize: moderateScale(12), fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   readinessValue: { fontSize: moderateScale(28), fontWeight: '800' },
   
   previewHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: verticalScale(16) },
-  overtimeSwitchContainer: { alignItems: 'flex-end', backgroundColor: '#f8fafc', paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0' },
+  overtimeSwitchContainer: { alignItems: 'flex-end', backgroundColor: '#f8fafc', paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: scale(12), borderWidth: 1, borderColor: '#e2e8f0' },
   overtimeSwitchLabel: { fontSize: moderateScale(9), fontWeight: '800', color: '#94a3b8', marginBottom: verticalScale(2) },
   overtimeSwitchValue: { fontSize: moderateScale(11), fontWeight: '800', color: '#64748b' },
   
-  topActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: moderateScale(12), marginBottom: verticalScale(24) },
-  headerBackBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
+  topActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: scale(12), marginBottom: verticalScale(24) },
+  headerBackBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(12), borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff' },
   headerBackBtnText: { fontSize: moderateScale(13), fontWeight: '700', color: '#64748b' },
-  headerRunBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: moderateScale(12), backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 2 },
+  headerRunBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(12), backgroundColor: '#10b981', shadowColor: '#10b981', shadowOffset: { width: 0, height: verticalScale(2) }, shadowOpacity: 0.3, shadowRadius: scale(4), elevation: 2 },
   headerRunBtnText: { fontSize: moderateScale(13), fontWeight: '700', color: '#fff' },
 
-  statCardsScroll: { gap: moderateScale(12), paddingBottom: verticalScale(16), marginBottom: verticalScale(8) },
-  statCardInline: { padding: moderateScale(16), borderRadius: moderateScale(16), minWidth: scale(140) },
+  statCardsScroll: { gap: scale(12), paddingBottom: verticalScale(16), marginBottom: verticalScale(8) },
+  statCardInline: { padding: scale(16), borderRadius: scale(16), minWidth: scale(140) },
   statCardInlineLabel: { fontSize: moderateScale(10), fontWeight: '800', color: '#94a3b8', marginBottom: verticalScale(8) },
   statCardInlineValue: { fontSize: moderateScale(20), fontWeight: '800' },
 
-  breakdownContainer: { marginTop: verticalScale(16), borderWidth: 1, borderColor: '#f1f5f9', borderRadius: moderateScale(16), overflow: 'hidden' },
-  breakdownHeader: { fontSize: moderateScale(11), fontWeight: '800', color: '#94a3b8', padding: moderateScale(16), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  breakdownContainer: { marginTop: verticalScale(16), borderWidth: 1, borderColor: '#f1f5f9', borderRadius: scale(16), overflow: 'hidden' },
+  breakdownHeader: { fontSize: moderateScale(11), fontWeight: '800', color: '#94a3b8', padding: scale(16), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   
   tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   tableCol: { flex: 1, fontSize: moderateScale(9), fontWeight: '800', color: '#94a3b8', textAlign: 'center' },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(12), paddingHorizontal: scale(16), backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
   tableCell: { flex: 1, fontSize: moderateScale(12), fontWeight: '700', textAlign: 'center' },
   
-  avatarMini: { width: scale(32), height: verticalScale(32), borderRadius: moderateScale(10), backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
+  avatarMini: { width: scale(32), height: verticalScale(32), borderRadius: scale(10), backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
   avatarMiniText: { fontSize: moderateScale(12), fontWeight: '800', color: '#4f46e5' },
   employeeName: { fontSize: moderateScale(11), fontWeight: '800', color: '#0f172a' },
   employeeId: { fontSize: moderateScale(9), fontWeight: '700', color: '#94a3b8' },
 
-  successIconWrapper: { backgroundColor: '#ecfdf5', padding: moderateScale(24), borderRadius: moderateScale(64) },
+  successIconWrapper: { backgroundColor: '#ecfdf5', padding: scale(24), borderRadius: scale(64) },
   successDesc: { textAlign: 'center', color: '#64748b', marginTop: verticalScale(12), fontSize: moderateScale(14), lineHeight: verticalScale(22), paddingHorizontal: scale(20) },
   
-  successActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: moderateScale(12) },
-  successGhostBtn: { paddingHorizontal: scale(20), paddingVertical: verticalScale(14), borderRadius: moderateScale(16) },
+  successActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: scale(12) },
+  successGhostBtn: { paddingHorizontal: scale(20), paddingVertical: verticalScale(14), borderRadius: scale(16) },
   successGhostBtnText: { fontSize: moderateScale(14), fontWeight: '800', color: '#475569' },
-  successPrimaryBtn: { backgroundColor: '#4f46e5', paddingHorizontal: scale(24), paddingVertical: verticalScale(14), borderRadius: moderateScale(16), shadowColor: '#4f46e5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  successPrimaryBtn: { backgroundColor: '#4f46e5', paddingHorizontal: scale(24), paddingVertical: verticalScale(14), borderRadius: scale(16), shadowColor: '#4f46e5', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.3, shadowRadius: scale(8), elevation: 4 },
   successPrimaryBtnText: { fontSize: moderateScale(14), fontWeight: '800', color: '#fff' },
-  successOutlineBtn: { backgroundColor: '#fff', paddingHorizontal: scale(24), paddingVertical: verticalScale(14), borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0' },
+  successOutlineBtn: { backgroundColor: '#fff', paddingHorizontal: scale(24), paddingVertical: verticalScale(14), borderRadius: scale(16), borderWidth: 1, borderColor: '#e2e8f0' },
   successOutlineBtnText: { fontSize: moderateScale(14), fontWeight: '800', color: '#0f172a' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: moderateScale(24), borderTopRightRadius: moderateScale(24), padding: moderateScale(24), paddingBottom: verticalScale(40) },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), padding: scale(24), paddingBottom: verticalScale(40) },
   modalTitle: { fontSize: moderateScale(18), fontWeight: '800', color: '#0f172a', marginBottom: verticalScale(16), textAlign: 'center' },
-  modalItem: { paddingVertical: verticalScale(16), paddingHorizontal: scale(24), borderRadius: moderateScale(16), marginBottom: verticalScale(8), backgroundColor: '#f8fafc' },
+  modalItem: { paddingVertical: verticalScale(16), paddingHorizontal: scale(24), borderRadius: scale(16), marginBottom: verticalScale(8), backgroundColor: '#f8fafc' },
   modalItemActive: { backgroundColor: '#eef2ff' },
   modalItemText: { fontSize: moderateScale(16), fontWeight: '700', color: '#475569', textAlign: 'center' },
   modalItemTextActive: { color: '#4f46e5', fontWeight: '800' }

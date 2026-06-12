@@ -140,11 +140,11 @@ export default function PayrollHistory() {
                     <View style={styles.runAvatar}>
                       <Archive size={20} color="#6366f1" />
                     </View>
-                    <View>
-                      <Text style={styles.runId}>{months[run.month - 1]} {run.year}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.runId} numberOfLines={1}>{months[run.month - 1]} {run.year}</Text>
                       <View style={styles.runInfo}>
                         <Users size={14} color="#64748b" />
-                        <Text style={styles.runInfoText}>{run.totalEmployees} Employees Processed</Text>
+                        <Text style={styles.runInfoText} numberOfLines={1}>{run.totalEmployees} Employees Processed</Text>
                       </View>
                     </View>
                   </View>
@@ -202,46 +202,46 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   
   statsContainer: { marginTop: verticalScale(16), marginBottom: verticalScale(24) },
-  statsScroll: { paddingHorizontal: moderateScale(16), gap: moderateScale(12) },
-  statCard: { width: scale(140), padding: moderateScale(16), borderRadius: moderateScale(24), shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5 },
-  statIconWrapper: { width: scale(40), height: verticalScale(40), borderRadius: moderateScale(20), backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(12) },
+  statsScroll: { paddingHorizontal: scale(16), gap: scale(12) },
+  statCard: { width: scale(140), padding: scale(16), borderRadius: scale(24), shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(8) }, shadowOpacity: 0.1, shadowRadius: scale(12), elevation: 5 },
+  statIconWrapper: { width: scale(40), height: verticalScale(40), borderRadius: scale(20), backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(12) },
   statValueDark: { fontSize: moderateScale(20), fontWeight: '800', color: '#fff' },
   statLabelDark: { fontSize: moderateScale(11), fontWeight: '600', color: 'rgba(255, 255, 255, 0.8)', marginTop: verticalScale(4), textTransform: 'uppercase', letterSpacing: 0.5 },
   
-  searchSection: { paddingHorizontal: moderateScale(16), marginBottom: verticalScale(24) },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: scale(16), borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0', height: verticalScale(56), shadowColor: '#64748b', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  searchSection: { paddingHorizontal: scale(16), marginBottom: verticalScale(24) },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: scale(16), borderRadius: scale(16), borderWidth: 1, borderColor: '#e2e8f0', height: verticalScale(56), shadowColor: '#64748b', shadowOffset: { width: 0, height: verticalScale(4) }, shadowOpacity: 0.05, shadowRadius: scale(8), elevation: 2 },
   searchBarFocused: { borderColor: '#6366f1', shadowOpacity: 0.1 },
   searchInput: { flex: 1, marginLeft: scale(12), fontSize: moderateScale(15), color: '#1e293b', fontWeight: '500' },
   
-  listContainer: { paddingHorizontal: moderateScale(16), gap: moderateScale(16) },
+  listContainer: { paddingHorizontal: scale(16), gap: scale(16) },
   sectionTitle: { fontSize: moderateScale(14), fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: verticalScale(4) },
   
-  runCard: { backgroundColor: '#fff', borderRadius: moderateScale(24), padding: moderateScale(20), borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.06, shadowRadius: 16, elevation: 3 },
+  runCard: { backgroundColor: '#fff', borderRadius: scale(24), padding: scale(20), borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#64748b', shadowOffset: { width: 0, height: verticalScale(8) }, shadowOpacity: 0.06, shadowRadius: scale(16), elevation: 3 },
   runHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: verticalScale(20) },
-  runTitleGroup: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(12) },
-  runAvatar: { width: scale(48), height: verticalScale(48), borderRadius: moderateScale(16), backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
+  runTitleGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(12), paddingRight: scale(8) },
+  runAvatar: { width: scale(48), height: verticalScale(48), borderRadius: scale(16), backgroundColor: '#eef2ff', justifyContent: 'center', alignItems: 'center' },
   runId: { fontSize: moderateScale(16), fontWeight: '800', color: '#0f172a', marginBottom: verticalScale(2) },
-  runInfo: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(4) },
+  runInfo: { flexDirection: 'row', alignItems: 'center', gap: scale(4) },
   runInfoText: { fontSize: moderateScale(12), color: '#64748b', fontWeight: '500' },
   
-  badge: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(6), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: moderateScale(12) },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: scale(6), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(12) },
   badgeSuccess: { backgroundColor: '#ecfdf5' },
   badgeWarning: { backgroundColor: '#fffbeb' },
-  badgeDot: { width: scale(6), height: verticalScale(6), borderRadius: moderateScale(3) },
+  badgeDot: { width: scale(6), height: verticalScale(6), borderRadius: scale(3) },
   badgeDotSuccess: { backgroundColor: '#10b981' },
   badgeDotWarning: { backgroundColor: '#f59e0b' },
   badgeText: { fontSize: moderateScale(11), fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   badgeTextSuccess: { color: '#059669' },
   badgeTextWarning: { color: '#d97706' },
   
-  runAmounts: { flexDirection: 'row', backgroundColor: '#f8fafc', padding: moderateScale(16), borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#f1f5f9' },
+  runAmounts: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: scale(16), borderRadius: scale(16), borderWidth: 1, borderColor: '#f1f5f9' },
   amountBox: { flex: 1 },
-  amountDivider: { width: 1, height: '100%', backgroundColor: '#e2e8f0', marginHorizontal: scale(16) },
+  amountDivider: { width: scale(1), height: verticalScale(30), backgroundColor: '#e2e8f0', marginHorizontal: scale(12) },
   amountLabel: { fontSize: moderateScale(11), fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: verticalScale(6), letterSpacing: 0.5 },
   amountValue: { fontSize: moderateScale(16), fontWeight: '800', color: '#0f172a' },
   
-  emptyState: { padding: moderateScale(40), alignItems: 'center', justifyContent: 'center', marginTop: verticalScale(20) },
-  emptyIconWrapper: { backgroundColor: '#f1f5f9', padding: moderateScale(20), borderRadius: moderateScale(40), marginBottom: verticalScale(16) },
+  emptyState: { padding: scale(40), alignItems: 'center', justifyContent: 'center', marginTop: verticalScale(20) },
+  emptyIconWrapper: { backgroundColor: '#f1f5f9', padding: scale(20), borderRadius: scale(40), marginBottom: verticalScale(16) },
   emptyTitle: { fontSize: moderateScale(18), fontWeight: '800', color: '#0f172a', marginBottom: verticalScale(8) },
   emptyText: { color: '#64748b', fontSize: moderateScale(14), textAlign: 'center', lineHeight: verticalScale(22) }
 });
