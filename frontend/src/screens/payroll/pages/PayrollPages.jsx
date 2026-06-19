@@ -667,19 +667,19 @@ export const EmployeePayrollProfiles = () => {
             </div>
          </div>
 
-          <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
-             <div className="overflow-x-auto max-h-[calc(100vh-420px)] overflow-y-auto scroll-smooth">
-                <table className="w-full text-left border-separate border-spacing-0">
-                   <thead className="sticky top-0 z-30">
-                      <tr className="bg-slate-50 dark:bg-[#1a1a1a] text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                         <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Employee</th>
-                         <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Role / Designation</th>
-                         <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Defined CTC</th>
-                         <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Payroll Status</th>
-                         <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Bank Status</th>
-                         <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Actions</th>
-                      </tr>
-                   </thead>
+         <div className="bg-white dark:bg-[#111111] rounded-2xl border border-slate-100 dark:border-[#333333] shadow-sm overflow-hidden flex flex-col">
+            <div className="overflow-x-auto max-h-[calc(100vh-420px)] overflow-y-auto scroll-smooth">
+               <table className="w-full text-left border-separate border-spacing-0">
+                  <thead className="sticky top-0 z-30">
+                     <tr className="bg-slate-50 dark:bg-[#1a1a1a] text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Employee</th>
+                        <th className="px-6 py-4 bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Role / Designation</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Defined CTC</th>
+                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Payroll Status</th>
+                        <th className="px-6 py-4 text-center bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Bank Status</th>
+                        <th className="px-6 py-4 text-right bg-slate-50 dark:bg-[#1a1a1a] border-b border-slate-100 dark:border-[#333333]">Actions</th>
+                     </tr>
+                  </thead>
                   <tbody className="divide-y divide-slate-50">
                      {profilesLoading ? (
                         <tr>
@@ -786,13 +786,13 @@ export const EmployeePayrollProfiles = () => {
                   <p className="text-xs font-bold text-slate-400 dark:text-gray-500">
                      Showing <span className="text-slate-900 dark:text-white">{Math.min(enrichedUsers.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900 dark:text-white">{Math.min(enrichedUsers.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900 dark:text-white">{enrichedUsers.length}</span> employees
                   </p>
-                  
+
                   <div className="h-4 w-px bg-slate-100 dark:bg-white/10 hidden sm:block" />
 
                   <div className="flex items-center gap-2">
                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rows:</span>
-                     <select 
-                        value={itemsPerPage} 
+                     <select
+                        value={itemsPerPage}
                         onChange={(e) => setItemsPerPage(Number(e.target.value))}
                         className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-md px-2 py-0.5 text-[10px] font-black text-slate-600 dark:text-gray-400 outline-none cursor-pointer"
                      >
@@ -812,13 +812,13 @@ export const EmployeePayrollProfiles = () => {
                      >
                         <ChevronLeft size={16} />
                      </button>
-                     
+
                      <div className="flex items-center gap-1 mx-1">
                         {[...Array(totalPages)].map((_, idx) => {
                            // Show first, last, and pages around current
                            if (
-                              idx === 0 || 
-                              idx === totalPages - 1 || 
+                              idx === 0 ||
+                              idx === totalPages - 1 ||
                               (idx >= currentPage - 2 && idx <= currentPage)
                            ) {
                               return (
@@ -862,184 +862,184 @@ export const EmployeePayrollProfiles = () => {
             danger
          />
 
-          {/* Clean Profile View Modal */}
-          <Modal
+         {/* Clean Profile View Modal */}
+         <Modal
             isOpen={viewModal.isOpen}
             onClose={() => setViewModal({ isOpen: false, data: null })}
             title="Employee Payroll Profile"
             maxWidth="3xl"
-          >
+         >
             {viewModal.data && (
-              <div className="space-y-10 p-2">
-                {/* Header Section: Premium Profile Card */}
-                <div className="relative overflow-hidden p-8 bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-16 -mt-16" />
-                   <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex items-center gap-6">
-                         <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-3xl font-black shadow-xl shadow-indigo-200 dark:shadow-none rotate-3 hover:rotate-0 transition-transform duration-500">
-                            {viewModal.data.user.name.charAt(0)}
-                         </div>
-                         <div>
-                            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{viewModal.data.user.name}</h3>
-                            <div className="flex items-center gap-3 mt-2 flex-wrap text-[10px] font-black uppercase tracking-[0.2em]">
-                               <span className="text-indigo-600 dark:text-indigo-400">{viewModal.data.user.designation || 'Staff'}</span>
-                               <span className="w-1 h-1 bg-slate-200 dark:bg-gray-700 rounded-full" />
-                               <span className="text-slate-500 dark:text-gray-400">{viewModal.data.user.department}</span>
-                               <span className="w-1 h-1 bg-slate-200 dark:bg-gray-700 rounded-full" />
-                               <span className="text-slate-400 dark:text-gray-500">ID: {viewModal.data.user.employeeId}</span>
-                            </div>
-                         </div>
-                      </div>
-                      <div className="flex flex-col items-start md:items-end p-5 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 min-w-[180px]">
-                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-2">Annual Package (CTC)</span>
-                         <p className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">
-                            {currencySymbol}{formatCurrency(viewModal.data.profile.annualCTC || (viewModal.data.profile.monthlyCTC * 12))}
-                         </p>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
-                   {/* Column 1: Financial Structure (60%) */}
-                   <div className="lg:col-span-3 space-y-8">
-                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-4">
-                         <h4 className="flex items-center gap-3 text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
-                            <Calculator size={16} className="text-indigo-500" /> Monthly Breakdown
-                         </h4>
-                      </div>
-
-                      <div className="space-y-8">
-                        {/* Earnings Section */}
-                        <div className="space-y-4">
-                           <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-2 border-l-2 border-emerald-500">Earnings (Payable)</p>
-                           <div className="bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-3xl p-6 space-y-4 shadow-sm group hover:border-emerald-500/20 transition-all">
-                              {viewModal.data.breakdown.earnings.map((e, idx) => (
-                                 <div key={idx} className="flex justify-between items-center group/row">
-                                    <span className="text-xs font-bold text-slate-600 dark:text-gray-400 group-hover/row:text-slate-900 dark:group-hover/row:text-white transition-colors">{e.name}</span>
-                                    <span className="text-xs font-black text-slate-900 dark:text-white">{currencySymbol}{formatCurrency(e.calculatedValue)}</span>
-                                 </div>
-                              ))}
-                              <div className="pt-4 mt-2 border-t border-slate-50 dark:border-white/5 flex justify-between items-center">
-                                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Total Monthly Gross</span>
-                                 <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{currencySymbol}{formatCurrency(viewModal.data.breakdown.grossPay)}</span>
+               <div className="space-y-10 p-2">
+                  {/* Header Section: Premium Profile Card */}
+                  <div className="relative overflow-hidden p-8 bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-16 -mt-16" />
+                     <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div className="flex items-center gap-6">
+                           <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-3xl font-black shadow-xl shadow-indigo-200 dark:shadow-none rotate-3 hover:rotate-0 transition-transform duration-500">
+                              {viewModal.data.user.name.charAt(0)}
+                           </div>
+                           <div>
+                              <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{viewModal.data.user.name}</h3>
+                              <div className="flex items-center gap-3 mt-2 flex-wrap text-[10px] font-black uppercase tracking-[0.2em]">
+                                 <span className="text-indigo-600 dark:text-indigo-400">{viewModal.data.user.designation || 'Staff'}</span>
+                                 <span className="w-1 h-1 bg-slate-200 dark:bg-gray-700 rounded-full" />
+                                 <span className="text-slate-500 dark:text-gray-400">{viewModal.data.user.department}</span>
+                                 <span className="w-1 h-1 bg-slate-200 dark:bg-gray-700 rounded-full" />
+                                 <span className="text-slate-400 dark:text-gray-500">ID: {viewModal.data.user.employeeId}</span>
                               </div>
                            </div>
                         </div>
+                        <div className="flex flex-col items-start md:items-end p-5 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 min-w-[180px]">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-2">Annual Package (CTC)</span>
+                           <p className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">
+                              {currencySymbol}{formatCurrency(viewModal.data.profile.annualCTC || (viewModal.data.profile.monthlyCTC * 12))}
+                           </p>
+                        </div>
+                     </div>
+                  </div>
 
-                        {/* Deductions Section */}
-                        <div className="space-y-4">
-                           <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-2 border-l-2 border-rose-500">Deductions (Subtractions)</p>
-                           <div className="bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-3xl p-6 space-y-4 shadow-sm group hover:border-rose-500/20 transition-all">
-                              {/* Statutory Components */}
-                              {viewModal.data.breakdown.statutoryDeductions?.length > 0 && (
-                                 <div className="space-y-3 mb-4 pb-4 border-b border-slate-50 dark:border-white/5">
-                                    {viewModal.data.breakdown.statutoryDeductions.map((d, idx) => (
-                                       <div key={`stat-${idx}`} className="flex justify-between items-center opacity-80">
-                                          <div className="flex items-center gap-2">
-                                             <Shield size={12} className="text-indigo-400" />
-                                             <span className="text-xs font-medium text-slate-500 italic">{d.name}</span>
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
+                     {/* Column 1: Financial Structure (60%) */}
+                     <div className="lg:col-span-3 space-y-8">
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-4">
+                           <h4 className="flex items-center gap-3 text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
+                              <Calculator size={16} className="text-indigo-500" /> Monthly Breakdown
+                           </h4>
+                        </div>
+
+                        <div className="space-y-8">
+                           {/* Earnings Section */}
+                           <div className="space-y-4">
+                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-2 border-l-2 border-emerald-500">Earnings (Payable)</p>
+                              <div className="bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-3xl p-6 space-y-4 shadow-sm group hover:border-emerald-500/20 transition-all">
+                                 {viewModal.data.breakdown.earnings.map((e, idx) => (
+                                    <div key={idx} className="flex justify-between items-center group/row">
+                                       <span className="text-xs font-bold text-slate-600 dark:text-gray-400 group-hover/row:text-slate-900 dark:group-hover/row:text-white transition-colors">{e.name}</span>
+                                       <span className="text-xs font-black text-slate-900 dark:text-white">{currencySymbol}{formatCurrency(e.calculatedValue)}</span>
+                                    </div>
+                                 ))}
+                                 <div className="pt-4 mt-2 border-t border-slate-50 dark:border-white/5 flex justify-between items-center">
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Total Monthly Gross</span>
+                                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{currencySymbol}{formatCurrency(viewModal.data.breakdown.grossPay)}</span>
+                                 </div>
+                              </div>
+                           </div>
+
+                           {/* Deductions Section */}
+                           <div className="space-y-4">
+                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-2 border-l-2 border-rose-500">Deductions (Subtractions)</p>
+                              <div className="bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-3xl p-6 space-y-4 shadow-sm group hover:border-rose-500/20 transition-all">
+                                 {/* Statutory Components */}
+                                 {viewModal.data.breakdown.statutoryDeductions?.length > 0 && (
+                                    <div className="space-y-3 mb-4 pb-4 border-b border-slate-50 dark:border-white/5">
+                                       {viewModal.data.breakdown.statutoryDeductions.map((d, idx) => (
+                                          <div key={`stat-${idx}`} className="flex justify-between items-center opacity-80">
+                                             <div className="flex items-center gap-2">
+                                                <Shield size={12} className="text-indigo-400" />
+                                                <span className="text-xs font-medium text-slate-500 italic">{d.name}</span>
+                                             </div>
+                                             <span className="text-xs font-black text-rose-500/80">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
                                           </div>
-                                          <span className="text-xs font-black text-rose-500/80">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
-                                       </div>
-                                    ))}
+                                       ))}
+                                    </div>
+                                 )}
+                                 {/* Regular Deductions */}
+                                 {viewModal.data.breakdown.deductions.map((d, idx) => (
+                                    <div key={idx} className="flex justify-between items-center group/row">
+                                       <span className="text-xs font-bold text-slate-600 dark:text-gray-400 group-hover/row:text-slate-900 dark:group-hover/row:text-white transition-colors">{d.name}</span>
+                                       <span className="text-xs font-black text-rose-600 dark:text-rose-400">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
+                                    </div>
+                                 ))}
+                                 <div className="pt-4 mt-2 border-t border-slate-50 dark:border-white/5 flex justify-between items-center">
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Total Monthly Deductions</span>
+                                    <span className="text-sm font-black text-rose-600 dark:text-rose-400">{currencySymbol}{formatCurrency(viewModal.data.breakdown.totalDeductions)}</span>
                                  </div>
-                              )}
-                              {/* Regular Deductions */}
-                              {viewModal.data.breakdown.deductions.map((d, idx) => (
-                                 <div key={idx} className="flex justify-between items-center group/row">
-                                    <span className="text-xs font-bold text-slate-600 dark:text-gray-400 group-hover/row:text-slate-900 dark:group-hover/row:text-white transition-colors">{d.name}</span>
-                                    <span className="text-xs font-black text-rose-600 dark:text-rose-400">{currencySymbol}{formatCurrency(d.calculatedValue)}</span>
-                                 </div>
-                              ))}
-                              <div className="pt-4 mt-2 border-t border-slate-50 dark:border-white/5 flex justify-between items-center">
-                                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Total Monthly Deductions</span>
-                                 <span className="text-sm font-black text-rose-600 dark:text-rose-400">{currencySymbol}{formatCurrency(viewModal.data.breakdown.totalDeductions)}</span>
                               </div>
                            </div>
                         </div>
-                      </div>
-                   </div>
+                     </div>
 
-                   {/* Column 2: Details & Status (40%) */}
-                   <div className="lg:col-span-2 space-y-8">
-                       <div className="flex items-center border-b border-slate-100 dark:border-white/5 pb-4">
-                          <h4 className="flex items-center gap-3 text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
-                             <Landmark size={16} className="text-emerald-500" /> Compliance Details
-                          </h4>
-                       </div>
+                     {/* Column 2: Details & Status (40%) */}
+                     <div className="lg:col-span-2 space-y-8">
+                        <div className="flex items-center border-b border-slate-100 dark:border-white/5 pb-4">
+                           <h4 className="flex items-center gap-3 text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">
+                              <Landmark size={16} className="text-emerald-500" /> Compliance Details
+                           </h4>
+                        </div>
 
-                       <div className="space-y-4">
-                          <div className="group p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-transparent hover:border-indigo-100 dark:hover:border-indigo-500/20 transition-all space-y-6">
-                             <div className="flex items-center gap-2 mb-2">
-                                <div className="w-2 h-2 bg-indigo-500 rounded-full" />
-                                <span className="text-[10px] font-black uppercase text-slate-600 dark:text-gray-400 tracking-wider">Beneficiary Bank</span>
-                             </div>
-                             <div className="grid grid-cols-1 gap-4">
-                                <div>
-                                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Institution</label>
-                                   <p className="text-sm font-black text-slate-800 dark:text-white group-hover:text-indigo-600 transition-colors uppercase">{viewModal.data.user.bankName || 'Not Set'}</p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                   <div>
-                                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Acc Number</label>
-                                      <p className="text-sm font-bold text-slate-700 dark:text-gray-300 tabular-nums">{viewModal.data.user.accountNumber || '—'}</p>
-                                   </div>
-                                   <div>
-                                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">IFSC Code</label>
-                                      <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{viewModal.data.user.ifscCode || '—'}</p>
-                                   </div>
-                                </div>
-                             </div>
-                          </div>
+                        <div className="space-y-4">
+                           <div className="group p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-transparent hover:border-indigo-100 dark:hover:border-indigo-500/20 transition-all space-y-6">
+                              <div className="flex items-center gap-2 mb-2">
+                                 <div className="w-2 h-2 bg-indigo-500 rounded-full" />
+                                 <span className="text-[10px] font-black uppercase text-slate-600 dark:text-gray-400 tracking-wider">Beneficiary Bank</span>
+                              </div>
+                              <div className="grid grid-cols-1 gap-4">
+                                 <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Institution</label>
+                                    <p className="text-sm font-black text-slate-800 dark:text-white group-hover:text-indigo-600 transition-colors uppercase">{viewModal.data.user.bankName || 'Not Set'}</p>
+                                 </div>
+                                 <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Acc Number</label>
+                                       <p className="text-sm font-bold text-slate-700 dark:text-gray-300 tabular-nums">{viewModal.data.user.accountNumber || '—'}</p>
+                                    </div>
+                                    <div>
+                                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">IFSC Code</label>
+                                       <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{viewModal.data.user.ifscCode || '—'}</p>
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
 
-                          <div className="group p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-transparent hover:border-emerald-100 dark:hover:border-emerald-500/20 transition-all space-y-6">
-                             <div className="flex items-center gap-2 mb-2">
-                                <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                                <span className="text-[10px] font-black uppercase text-slate-600 dark:text-gray-400 tracking-wider">Tax Identity</span>
-                             </div>
-                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">PAN Number</label>
-                                   <p className="text-sm font-black text-slate-800 dark:text-white font-mono tracking-wider">{viewModal.data.user.pan || '—'}</p>
-                                </div>
-                                <div>
-                                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">UAN (Universal)</label>
-                                   <p className="text-sm font-bold text-slate-700 dark:text-gray-300 tabular-nums">{viewModal.data.user.uan || '—'}</p>
-                                </div>
-                             </div>
-                          </div>
+                           <div className="group p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-transparent hover:border-emerald-100 dark:hover:border-emerald-500/20 transition-all space-y-6">
+                              <div className="flex items-center gap-2 mb-2">
+                                 <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                                 <span className="text-[10px] font-black uppercase text-slate-600 dark:text-gray-400 tracking-wider">Tax Identity</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                 <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">PAN Number</label>
+                                    <p className="text-sm font-black text-slate-800 dark:text-white font-mono tracking-wider">{viewModal.data.user.pan || '—'}</p>
+                                 </div>
+                                 <div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">UAN (Universal)</label>
+                                    <p className="text-sm font-bold text-slate-700 dark:text-gray-300 tabular-nums">{viewModal.data.user.uan || '—'}</p>
+                                 </div>
+                              </div>
+                           </div>
 
-                          <div className="p-8 bg-slate-900 dark:bg-[#050505] rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
-                             <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-700"><DollarSign size={150} /></div>
-                             <div className="relative z-10 space-y-4">
-                                <div className="space-y-1">
-                                   <span className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40">Estimate Payout</span>
-                                   <h4 className="text-4xl font-black text-white tracking-tighter">
-                                      {currencySymbol}{formatCurrency(viewModal.data.breakdown.netSalary)}
-                                   </h4>
-                                </div>
-                                <p className="text-[9px] font-bold text-white/30 uppercase tracking-[0.1em] border-t border-white/5 pt-3">Calculated Monthly Take-Home</p>
-                             </div>
-                          </div>
-                       </div>
-                   </div>
-                </div>
+                           <div className="p-8 bg-slate-900 dark:bg-[#050505] rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+                              <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-700"><DollarSign size={150} /></div>
+                              <div className="relative z-10 space-y-4">
+                                 <div className="space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40">Estimate Payout</span>
+                                    <h4 className="text-4xl font-black text-white tracking-tighter">
+                                       {currencySymbol}{formatCurrency(viewModal.data.breakdown.netSalary)}
+                                    </h4>
+                                 </div>
+                                 <p className="text-[9px] font-bold text-white/30 uppercase tracking-[0.1em] border-t border-white/5 pt-3">Calculated Monthly Take-Home</p>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
 
-                <div className="flex justify-between items-center pt-8 border-t border-slate-100 dark:border-white/5">
-                   <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
-                      <div className="w-8 h-8 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center"><Check size={16} /></div>
-                      <span className="text-[10px] font-black uppercase tracking-widest">Profile Optimized</span>
-                   </div>
-                   <button
-                      onClick={() => navigate(`/payroll/profile/${viewModal.data.user.id || viewModal.data.user._id}`, { state: { preSelectedUser: viewModal.data.user } })}
-                      className="group flex items-center gap-3 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-indigo-100 dark:shadow-none hover:-translate-y-0.5 active:scale-95"
-                   >
-                      <Edit3 size={16} className="group-hover:rotate-12 transition-transform" /> Modify Configuration
-                   </button>
-                </div>
-              </div>
+                  <div className="flex justify-between items-center pt-8 border-t border-slate-100 dark:border-white/5">
+                     <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
+                        <div className="w-8 h-8 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center"><Check size={16} /></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Profile Optimized</span>
+                     </div>
+                     <button
+                        onClick={() => navigate(`/payroll/profile/${viewModal.data.user.id || viewModal.data.user._id}`, { state: { preSelectedUser: viewModal.data.user } })}
+                        className="group flex items-center gap-3 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-indigo-100 dark:shadow-none hover:-translate-y-0.5 active:scale-95"
+                     >
+                        <Edit3 size={16} className="group-hover:rotate-12 transition-transform" /> Modify Configuration
+                     </button>
+                  </div>
+               </div>
             )}
-          </Modal>
+         </Modal>
 
       </div>
    );
@@ -1664,7 +1664,7 @@ export const SalaryStructures = () => {
             confirmText={statusConfirm.isActive ? "Yes, Deactivate" : "Yes, Activate"}
          />
 
-          <TwoStepConfirmModal
+         <TwoStepConfirmModal
             isOpen={hardDeleteConfirm.isOpen}
             onClose={() => setHardDeleteConfirm({ isOpen: false, id: null })}
             onConfirm={() => hardDeleteConfirm.id && deleteMutation.mutate(hardDeleteConfirm.id)}
@@ -2714,43 +2714,43 @@ ${filename}`,
                      ) : enrichedPayslips.length === 0 ? (
                         <tr>
                            <td colSpan="8" className="px-6 py-32 text-center">
-                        <div className="max-w-xs mx-auto space-y-4">
-                           <div className="w-20 h-20 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-300 dark:text-gray-600">
-                              <Receipt size={40} />
-                           </div>
-                           {history?.length > 0 ? (
-                              <div className="space-y-4">
-                                 <div>
-                                    <h3 className="text-slate-900 dark:text-white font-bold">Payroll Processed but Statements Not Generated</h3>
-                                    <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">We found {history.length} processed payroll records for {monthLabel} ready for final statement generation.</p>
+                              <div className="max-w-xs mx-auto space-y-4">
+                                 <div className="w-20 h-20 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-300 dark:text-gray-600">
+                                    <Receipt size={40} />
                                  </div>
-                                 <button
-                                    onClick={handleGenerate}
-                                    className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none flex items-center justify-center gap-2 mx-auto"
-                                 >
-                                    <RefreshCw size={14} /> Generate & Finalize Payslips
-                                 </button>
-                                 <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2 italic">Generating payslips will create immutable records for employee distribution.</p>
+                                 {history?.length > 0 ? (
+                                    <div className="space-y-4">
+                                       <div>
+                                          <h3 className="text-slate-900 dark:text-white font-bold">Payroll Processed but Statements Not Generated</h3>
+                                          <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">We found {history.length} processed payroll records for {monthLabel} ready for final statement generation.</p>
+                                       </div>
+                                       <button
+                                          onClick={handleGenerate}
+                                          className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-100 dark:shadow-none flex items-center justify-center gap-2 mx-auto"
+                                       >
+                                          <RefreshCw size={14} /> Generate & Finalize Payslips
+                                       </button>
+                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2 italic">Generating payslips will create immutable records for employee distribution.</p>
+                                    </div>
+                                 ) : (
+                                    <div className="space-y-4">
+                                       <div>
+                                          <h3 className="text-slate-900 dark:text-white font-bold">No Payslips Generated Yet</h3>
+                                          <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">Start by processing payroll for {monthLabel} to generate statements.</p>
+                                       </div>
+                                       <button
+                                          onClick={() => navigate('/payroll/run')}
+                                          className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 dark:shadow-none"
+                                       >
+                                          Run Payroll Wizard
+                                       </button>
+                                       <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2">Payslips are only available after payroll execution.</p>
+                                    </div>
+                                 )}
                               </div>
-                           ) : (
-                              <div className="space-y-4">
-                                 <div>
-                                    <h3 className="text-slate-900 dark:text-white font-bold">No Payslips Generated Yet</h3>
-                                    <p className="text-slate-500 dark:text-gray-400 text-xs mt-1">Start by processing payroll for {monthLabel} to generate statements.</p>
-                                 </div>
-                                 <button
-                                    onClick={() => navigate('/payroll/run')}
-                                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 dark:shadow-none"
-                                 >
-                                    Run Payroll Wizard
-                                 </button>
-                                 <p className="text-[10px] font-bold text-slate-400 dark:text-gray-500 mt-2">Payslips are only available after payroll execution.</p>
-                              </div>
-                           )}
-                        </div>
-                     </td>
-                  </tr>
-               ) : paginatedPayslips.map((p) => {
+                           </td>
+                        </tr>
+                     ) : paginatedPayslips.map((p) => {
                         const isGenerated = p.isGenerated || p.status === 'GENERATED';
                         const isPaid = p.status === 'PAID';
                         const isSent = p.status === 'SENT' || p.isEmailSent;
@@ -2809,20 +2809,20 @@ ${filename}`,
                   </tbody>
                </table>
             </div>
-            
+
             {/* 📄 Pagination Controls */}
             <div className="p-4 border-t border-slate-50 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-[#111111] gap-4">
                <div className="flex items-center gap-4">
                   <p className="text-xs font-bold text-slate-400 dark:text-gray-500">
                      Showing <span className="text-slate-900 dark:text-white">{Math.min(enrichedPayslips.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-900 dark:text-white">{Math.min(enrichedPayslips.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-900 dark:text-white">{enrichedPayslips.length}</span> employees
                   </p>
-                  
+
                   <div className="h-4 w-px bg-slate-100 dark:bg-white/10 hidden sm:block" />
 
                   <div className="flex items-center gap-2">
                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rows:</span>
-                     <select 
-                        value={itemsPerPage} 
+                     <select
+                        value={itemsPerPage}
                         onChange={(e) => setItemsPerPage(Number(e.target.value))}
                         className="bg-slate-50 dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#333333] rounded-md px-2 py-0.5 text-[10px] font-black text-slate-600 dark:text-gray-400 outline-none cursor-pointer"
                      >
@@ -2842,7 +2842,7 @@ ${filename}`,
                      >
                         <ChevronLeft size={16} />
                      </button>
-                     
+
                      <div className="flex items-center gap-1 mx-1">
                         {[...Array(totalPages)].map((_, idx) => {
                            if (idx === 0 || idx === totalPages - 1 || (idx >= currentPage - 2 && idx <= currentPage)) {
@@ -4174,8 +4174,8 @@ export const BankTransferExport = () => {
                            <tr className="bg-slate-50/50 dark:bg-white/5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 dark:border-[#333333]">
                               <th className="px-6 py-4 w-10">
                                  <div className="flex items-center justify-center">
-                                    <input 
-                                       type="checkbox" 
+                                    <input
+                                       type="checkbox"
                                        checked={selectedIds.length === filteredNodes.length && filteredNodes.length > 0}
                                        onChange={handleSelectAll}
                                        className="w-4 h-4 rounded border-slate-300 dark:border-white/10 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -4194,8 +4194,8 @@ export const BankTransferExport = () => {
                               <tr key={i} className={`hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group ${selectedIds.includes(h.id) ? 'bg-indigo-50/30 dark:bg-indigo-500/5' : ''}`}>
                                  <td className="px-6 py-4">
                                     <div className="flex items-center justify-center">
-                                       <input 
-                                          type="checkbox" 
+                                       <input
+                                          type="checkbox"
                                           checked={selectedIds.includes(h.id)}
                                           onChange={() => toggleSelection(h.id)}
                                           className="w-4 h-4 rounded border-slate-300 dark:border-white/10 text-indigo-600 focus:ring-indigo-500 cursor-pointer"

@@ -14,24 +14,40 @@ const projectService = {
     const filter = { organizationId };
 
     if (query.status) filter.status = query.status;
-    if (query.search) filter.name = new RegExp(query.search, 'i');
     if (query.code) filter.code = query.code.toUpperCase();
     if (query.managerId) filter.managerId = query.managerId;
     
     // Always exclude the system 'Leave' project from general lists
     filter.code = { ... (query.code && { $eq: query.code.toUpperCase() }), $ne: 'LEAVE-SYS' };
 
+    let searchOr = null;
+    if (query.search) {
+      searchOr = [
+        { name: new RegExp(query.search, 'i') },
+        { code: new RegExp(query.search, 'i') }
+      ];
+    }
+
     // Restrict visibility for non-admins, or if assignedOnly is requested
     const assignedOnly = query.assignedOnly === 'true';
     const isEmployee = requestor.role === ROLES.EMPLOYEE;
     const isManager = requestor.role === ROLES.MANAGER;
 
+    let roleOr = null;
     if (assignedOnly || isEmployee || isManager) {
       const targetUserId = query.userId || requestor._id;
-      filter.$or = [
+      roleOr = [
         { managerId: targetUserId },
         { 'allocatedEmployees.userId': targetUserId }
       ];
+    }
+
+    if (searchOr && roleOr) {
+      filter.$and = [{ $or: searchOr }, { $or: roleOr }];
+    } else if (searchOr) {
+      filter.$or = searchOr;
+    } else if (roleOr) {
+      filter.$or = roleOr;
     }
 
     const [projects, total] = await Promise.all([
@@ -149,21 +165,37 @@ const projectService = {
   async exportProjects(query, requestor, organizationId) {
     const filter = { organizationId };
     if (query.status) filter.status = query.status;
-    if (query.search) filter.name = new RegExp(query.search, 'i');
     if (query.code) filter.code = query.code.toUpperCase();
     if (query.managerId) filter.managerId = query.managerId;
     
     filter.code = { ... (query.code && { $eq: query.code.toUpperCase() }), $ne: 'LEAVE-SYS' };
 
+    let searchOr = null;
+    if (query.search) {
+      searchOr = [
+        { name: new RegExp(query.search, 'i') },
+        { code: new RegExp(query.search, 'i') }
+      ];
+    }
+
     const assignedOnly = query.assignedOnly === 'true';
     const isEmployee = requestor.role === ROLES.EMPLOYEE;
     const isManager = requestor.role === ROLES.MANAGER;
 
+    let roleOr = null;
     if (assignedOnly || isEmployee || isManager) {
-      filter.$or = [
+      roleOr = [
         { managerId: requestor._id },
         { 'allocatedEmployees.userId': requestor._id }
       ];
+    }
+
+    if (searchOr && roleOr) {
+      filter.$and = [{ $or: searchOr }, { $or: roleOr }];
+    } else if (searchOr) {
+      filter.$or = searchOr;
+    } else if (roleOr) {
+      filter.$or = roleOr;
     }
 
     const projects = await Project.find(filter)

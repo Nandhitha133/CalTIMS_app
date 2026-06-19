@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
-  Modal
+  Modal,
+  Linking
 } from 'react-native';
 import {
   Calendar,
@@ -25,6 +26,9 @@ import { useAuthStore } from '../../store/authStore';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import StatementPreviewModal from './StatementPreviewModal';
+import { exportFile, downloadFileFromUrl } from '../../utils/exportHelper';
+import { BASE_URL } from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const months = [
   "January", "February", "March", "April", "May", "June",
@@ -71,10 +75,30 @@ export default function MyPayslipsScreen() {
     }
   };
 
+  const [downloading, setDownloading] = useState(false);
+
   const handleDownload = async (id?: string) => {
-    const targetId = id || payslip?.id;
+    const targetId = id || payslip?.id || payslip?._id;
     if (!targetId) return;
-    Alert.alert('Download', 'Downloading payslip on mobile is not fully implemented yet.');
+    
+    try {
+      setDownloading(true);
+      const name = user?.name || payslip?.employeeInfo?.name || 'Employee';
+      const m = payslip?.month || selectedMonth;
+      const y = payslip?.year || selectedYear;
+      const base64Data = await payrollAPI.downloadPayslip(targetId);
+      const fileName = `Payslip_${name.replace(/\\s+/g, '_')}_${months[m - 1]}_${y}.pdf`;
+      
+      if (base64Data) {
+        await exportFile(base64Data as string, fileName, 'application/pdf', true);
+      } else {
+        throw new Error('Failed to fetch the PDF data.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to download payslip');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const currencySymbol = settings?.payroll?.currencySymbol || '$';
@@ -173,8 +197,8 @@ export default function MyPayslipsScreen() {
                     <Text style={styles.historyNet}>{currencySymbol}{(h.netPay || 0).toLocaleString()}</Text>
                   </View>
                   <View style={styles.historyActions}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleDownload(h.id)}>
-                      <Download size={18} color="#64748b" />
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => handleDownload(h.id || h._id)} disabled={downloading}>
+                      {downloading ? <ActivityIndicator size="small" color="#64748b" /> : <Download size={18} color="#64748b" />}
                     </TouchableOpacity>
                   </View>
                 </View>

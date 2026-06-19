@@ -35,8 +35,6 @@ import Layout from '../../components/common/Layout';
 // ─── Super Admin Email Guard ──────────────────────────────────────────────────
 const SUPER_ADMIN_EMAIL = 'superadmin@timesheetpro.com';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 // Types
 interface Metrics {
   total_users: number;
@@ -587,11 +585,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   metricCard: {
-    width: (SCREEN_WIDTH - 76) / 2,
+    width: '46%', // Responsive width using percentage
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 14,
-    marginHorizontal: 6,
+    marginHorizontal: '2%',
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -624,11 +622,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   twoColumnGrid: {
-    flexDirection: 'column',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 16,
     marginBottom: 20,
   },
   subscriptionCard: {
+    flexGrow: 1,
+    flexBasis: '48%',
+    minWidth: 280,
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
@@ -679,6 +681,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   healthCard: {
+    flexGrow: 1,
+    flexBasis: '48%',
+    minWidth: 280,
     borderRadius: 20,
     overflow: 'hidden',
   },

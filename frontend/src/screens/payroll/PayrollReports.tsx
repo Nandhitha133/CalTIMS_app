@@ -528,7 +528,7 @@ export default function PayrollReports() {
                   onPress={() => downloadReport('Export')}
                 >
                   <FileSpreadsheet size={20} color="#64748b" style={{ marginBottom: 8 }} />
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Detailed Payroll Ledger (CSV, PDF)</Text>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Detailed Payroll Ledger CSV</Text>
                 </TouchableOpacity>
               </View>
             </View>

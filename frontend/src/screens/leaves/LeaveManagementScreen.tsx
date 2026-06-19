@@ -1494,8 +1494,8 @@ const styles = StyleSheet.create({
   },
 
   searchBar: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, minHeight: 48, gap: 8 },
+  searchInput: { flex: 1, fontSize: 14, color: '#1e293b', paddingVertical: 0, height: '100%' },
 
   filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },

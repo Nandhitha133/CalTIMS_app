@@ -1062,6 +1062,49 @@ export default function ProjectsScreen() {
   const fetchProjects = async () => {
     try {
       setLoading(true);
+
+      // We do local filtering if there is a search or filter, to support partial search by code 
+      // without needing a backend server restart on the live production server.
+      if (searchQuery.length >= 2 || statusFilter || managerFilter || projectCodeFilter) {
+         if (allProjectsList.length === 0) {
+           await fetchAllProjects();
+         }
+         // Wait for state to update, but we might not have allProjectsList immediately if it was just fetched.
+         // Let's refetch directly if it's empty to be safe
+         let projectsToFilter = allProjectsList;
+         if (projectsToFilter.length === 0) {
+            const resp = await projectAPI.getAll({ limit: 1000 });
+            projectsToFilter = (resp as any)?.data?.data || (resp as any).data || [];
+            setAllProjectsList(Array.isArray(projectsToFilter) ? projectsToFilter : []);
+         }
+
+         let filtered = [...projectsToFilter];
+         
+         if (searchQuery.length >= 2) {
+           const lowerQ = searchQuery.toLowerCase();
+           filtered = filtered.filter(p => 
+             (p.name && p.name.toLowerCase().includes(lowerQ)) || 
+             (p.code && p.code.toLowerCase().includes(lowerQ)) ||
+             (p.clientName && p.clientName.toLowerCase().includes(lowerQ))
+           );
+         }
+         
+         if (statusFilter) filtered = filtered.filter(p => p.status === statusFilter);
+         if (managerFilter) filtered = filtered.filter(p => (typeof p.managerId === 'object' ? p.managerId._id : p.managerId) === managerFilter);
+         if (projectCodeFilter) filtered = filtered.filter(p => p.code && p.code.toLowerCase().includes(projectCodeFilter.toLowerCase()));
+         
+         const total = filtered.length;
+         const pages = Math.ceil(total / limit) || 1;
+         const start = (page - 1) * limit;
+         const paginated = filtered.slice(start, start + limit);
+         
+         setProjects(paginated);
+         setTotalPages(pages);
+         setTotalResults(total);
+         setLoading(false);
+         return;
+      }
+
       const params: any = { page, limit };
       if (searchQuery.length >= 2) params.search = searchQuery;
       if (statusFilter) params.status = statusFilter;
@@ -1279,7 +1322,13 @@ export default function ProjectsScreen() {
     if (selectedDate) {
       const formattedDate = format(selectedDate, 'yyyy-MM-dd');
       if (datePickerContext === 'start') {
-        setFormData(prev => ({ ...prev, startDate: formattedDate }));
+        setFormData(prev => {
+          let newEndDate = prev.endDate;
+          if (newEndDate && new Date(formattedDate) > new Date(newEndDate)) {
+             newEndDate = ''; // Clear end date if it's now before the start date
+          }
+          return { ...prev, startDate: formattedDate, endDate: newEndDate };
+        });
       } else {
         setFormData(prev => ({ ...prev, endDate: formattedDate }));
       }
@@ -1336,9 +1385,9 @@ export default function ProjectsScreen() {
 
   const stats = useMemo(() => ({
     total: allProjectsList.length,
-    active: allProjectsList.filter(p => p.status === 'active').length,
-    onHold: allProjectsList.filter(p => p.status === 'on-hold').length,
-    completed: allProjectsList.filter(p => p.status === 'completed').length,
+    active: allProjectsList.filter(p => p.status?.toLowerCase() === 'active').length,
+    onHold: allProjectsList.filter(p => p.status?.toLowerCase() === 'on-hold').length,
+    completed: allProjectsList.filter(p => p.status?.toLowerCase() === 'completed').length,
   }), [allProjectsList]);
 
   const getManagerDisplayValue = useCallback((managerId: string) => {
@@ -1463,6 +1512,19 @@ export default function ProjectsScreen() {
                   </Text>
                   <ChevronDown size={14} color="#64748b" />
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.filterField}>
+                <Text style={styles.filterLabel}>Project Code</Text>
+                <View style={styles.filterInputContainer}>
+                  <TextInput
+                    style={styles.filterInput}
+                    placeholder="Enter project code (e.g. PRJ-001)"
+                    placeholderTextColor="#94a3b8"
+                    value={tempFilters.projectCode}
+                    onChangeText={(val) => setTempFilters(prev => ({ ...prev, projectCode: val }))}
+                  />
+                </View>
               </View>
 
               <View style={styles.filterActions}>
@@ -1598,6 +1660,7 @@ export default function ProjectsScreen() {
           value={formData.endDate ? new Date(formData.endDate) : new Date()}
           mode="date"
           display="default"
+          minimumDate={formData.startDate ? new Date(formData.startDate) : undefined}
           onChange={handleDateChange}
         />
       )}
@@ -1745,16 +1808,6 @@ export default function ProjectsScreen() {
                     numberOfLines={3}
                     value={formData.description}
                     onChangeText={(val) => setFormData(prev => ({ ...prev, description: val }))}
-                  />
-                </View>
-
-                <View style={modalStyles.switchRow}>
-                  <Text style={modalStyles.switchLabel}>Restrict Tasks to Allocated Members</Text>
-                  <Switch
-                    value={formData.onlyProjectTasks}
-                    onValueChange={(val) => setFormData(prev => ({ ...prev, onlyProjectTasks: val }))}
-                    trackColor={{ false: '#cbd5e1', true: '#93c5fd' }}
-                    thumbColor={formData.onlyProjectTasks ? '#3b82f6' : '#f4f3f4'}
                   />
                 </View>
 
@@ -1926,14 +1979,6 @@ export default function ProjectsScreen() {
                 </View>
               ) : null}
 
-              <View style={detailModalStyles.settingsSection}>
-                <Text style={detailModalStyles.sectionTitle}>Settings</Text>
-                <View style={detailModalStyles.settingRow}>
-                  <Text style={detailModalStyles.settingLabel}>Restrict Tasks to Allocated Members</Text>
-                  <Text style={detailModalStyles.settingValue}>{selectedProject?.onlyProjectTasks ? 'Yes' : 'No'}</Text>
-                </View>
-              </View>
-
               <View style={detailModalStyles.teamSection}>
                 <Text style={detailModalStyles.sectionTitle}>Allocated Team Members ({selectedProject?.allocatedEmployees?.length || 0})</Text>
                 {selectedProject?.allocatedEmployees && selectedProject.allocatedEmployees.length > 0 ? (
@@ -2034,8 +2079,8 @@ const styles = StyleSheet.create({
   statValue: { fontSize: moderateScale(22), fontWeight: '800', color: '#1e293b' },
   statLabel: { fontSize: moderateScale(10), fontWeight: '700', color: '#64748b', marginTop: verticalScale(4), letterSpacing: 0.5 },
   searchContainer: { flexDirection: 'row', gap: moderateScale(12), marginBottom: verticalScale(16) },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), height: verticalScale(44), gap: moderateScale(8) },
-  searchInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b' },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), minHeight: verticalScale(48), gap: moderateScale(8) },
+  searchInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b', paddingVertical: 0, height: '100%' },
   filterButton: { width: scale(44), height: verticalScale(44), borderRadius: moderateScale(12), backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   filterBadge: { position: 'absolute', top: verticalScale(-4), right: scale(-4), backgroundColor: '#3b82f6', borderRadius: moderateScale(10), minWidth: scale(18), height: verticalScale(18), alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(4) },
@@ -2049,6 +2094,8 @@ const styles = StyleSheet.create({
   filterSelectButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: moderateScale(10), backgroundColor: '#f8fafc', paddingHorizontal: scale(12), paddingVertical: verticalScale(10) },
   filterSelectText: { fontSize: moderateScale(14), color: '#1e293b', flex: 1 },
   placeholderText: { color: '#94a3b8' },
+  filterInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: moderateScale(10), borderWidth: 1, borderColor: '#e2e8f0', minHeight: verticalScale(42), paddingHorizontal: scale(12) },
+  filterInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b', paddingVertical: 0 },
   filterActions: { flexDirection: 'row', gap: moderateScale(12), marginTop: verticalScale(8) },
   filterClear: { flex: 1, paddingVertical: verticalScale(10), backgroundColor: '#f1f5f9', borderRadius: moderateScale(10), alignItems: 'center' },
   filterClearText: { fontSize: moderateScale(13), fontWeight: '600', color: '#64748b' },

@@ -227,17 +227,17 @@ const ActionReasonModal = ({
 };
 
 // Leave Details Modal
-const LeaveDetailModal = ({ 
-    leave, 
-    visible, 
+const LeaveDetailModal = ({
+    leave,
+    visible,
     onClose,
     isAdmin,
     onApprove,
     onReject,
     isProcessing
-}: { 
-    leave: LeaveRequest | null; 
-    visible: boolean; 
+}: {
+    leave: LeaveRequest | null;
+    visible: boolean;
     onClose: () => void;
     isAdmin: boolean;
     onApprove: (id: string) => void;
@@ -292,7 +292,7 @@ const LeaveDetailModal = ({
                                     <Text style={[styles.gridValue, { color: '#ef4444' }]}>{leave.rejectionReason}</Text>
                                 </View>
                             )}
-                            
+
                             {leave.status === 'cancelled' && leave.cancellationReason && (
                                 <View style={[styles.gridItem, { backgroundColor: '#f1f5f9' }]}>
                                     <Text style={[styles.gridLabel, { color: '#64748b' }]}>CANCELLATION REASON</Text>
@@ -320,15 +320,15 @@ const LeaveDetailModal = ({
 
                             {isAdmin && leave.status === 'pending' && (
                                 <View style={{ flexDirection: 'row', gap: scale(8) }}>
-                                    <TouchableOpacity 
-                                        style={[styles.actionBtn, { backgroundColor: '#fef2f2' }]} 
+                                    <TouchableOpacity
+                                        style={[styles.actionBtn, { backgroundColor: '#fef2f2' }]}
                                         onPress={() => onReject(leave.id, '')}
                                         disabled={isProcessing}
                                     >
                                         <X size={16} color="#ef4444" />
                                     </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        style={[styles.actionBtn, { backgroundColor: '#ecfdf5' }]} 
+                                    <TouchableOpacity
+                                        style={[styles.actionBtn, { backgroundColor: '#ecfdf5' }]}
                                         onPress={() => onApprove(leave.id)}
                                         disabled={isProcessing}
                                     >
@@ -448,8 +448,8 @@ const ApplyLeaveModal = ({
                                 </View>
                                 <View style={[styles.formField, { flex: 1 }]}>
                                     <Text style={styles.formLabel}>End Date *</Text>
-                                    <TouchableOpacity 
-                                        style={[styles.dateButton, isHalfDay && styles.dateButtonDisabled]} 
+                                    <TouchableOpacity
+                                        style={[styles.dateButton, isHalfDay && styles.dateButtonDisabled]}
                                         onPress={() => setShowEndPicker(true)}
                                         disabled={isHalfDay}
                                     >
@@ -491,8 +491,8 @@ const ApplyLeaveModal = ({
                             )}
 
                             <View style={styles.formField}>
-                                <TouchableOpacity 
-                                    style={styles.halfDayButton} 
+                                <TouchableOpacity
+                                    style={styles.halfDayButton}
                                     onPress={() => {
                                         const nextVal = !isHalfDay;
                                         setIsHalfDay(nextVal);
@@ -703,7 +703,7 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
             setIsCancelling(false);
         }
     };
-    
+
     const handleApproveLeave = async (id: string) => {
         setIsProcessing(true);
         try {
@@ -766,7 +766,7 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
 
     const handleActionSubmit = async (reason: string) => {
         if (!selectedLeave) return;
-        
+
         if (actionConfig.type === 'cancel') {
             await handleCancelLeave(reason);
         } else {
@@ -930,11 +930,11 @@ const styles = StyleSheet.create({
 
     sectionTitle: { fontSize: moderateScale(14), fontWeight: '700', color: '#1e293b', marginBottom: verticalScale(12) },
 
-    requestCard: { 
-        backgroundColor: 'white', 
-        borderRadius: scale(16), 
-        marginBottom: verticalScale(12), 
-        borderWidth: 1, 
+    requestCard: {
+        backgroundColor: 'white',
+        borderRadius: scale(16),
+        marginBottom: verticalScale(12),
+        borderWidth: 1,
         borderColor: '#e2e8f0',
         overflow: 'hidden',
         shadowColor: '#000',

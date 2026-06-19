@@ -8,7 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform
+  Platform,
+  Modal
 } from 'react-native';
 import {
   Download,
@@ -58,6 +59,7 @@ export default function BankTransferExport() {
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   useEffect(() => {
     fetchData(history.length === 0);
@@ -175,25 +177,32 @@ export default function BankTransferExport() {
       
       const selectedNodes = filteredNodes.filter(n => selectedIds.includes(n.id));
       
-      const headers = ['Employee Name', 'Employee ID', 'Bank Name', 'Account Number', 'IFSC Code', 'Net Pay', 'Status'];
+      const headers = ['Account Number', 'Beneficiary Name', 'Bank Name', 'IFSC', 'Amount', 'Description'];
       const rows = selectedNodes.map(node => [
-        node.employee?.user?.name || node.user?.name || 'Unknown',
-        node.employee?.employeeId || node.employee?.user?.employeeId || node.employeeInfo?.employeeId || node.user?.employeeId || '-',
-        node.bankName,
         `'${node.accountNumber}`, // Quote to prevent excel scientific notation
+        node.employee?.user?.name || node.user?.name || 'Unknown',
+        node.bankName,
         node.ifsc,
         node.netPayCalc,
-        node.status.label
+        `Salary_${month}_${year}`
       ]);
 
       const csvString = convertToCSV(headers, rows);
       await exportFile(csvString, `Bank_Export_${months[month-1]}_${year}.csv`, 'text/csv', false);
-
+      setShowPreviewModal(false);
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to export bank file');
     } finally {
       setExporting(false);
     }
+  };
+
+  const handleOpenPreview = () => {
+    if (selectedIds.length === 0) {
+      Alert.alert('No Selection', 'Please select at least one record to preview.');
+      return;
+    }
+    setShowPreviewModal(true);
   };
 
   return (
@@ -209,7 +218,7 @@ export default function BankTransferExport() {
             </View>
             <Text style={styles.headerSubtitle}>Generate and validate bank transfer files for salary payouts</Text>
           </View>
-          <TouchableOpacity style={styles.headerBtn} onPress={handleExport} disabled={exporting || selectedIds.length === 0}>
+          <TouchableOpacity style={styles.headerBtn} onPress={handleOpenPreview} disabled={exporting || selectedIds.length === 0}>
             {exporting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.headerBtnText}>Generate File ({selectedIds.length})</Text>}
           </TouchableOpacity>
         </View>
@@ -364,29 +373,25 @@ export default function BankTransferExport() {
       {/* Floating Bottom Bar */}
       {!loading && (
         <View style={styles.floatingBar}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ marginRight: 16 }}>
-              <Text style={styles.floatLabel}>SELECTED FOR EXPORT</Text>
-              <Text style={styles.floatValue}>{selectionStats.count} / {filteredNodes.length} Employees</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.floatLabel}>SELECTED PAYOUT</Text>
-              <Text style={styles.floatValue} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{selectionStats.amount.toLocaleString()}</Text>
-            </View>
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={styles.floatLabel}>SELECTED ({selectionStats.count}/{filteredNodes.length})</Text>
+            <Text style={[styles.floatValue, { fontSize: 18, marginTop: 2 }]} numberOfLines={1} adjustsFontSizeToFit>
+              {currencySymbol}{selectionStats.amount.toLocaleString()}
+            </Text>
           </View>
           <TouchableOpacity 
             style={[styles.floatBtn, selectedIds.length === 0 && { opacity: 0.5 }]} 
-            onPress={handleExport}
+            onPress={handleOpenPreview}
             disabled={selectedIds.length === 0 || exporting}
           >
-            {exporting ? <ActivityIndicator color="#fff" /> : <Text style={styles.floatBtnText}>PREVIEW & EXPORT ({selectionStats.count})</Text>}
+            {exporting ? <ActivityIndicator color="#fff" /> : <Text style={styles.floatBtnText}>PREVIEW</Text>}
           </TouchableOpacity>
         </View>
       )}
 
       {/* Month Picker Modal */}
-      {showMonthPicker && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+      <Modal visible={showMonthPicker} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Month</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -412,11 +417,11 @@ export default function BankTransferExport() {
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* Year Picker Modal */}
-      {showYearPicker && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+      <Modal visible={showYearPicker} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Year</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -442,11 +447,11 @@ export default function BankTransferExport() {
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* Bank Picker Modal */}
-      {showBankPicker && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+      <Modal visible={showBankPicker} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Bank</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -471,11 +476,11 @@ export default function BankTransferExport() {
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* Status Picker Modal */}
-      {showStatusPicker && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }]}>
+      <Modal visible={showStatusPicker} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Status</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -500,7 +505,63 @@ export default function BankTransferExport() {
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      </Modal>
+
+      {/* Preview Modal */}
+      <Modal visible={showPreviewModal} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '90%', maxHeight: '80%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#0f172a', marginBottom: 16 }}>Export File Preview</Text>
+            
+            <View style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a', borderWidth: 1, padding: 12, borderRadius: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
+              <AlertCircle size={20} color="#d97706" style={{ marginRight: 8 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#92400e', marginBottom: 2 }}>SAFETY VERIFICATION</Text>
+                <Text style={{ fontSize: 10, color: '#b45309' }}>Please review the payout records below before generating the final bank transfer file.</Text>
+              </View>
+            </View>
+
+            <ScrollView horizontal style={{ marginBottom: 16 }}>
+              <View>
+                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', paddingBottom: 8, marginBottom: 8 }}>
+                  <Text style={{ width: 120, fontSize: 10, fontWeight: '800', color: '#64748b' }}>ACCOUNT NO</Text>
+                  <Text style={{ width: 120, fontSize: 10, fontWeight: '800', color: '#64748b' }}>BENEFICIARY</Text>
+                  <Text style={{ width: 100, fontSize: 10, fontWeight: '800', color: '#64748b' }}>BANK</Text>
+                  <Text style={{ width: 100, fontSize: 10, fontWeight: '800', color: '#64748b' }}>IFSC</Text>
+                  <Text style={{ width: 80, fontSize: 10, fontWeight: '800', color: '#64748b', textAlign: 'right' }}>AMOUNT</Text>
+                  <Text style={{ width: 100, fontSize: 10, fontWeight: '800', color: '#64748b', marginLeft: 16 }}>DESCRIPTION</Text>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={true} style={{ maxHeight: 300 }}>
+                  {filteredNodes.filter(n => selectedIds.includes(n.id)).map(node => (
+                    <View key={node.id} style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f8fafc', paddingVertical: 8 }}>
+                      <Text style={{ width: 120, fontSize: 12, color: '#334155', fontWeight: '600' }} numberOfLines={1}>{node.accountNumber}</Text>
+                      <Text style={{ width: 120, fontSize: 12, color: '#334155' }} numberOfLines={1}>{node.employee?.user?.name || node.user?.name || 'Unknown'}</Text>
+                      <Text style={{ width: 100, fontSize: 12, color: '#334155' }} numberOfLines={1}>{node.bankName}</Text>
+                      <Text style={{ width: 100, fontSize: 12, color: '#334155' }} numberOfLines={1}>{node.ifsc}</Text>
+                      <Text style={{ width: 80, fontSize: 12, color: '#0f172a', fontWeight: '800', textAlign: 'right' }}>{currencySymbol}{node.netPayCalc}</Text>
+                      <Text style={{ width: 100, fontSize: 12, color: '#334155', marginLeft: 16 }} numberOfLines={1}>Salary_{month}_{year}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+              <TouchableOpacity style={{ paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#f1f5f9', borderRadius: 8 }} onPress={() => setShowPreviewModal(false)}>
+                <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 12 }}>Discard</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#4f46e5', borderRadius: 8, flexDirection: 'row', alignItems: 'center' }} onPress={handleExport} disabled={exporting}>
+                {exporting ? <ActivityIndicator color="#fff" size="small" /> : (
+                  <>
+                    <Download size={16} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={{ fontWeight: '800', color: '#fff', fontSize: 12 }}>Generate Final CSV</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </Layout>
   );

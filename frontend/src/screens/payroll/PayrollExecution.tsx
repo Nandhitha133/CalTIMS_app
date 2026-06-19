@@ -7,7 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   TextInput,
-  Modal
+  Modal,
+  Alert
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import {
@@ -114,6 +115,24 @@ export default function PayrollExecution() {
 
   const handleMarkAllPaid = async () => {
     // Implement bulk mark paid logic via Alert/Modal
+  };
+
+  const handleMarkIndividualPaid = async (row: any) => {
+    if (!row.payslip?._id && !row.payslip?.id) {
+      Alert.alert('Error', 'Payslip not found for this record.');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await payrollAPI.markPayslipAsPaid(row.payslip._id || row.payslip.id);
+      await fetchData();
+      Alert.alert('Success', `Successfully marked ${row.employeeInfo?.name || 'employee'} as paid`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to mark as paid');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -268,15 +287,31 @@ export default function PayrollExecution() {
                         </View>
                       </View>
                       
-                      <TouchableOpacity 
-                        style={styles.empActionBtn}
-                        onPress={() => navigation.navigate('EmployeeDetail', { 
-                          userId: row.employee?.userId || row.userId || row.employee,
-                          employeeInfo: row.employeeInfo
-                        })}
-                      >
-                        <ExternalLink size={18} color="#6366f1" />
-                      </TouchableOpacity>
+                      {isPaid ? (
+                        <TouchableOpacity 
+                          style={styles.empActionBtn}
+                          onPress={() => {
+                            const correctUserId = row.payslip?.user?._id || row.payslip?.user || row.user?._id || row.user || row.employee?.userId || row.employee?._id || row.userId || (typeof row.employee === 'string' ? row.employee : null) || row.employeeInfo?.userId || row.employeeInfo?._id;
+                            navigation.navigate('EmployeeDetail', { 
+                              userId: correctUserId,
+                              employeeInfo: row.employeeInfo
+                            });
+                          }}
+                        >
+                          <ExternalLink size={18} color="#94a3b8" />
+                        </TouchableOpacity>
+                      ) : !bankMissing ? (
+                        <TouchableOpacity 
+                          style={[styles.empActionBtn, { backgroundColor: '#ecfdf5', borderColor: '#10b981', borderWidth: 1 }]}
+                          onPress={() => handleMarkIndividualPaid(row)}
+                        >
+                          <CheckCircle2 size={18} color="#10b981" />
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={[styles.empActionBtn, { opacity: 0.5 }]}>
+                          <CheckCircle2 size={18} color="#94a3b8" />
+                        </View>
+                      )}
                     </View>
 
                     <View style={styles.empMetricsGrid}>

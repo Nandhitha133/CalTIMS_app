@@ -5,6 +5,7 @@ const ProcessedPayroll = require('./processedPayroll.model');
 const emailService = require('../../shared/services/email.service');
 const pdfGeneratorService = require('../reports/pdfGenerator.service');
 const Settings = require('../settings/settings.model');
+const User = require('../users/user.model');
 const logger = require('../../shared/utils/logger');
 
 /**
@@ -25,23 +26,31 @@ const processJobs = async () => {
         try {
             if (job.type === 'SEND_PAYSLIP_EMAILS') {
                 const { ids, organizationId } = job.payload;
-                const payrolls = await ProcessedPayroll.find({ _id: { $in: ids }, organizationId }).populate('user');
+                const payrolls = await ProcessedPayroll.find({ _id: { $in: ids }, organizationId });
                 const settings = await Settings.findOne({ organizationId });
                 
+                const userIds = payrolls.map(p => typeof p.user === 'object' && p.user._id ? p.user._id : p.user).filter(Boolean);
+                const users = await User.find({ _id: { $in: userIds } });
+                const userMap = new Map(users.map(u => [u._id.toString(), u]));
+                
                 // Reuse existing bulk email logic but in background
-                const bulkData = payrolls.map(p => ({
-                    email: p.user?.email || p.employeeInfo?.email,
-                    data: {
-                        user: p.user,
-                        month: p.month,
-                        year: p.year,
-                        breakdown: p.breakdown,
-                        attendance: p.attendance,
-                        currencySymbol: settings?.payroll?.currencySymbol || '₹',
-                        employeeInfo: p.employeeInfo,
-                        bankDetails: p.bankDetails
-                    }
-                })).filter(x => x.email);
+                const bulkData = payrolls.map(p => {
+                    const userId = typeof p.user === 'object' && p.user._id ? p.user._id.toString() : p.user?.toString();
+                    const userObj = userMap.get(userId);
+                    return {
+                        email: userObj?.email || p.employeeInfo?.email,
+                        data: {
+                            user: userObj,
+                            month: p.month,
+                            year: p.year,
+                            breakdown: p.breakdown,
+                            attendance: p.attendance,
+                            currencySymbol: settings?.payroll?.currencySymbol || '₹',
+                            employeeInfo: p.employeeInfo,
+                            bankDetails: p.bankDetails
+                        }
+                    };
+                }).filter(x => x.email);
 
                 const results = await emailService.sendPayslipsBulk(bulkData);
                 

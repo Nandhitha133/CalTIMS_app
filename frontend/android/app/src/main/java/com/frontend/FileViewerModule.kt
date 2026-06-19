@@ -31,14 +31,17 @@ class FileViewerModule(reactContext: ReactApplicationContext) : ReactContextBase
             )
             val intent = Intent(Intent.ACTION_VIEW)
             intent.setDataAndType(uri, mimeType)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            val chooser = Intent.createChooser(intent, "Open PDF with...")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
             val activity = getCurrentActivity()
             if (activity != null) {
-                activity.startActivity(intent)
+                activity.startActivity(chooser)
                 promise.resolve(true)
             } else {
-                reactApplicationContext.startActivity(intent)
+                reactApplicationContext.startActivity(chooser)
                 promise.resolve(true)
             }
         } catch (e: Exception) {

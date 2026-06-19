@@ -63,7 +63,8 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
   };
 
   // ── 1. Calendar & Proration Foundation ───────────────────────────────────
-  const totalDaysInMonth = attendanceCtx?.calendarDaysInMonth || 30;
+  const overrideDays = policy?.attendanceOverride?.mode === 'CUSTOM' ? (policy.attendanceOverride.workingDays || 30) : null;
+  const totalDaysInMonth = overrideDays || attendanceCtx?.calendarDaysInMonth || 30;
   const rawPreJoinDays = attendanceCtx?.preJoinDays || 0;
   const rawLopDays = attendanceCtx?.lopDays || 0;
 

@@ -741,7 +741,8 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
         employeeId: userData.employeeId,
         department: userData.department,
         designation: userData.designation,
-        branch: userData.branch
+        branch: userData.branch,
+        email: userData.email
       },
       bankDetails: {
         bankName: userData.bankName,

@@ -95,8 +95,8 @@ const styles = StyleSheet.create({
   },
 
   searchContainer: { flexDirection: 'row', gap: moderateScale(8), marginBottom: verticalScale(16), flexWrap: 'wrap' },
-  searchBox: { flex: 1, minWidth: scale(200), flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), height: verticalScale(44), gap: moderateScale(8) },
-  searchInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b' },
+  searchBox: { flex: 1, minWidth: scale(200), flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), minHeight: verticalScale(48), gap: moderateScale(8) },
+  searchInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b', paddingVertical: 0, height: '100%' },
   filterButton: { width: scale(44), height: verticalScale(44), borderRadius: moderateScale(12), backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   filterBadge: { position: 'absolute', top: verticalScale(-4), right: scale(-4), backgroundColor: '#3b82f6', borderRadius: moderateScale(10), minWidth: scale(18), height: verticalScale(18), alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(4) },
@@ -1240,7 +1240,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       <DropdownModal
         visible={showProjectDropdown}
         onClose={() => setShowProjectDropdown(false)}
-        options={projectOptions}
+        options={dropdownContext === 'filter' ? [{ value: '', label: 'All Projects' }, ...projectOptions] : projectOptions}
         selectedValue={
           dropdownContext === 'create' ? formData.projectId :
             dropdownContext === 'edit' ? editFormData.projectId :
@@ -1253,7 +1253,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
       <DropdownModal
         visible={showStatusDropdown}
         onClose={() => setShowStatusDropdown(false)}
-        options={statusOptions}
+        options={dropdownContext === 'filter' ? [{ value: '', label: 'All Statuses' }, ...statusOptions] : statusOptions}
         selectedValue={
           dropdownContext === 'create' ? formData.status :
             dropdownContext === 'edit' ? editFormData.status :
@@ -1346,18 +1346,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                   multiline
                   numberOfLines={3}
                 />
-                <View style={modalStyles.switchRow}>
-                  <View>
-                    <Text style={modalStyles.switchLabel}>Only show project-specific tasks</Text>
-                    <Text style={modalStyles.switchSub}>Combined global categories will be hidden.</Text>
-                  </View>
-                  <Switch
-                    value={formData.onlyProjectTasks}
-                    onValueChange={(value: boolean) => setFormData(prev => ({ ...prev, onlyProjectTasks: value }))}
-                    trackColor={{ false: '#cbd5e1', true: '#3b82f6' }}
-                    thumbColor="white"
-                  />
-                </View>
+
                 <TouchableOpacity
                   style={[modalStyles.submitButton, isSubmitting && modalStyles.disabledButton]}
                   onPress={handleCreateTask}
@@ -1481,18 +1470,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                   multiline
                   numberOfLines={6}
                 />
-                <View style={modalStyles.switchRow}>
-                  <View>
-                    <Text style={modalStyles.switchLabel}>Only show these tasks for this project</Text>
-                    <Text style={modalStyles.switchSub}>Combined global categories will be hidden.</Text>
-                  </View>
-                  <Switch
-                    value={bulkIsolate}
-                    onValueChange={setBulkIsolate}
-                    trackColor={{ false: '#cbd5e1', true: '#3b82f6' }}
-                    thumbColor="white"
-                  />
-                </View>
+
                 <TouchableOpacity
                   style={[modalStyles.submitButton, isSubmitting && modalStyles.disabledButton]}
                   onPress={handleBulkCreate}
@@ -1591,18 +1569,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
                   multiline
                   numberOfLines={3}
                 />
-                <View style={modalStyles.switchRow}>
-                  <View>
-                    <Text style={modalStyles.switchLabel}>Only show project-specific tasks</Text>
-                    <Text style={modalStyles.switchSub}>Combined global categories will be hidden.</Text>
-                  </View>
-                  <Switch
-                    value={editFormData.onlyProjectTasks}
-                    onValueChange={(value: boolean) => setEditFormData(prev => ({ ...prev, onlyProjectTasks: value }))}
-                    trackColor={{ false: '#cbd5e1', true: '#3b82f6' }}
-                    thumbColor="white"
-                  />
-                </View>
+
                 <TouchableOpacity
                   style={[modalStyles.submitButton, isSubmitting && modalStyles.disabledButton]}
                   onPress={handleUpdateTask}

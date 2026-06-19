@@ -126,7 +126,9 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
     { $match: match },
     {
       $group: {
-        _id: '$status',
+        _id: {
+          $cond: [{ $eq: ['$filledByAdmin', true] }, 'admin_filled', '$status']
+        },
         count: { $sum: 1 }
       }
     }
@@ -137,7 +139,9 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
     approved: 0,
     submitted: 0,
     rejected: 0,
-    draft: 0
+    draft: 0,
+    admin_filled: 0,
+    frozen: 0
   };
 
   let totalTimesheetsInRange = 0;
@@ -153,7 +157,9 @@ router.get('/compliance-summary', requireFeature('advanced_reports'), asyncHandl
     { name: 'Approved', value: result.approved, fill: '#22c55e' },
     { name: 'Pending Review', value: result.submitted, fill: '#f59e0b' },
     { name: 'Rejected', value: result.rejected, fill: '#ef4444' },
-    { name: 'Draft/Incomplete', value: result.draft, fill: '#94a3b8' }
+    { name: 'Draft/Incomplete', value: result.draft, fill: '#94a3b8' },
+    { name: 'Admin Resolved', value: result.admin_filled, fill: '#6366f1' },
+    { name: 'Locked', value: result.frozen, fill: '#8b5cf6' }
   ].filter(d => d.value > 0);
 
   ApiResponse.success(res, { data: formattedData });
@@ -704,15 +710,14 @@ router.get('/pdf-export', requireFeature('advanced_reports'), asyncHandler(async
     // 7. Compliance Stats (simple overall group)
     Timesheet.aggregate([
       { $match: { organizationId: req.organizationId, ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
+      { $group: { _id: { $cond: [{ $eq: ['$filledByAdmin', true] }, 'admin_filled', '$status'] }, count: { $sum: 1 } } }
     ])
   ]);
 
   const stats = timesheetStats[0] || { totalHours: 0, totalTimesheets: 0, uniqueEmployees: [] };
-  const complianceStats = { total: 0, approved: 0, submitted: 0, rejected: 0, draft: 0 };
+  const complianceStats = { total: 0, approved: 0, submitted: 0, rejected: 0, draft: 0, admin_filled: 0 };
   complianceRes.forEach(r => {
-    // Treat admin_filled as approved for compliance reporting
-    const status = (r._id === 'admin_filled') ? 'approved' : r._id;
+    const status = r._id;
     if (complianceStats[status] !== undefined) {
       complianceStats[status] += r.count;
     }
@@ -801,7 +806,7 @@ router.get('/csv-export', requireFeature('advanced_reports'), asyncHandler(async
     ]),
     Timesheet.aggregate([
       { $match: { organizationId: req.organizationId, ...(from ? { weekStartDate: { $gte: from } } : {}), ...(to ? { weekStartDate: { $lte: to } } : {}) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
+      { $group: { _id: { $cond: [{ $eq: ['$filledByAdmin', true] }, 'admin_filled', '$status'] }, count: { $sum: 1 } } }
     ])
   ]);
 

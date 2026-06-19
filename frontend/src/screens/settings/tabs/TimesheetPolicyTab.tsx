@@ -34,7 +34,9 @@ import {
   ShieldAlert,
   Database,
   CalendarDays,
-  Info
+  Info,
+  Lock,
+  Unlock
 } from 'lucide-react-native';
 import { settingsAPI } from '../../../services/endpoints';
 import { useSocketEvent } from '../../../services/socket';
@@ -260,8 +262,14 @@ const EditableBadge = ({
   const handleSave = () => {
     let numValue = parseFloat(tempValue);
     if (!isNaN(numValue)) {
-      if (min !== undefined) numValue = Math.max(min, numValue);
-      if (max !== undefined) numValue = Math.min(max, numValue);
+      if (min !== undefined && numValue < min) {
+        Alert.alert('Not Allowed', `Value cannot be less than ${min}.`);
+        return;
+      }
+      if (max !== undefined && numValue > max) {
+        Alert.alert('Not Allowed', `Value cannot be greater than ${max}.`);
+        return;
+      }
       onChange(numValue);
     }
     setShowModal(false);
@@ -428,10 +436,56 @@ export default function TimesheetPolicyTab() {
   }, [refetch]);
 
   const updatePolicy = <K extends keyof TimesheetPolicy>(key: K, value: TimesheetPolicy[K]) => {
+    if (key === 'permissionMaxDaysPerWeek') {
+      const weeklyVal = value as number;
+      const monthlyVal = policy.permissionMaxDaysPerMonth;
+      if (monthlyVal !== 0 && (weeklyVal === 0 || weeklyVal > monthlyVal)) {
+        Alert.alert('Not Allowed', 'Weekly limit cannot be higher than the monthly limit.');
+        return;
+      }
+    } else if (key === 'permissionMaxDaysPerMonth') {
+      const monthlyVal = value as number;
+      const weeklyVal = policy.permissionMaxDaysPerWeek;
+      if (monthlyVal !== 0 && (weeklyVal === 0 || weeklyVal > monthlyVal)) {
+        Alert.alert('Not Allowed', 'Monthly limit cannot be lower than the weekly limit. Reduce the weekly limit first.');
+        return;
+      }
+    } else if (key === 'minHoursPerDay') {
+      const minVal = value as number;
+      if (minVal > policy.maxHoursPerDay) {
+        Alert.alert('Not Allowed', 'Daily minimum cannot be higher than the daily maximum.');
+        return;
+      }
+    } else if (key === 'maxHoursPerDay') {
+      const maxVal = value as number;
+      if (maxVal < policy.minHoursPerDay) {
+        Alert.alert('Not Allowed', 'Daily maximum cannot be lower than the daily minimum.');
+        return;
+      }
+      if (maxVal > policy.maxHoursPerWeek) {
+        Alert.alert('Not Allowed', 'Daily maximum cannot be higher than the weekly limit.');
+        return;
+      }
+    } else if (key === 'maxHoursPerWeek') {
+      const weeklyVal = value as number;
+      if (weeklyVal < policy.maxHoursPerDay) {
+        Alert.alert('Not Allowed', 'Weekly limit cannot be lower than the daily maximum.');
+        return;
+      }
+    }
     setPolicy(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSave = () => {
+    if (policy.permissionMaxDaysPerWeek === 0 && policy.permissionMaxDaysPerMonth !== 0) {
+      Alert.alert('Not Allowed', 'Weekly limit (∞) cannot be higher than the monthly limit.');
+      return;
+    }
+    if (policy.permissionMaxDaysPerWeek !== 0 && policy.permissionMaxDaysPerMonth !== 0 && policy.permissionMaxDaysPerWeek > policy.permissionMaxDaysPerMonth) {
+      Alert.alert('Not Allowed', 'Weekly limit cannot be higher than the monthly limit.');
+      return;
+    }
+
     const currentState = JSON.stringify({ taskCategories, ...policy });
     if (currentState === initialState) {
       Toast.show({ type: 'info', text1: 'Info', text2: 'There is nothing to change' });
@@ -758,6 +812,8 @@ export default function TimesheetPolicyTab() {
                 onChange={(val) => updatePolicy('maxHoursPerWeek', val)}
                 badgeStyle={styles.indigoBadge}
                 formatValue={(v) => `${v} HRS`}
+                min={policy.maxHoursPerDay}
+                max={168}
               />
             </View>
             
@@ -809,7 +865,11 @@ export default function TimesheetPolicyTab() {
             </View>
 
             <View style={[styles.warningBox, policy.enforceMinHoursOnSubmit && styles.warningBoxActive]}>
-              <ShieldCheck size={14} color={policy.enforceMinHoursOnSubmit ? "#ef4444" : "#94a3b8"} />
+              {policy.enforceMinHoursOnSubmit ? (
+                <Lock size={14} color="#ef4444" />
+              ) : (
+                <Unlock size={14} color="#94a3b8" />
+              )}
               <Text style={[styles.warningText, policy.enforceMinHoursOnSubmit && styles.warningTextActive]}>
                 {policy.enforceMinHoursOnSubmit ? (
                   <>

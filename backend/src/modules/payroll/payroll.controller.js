@@ -566,15 +566,23 @@ exports.downloadPayslipPDF = async (req, res, next) => {
 exports.sendPayslipEmail = async (req, res, next) => {
   try {
     const { id } = req.params;
-    let payslip = await prisma.payslip.findFirst({ 
-        where: { id, organizationId: req.organizationId }
+    const ProcessedPayroll = require('./processedPayroll.model');
+    const User = require('../users/user.model');
+    
+    let payslip = await ProcessedPayroll.findOne({ 
+        _id: id, organizationId: req.organizationId 
     });
+    
     if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
     
-    payslip = payrollService.formatPayslip(payslip);
+    let email = payslip.employeeInfo?.email;
+    if (!email) {
+        // Fallback to fetch from User model since Mixed type populate might fail
+        const userObj = await User.findById(payslip.user);
+        if (userObj) email = userObj.email;
+    }
     
-    const email = payslip.employeeInfo?.email;
-    if (!email) return res.status(400).json({ success: false, message: 'Employee email address is missing from snapshot.' });
+    if (!email) return res.status(400).json({ success: false, message: 'Employee email address is missing from snapshot and user profile.' });
     
     const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId: req.organizationId } });
     const companyName = orgSettings?.data?.organization?.companyName || 'CALTIMS';
@@ -582,7 +590,7 @@ exports.sendPayslipEmail = async (req, res, next) => {
     // Pass raw payslip and organizationId to service
     await emailService.sendPayslipEmail(email, payslip, req.organizationId, companyName);
     
-    await prisma.payslip.update({ where: { id }, data: { isEmailSent: true, status: 'SENT', lastEmailSentAt: new Date() } });
+    await ProcessedPayroll.updateOne({ _id: id }, { $set: { isEmailSent: true, lastEmailSentAt: new Date() } });
     res.status(200).json({ success: true, message: 'Payslip emailed successfully' });
   } catch (err) { logger.error(`[Payroll] sendPayslipEmail failed: ${err.message}`); next(err); }
 };

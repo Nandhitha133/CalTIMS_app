@@ -60,9 +60,12 @@ export default function PayrollHistory() {
   const currencySymbol = settings?.payroll?.currencySymbol || '$';
 
   const filteredRuns = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return runs;
     return runs.filter(run => {
       const label = `${run.year}-${String(run.month).padStart(2, '0')}`;
-      return label.includes(searchTerm) || (run.year.toString().includes(searchTerm));
+      const monthName = months[run.month - 1]?.toLowerCase() || '';
+      return label.includes(term) || run.year.toString().includes(term) || monthName.includes(term);
     });
   }, [runs, searchTerm]);
 

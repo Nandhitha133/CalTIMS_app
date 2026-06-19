@@ -893,7 +893,12 @@ const PayrollSetupWizard = () => {
                                     <input 
                                       type="number" 
                                       value={attendanceConfig.workingDays}
-                                      onChange={(e) => setAttendanceConfig({...attendanceConfig, workingDays: parseInt(e.target.value) || 0})}
+                                      onChange={(e) => {
+                                        let val = parseInt(e.target.value);
+                                        if (isNaN(val)) val = 0;
+                                        if (val > 31) val = 31;
+                                        setAttendanceConfig({...attendanceConfig, workingDays: val});
+                                      }}
                                       className="w-full bg-white dark:bg-[#1a1a1a] border-2 border-transparent focus:border-amber-100 dark:focus:border-amber-500 dark:text-white rounded-2xl px-5 py-3 text-sm font-black outline-none transition-all" 
                                       placeholder="e.g. 26" 
                                     />

@@ -167,7 +167,7 @@ const AuditLogCard = memo(({ log, onPress }: { log: AuditLog; onPress: () => voi
   );
 });
 
-const DetailModal = memo(({ visible, log, onClose, onExport, onExportUser }: any) => {
+const DetailModal = memo(({ visible, log, onClose, onExport, onExportUser, onExportRole }: any) => {
   if (!log) return null;
   const statusColors: Record<string, string> = { SUCCESS: '#6366f1', FAILED: '#e11d48', WARNING: '#f59e0b' };
   const bannerColor = statusColors[log.status] || '#3b82f6';
@@ -230,9 +230,22 @@ const DetailModal = memo(({ visible, log, onClose, onExport, onExportUser }: any
             )}
           </ScrollView>
           <View style={detailStyles.footer}>
+            <TouchableOpacity style={detailStyles.exportUserButton} onPress={() => onExportUser(log)}>
+              <Download size={14} color="white" />
+              <Text style={detailStyles.exportUserButtonText}>
+                User
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={detailStyles.exportUserButton} onPress={() => onExportRole(log)}>
+              <Download size={14} color="white" />
+              <Text style={detailStyles.exportUserButtonText}>
+                Role
+              </Text>
+            </TouchableOpacity>
             
             <TouchableOpacity style={detailStyles.exportButton} onPress={onExport}>
-              <Download size={16} color="#1e293b" /><Text style={detailStyles.exportButtonText}>Export All</Text>
+              <Download size={14} color="#1e293b" /><Text style={detailStyles.exportButtonText}>All</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -291,6 +304,7 @@ export default function AuditLogScreen() {
       const params: any = {};
       if (actionFilter) params.action = actionFilter;
       if (statusFilter) params.status = statusFilter;
+      params.limit = 1000;
       const response = await auditAPI.getAll(params);
       const data = response as any;
 
@@ -362,6 +376,28 @@ export default function AuditLogScreen() {
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     await exportFile(csv, `audit_activity_${userName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.csv`, 'text/csv');
+  };
+
+  const handleExportRoleCSV = async (targetLog: AuditLog) => {
+    if (!targetLog.role) {
+      Alert.alert('Error', 'No role associated with this log.');
+      return;
+    }
+
+    const roleName = targetLog.role;
+    const roleLogs = logs.filter(l => l.role === roleName);
+
+    if (roleLogs.length === 0) {
+      Alert.alert('Info', 'No additional activity found for this role.');
+      return;
+    }
+
+    const headers = ['Action', 'User', 'Role', 'Entity', 'Status', 'IP', 'Timestamp'];
+    const rows = roleLogs.map(l => [
+      l.action, l.performedBy?.name || 'System', l.role, l.entity, l.status, l.ipAddress, l.createdAt ? `[${format(new Date(l.createdAt), 'yyyy-MM-dd HH:mm:ss')}]` : ''
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    await exportFile(csv, `audit_role_${roleName.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.csv`, 'text/csv');
   };
 
   const applyFilters = () => { setActionFilter(tempFilters.action); setStatusFilter(tempFilters.status); setShowFilters(false); };
@@ -486,6 +522,7 @@ export default function AuditLogScreen() {
         onClose={() => setSelectedLog(null)} 
         onExport={handleExportCSV} 
         onExportUser={handleExportUserCSV}
+        onExportRole={handleExportRoleCSV}
       />
     </>
   );
@@ -494,8 +531,8 @@ export default function AuditLogScreen() {
 // ---------- Styles ----------
 const styles = StyleSheet.create({
   searchContainer: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 12 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 44, gap: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#1e293b' },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, minHeight: 48, gap: 8 },
+  searchInput: { flex: 1, fontSize: 14, color: '#1e293b', paddingVertical: 0, height: '100%' },
   filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#6366f1', backgroundColor: '#eef2ff' },
   filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#6366f1', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
@@ -626,8 +663,8 @@ const detailStyles = StyleSheet.create({
   divider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
   section: { paddingHorizontal: 20, marginBottom: 24 },
   sectionTitle: { fontSize: 10, fontWeight: '700', color: '#64748b', letterSpacing: 1, marginBottom: 12 },
-  identityGrid: { flexDirection: 'row', gap: 12 },
-  identityCard: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+  identityGrid: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  identityCard: { flex: 1, minWidth: 140, backgroundColor: '#f8fafc', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e2e8f0' },
   identityLabel: { fontSize: 10, fontWeight: '600', color: '#64748b', marginBottom: 4 },
   identityValue: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
   identityRole: { fontSize: 10, color: '#6366f1', fontWeight: '600', marginTop: 4 },
@@ -639,6 +676,7 @@ const detailStyles = StyleSheet.create({
   jsonContent: { padding: 16, fontSize: 11, color: '#4ade80', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 16 },
   footer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     padding: 20,
     borderTopWidth: 1,
@@ -646,7 +684,9 @@ const detailStyles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   exportUserButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -661,7 +701,9 @@ const detailStyles = StyleSheet.create({
     color: 'white',
   },
   exportButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

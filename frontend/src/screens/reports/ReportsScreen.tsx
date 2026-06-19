@@ -45,6 +45,8 @@ import {
   ShieldAlert,
   ChevronDown,
   FileSpreadsheet,
+  CheckCircle,
+  Lock,
 } from 'lucide-react-native';
 import { reportAPI, projectAPI, userAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
@@ -53,11 +55,6 @@ import SafeSelector from '../../components/common/SafeSelector';
 import ProGuard from '../../components/common/ProGuard';
 import { exportFile } from '../../utils/exportHelper';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 32;
-const CARD_INNER_WIDTH = SCREEN_WIDTH - 64;
-
-// Color Palette
 const PALETTE = [
   '#6366f1', '#22c55e', '#f59e0b', '#ef4444',
   '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6',
@@ -349,6 +346,7 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
                     value={tempFilters[datePickerMode] ? new Date(tempFilters[datePickerMode]) : new Date()}
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    minimumDate={datePickerMode === 'to' && tempFilters.from ? new Date(tempFilters.from) : undefined}
                     onChange={onDateChange}
                   />
                 )}
@@ -540,10 +538,14 @@ const extractData = (response: any, defaultValue: any = null): any => {
 };
 
 export default function ReportsScreen({ navigation }: { navigation: any }) {
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const CARD_INNER_WIDTH = SCREEN_WIDTH - 64;
+  
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [trendTooltip, setTrendTooltip] = useState<{ visible: boolean, x: number, y: number, index: number } | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -878,8 +880,17 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
   const uniqueEmployees = new Set(filteredTsData.map(r => r._id?.userId)).size;
 
   const complianceRate = complianceData.length
-    ? Math.round((complianceData.find(d => d.name === 'Approved')?.value || 0) / complianceData.reduce((s, d) => s + d.value, 0) * 100)
+    ? Math.round(
+        (complianceData.filter(d => ['Approved', 'Pending Review', 'Admin Resolved', 'Locked'].includes(d.name)).reduce((s, d) => s + d.value, 0)) /
+        complianceData.reduce((s, d) => s + d.value, 0) * 100
+      )
     : 0;
+
+  const adminResolvedCount = complianceData.find(d => 
+    d.name === 'Admin Resolved' || 
+    d.name === 'Admin Filled' || 
+    d.name === 'admin_filled'
+  )?.value || 0;
 
   const weeklyAvg = weeklyTrend.length
     ? (weeklyTrend.reduce((s, w) => s + w.totalHours, 0) / weeklyTrend.length).toFixed(2)
@@ -890,17 +901,27 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
     labels: weeklyTrend.map(w => dateFnsFormat(new Date(w.week), 'MMM d')),
     datasets: [
       {
-        data: weeklyTrend.map(w => w.totalHours),
-        color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
-        strokeWidth: 2,
-      },
-      {
         data: weeklyTrend.map(w => w.employeeCount ? w.totalHours / w.employeeCount : 0),
         color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
         strokeWidth: 2,
+        withDots: true,
       },
+      {
+        data: weeklyTrend.map(w => w.totalHours),
+        color: (opacity = 1) => `rgba(34, 197, 94, ${opacity})`,
+        strokeWidth: 2,
+        strokeDashArray: [5, 5],
+        withDots: true,
+      },
+      {
+        data: weeklyTrend.map(() => 40), // Standard weekly target
+        color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
+        strokeWidth: 1,
+        strokeDashArray: [2, 4],
+        withDots: false,
+      }
     ],
-    legend: ['Total Hours', 'Avg/Person'],
+    legend: ['Avg/Person', 'Total Hours', 'Target'],
   };
 
   const deptChartData = {
@@ -974,9 +995,9 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                 <TouchableOpacity style={styles.filterHeaderButton} onPress={() => setShowFilterModal(true)}>
                   <Filter size={18} color="#3b82f6" />
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.exportHeaderButton, SCREEN_WIDTH <= 380 && { paddingHorizontal: 10 }]} onPress={() => setShowExportModal(true)}>
+                <TouchableOpacity style={styles.exportHeaderButton} onPress={() => setShowExportModal(true)}>
                   <Download size={18} color="white" />
-                  {SCREEN_WIDTH > 380 && <Text style={styles.exportHeaderText}>Export</Text>}
+                  <Text style={styles.exportHeaderText}>Export</Text>
                 </TouchableOpacity>
               </View>
             }
@@ -1014,6 +1035,13 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                 color="#8b5cf6"
                 sub="Per active employee"
               />
+              <KpiCard
+                icon={CheckCircle}
+                label="Admin Resolved"
+                value={adminResolvedCount}
+                color="#6366f1"
+                sub="Timesheets filled by Admin"
+              />
             </View>
 
             {/* Smart Insights */}
@@ -1040,18 +1068,21 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
             <View style={styles.chartCard}>
               <SectionHeader icon={PieIcon} title="Compliance Overview" color="#f59e0b" subtitle="Timesheet submission status" />
               {compliancePieData.length > 0 ? (
-                <RNSPieChart
-                  data={compliancePieData}
-                  width={CARD_INNER_WIDTH}
-                  height={220}
-                  chartConfig={{
-                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                  }}
-                  accessor="value"
-                  backgroundColor="transparent"
-                  paddingLeft="15"
-                  absolute
-                />
+                <View style={{ alignItems: 'center' }}>
+                  <RNSPieChart
+                    data={compliancePieData}
+                    width={SCREEN_WIDTH - 30} // Slightly narrower to prevent clipping
+                    height={220}
+                    chartConfig={{
+                      color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                    }}
+                    accessor="value"
+                    backgroundColor="transparent"
+                    paddingLeft="0"
+                    center={[0, 0]} // Reset center to prevent left-edge clipping
+                    absolute
+                  />
+                </View>
               ) : (
                 <EmptyChart message="No timesheets to analyze" />
               )}
@@ -1082,35 +1113,73 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
             <View style={styles.chartCard}>
               <SectionHeader icon={Activity} title="Productivity Trend" color="#22c55e" subtitle="Weekly volume and average per person" />
               {weeklyTrend.length > 0 ? (
-                <LineChart
-                  data={trendChartData}
-                  width={CARD_INNER_WIDTH}
-                  height={220}
-                  chartConfig={{
-                    backgroundColor: '#ffffff',
-                    backgroundGradientFrom: '#ffffff',
-                    backgroundGradientTo: '#ffffff',
-                    decimalPlaces: 1,
-                    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
-                    style: { borderRadius: 16 },
-                    propsForDots: { r: '4', strokeWidth: '2', stroke: '#6366f1' },
-                    propsForBackgroundLines: {
-                      strokeDasharray: '5, 5',
-                      strokeWidth: 1,
-                      stroke: '#e2e8f0',
-                    },
-                  }}
-                  bezier
-                  withVerticalLines={false}
-                  withHorizontalLines={true}
-                  style={{
-                    ...styles.chart,
-                    paddingRight: 40,
-                  }}
-                  yAxisLabel=""
-                  yAxisSuffix="h"
-                />
+                <View style={{ position: 'relative' }}>
+                  <LineChart
+                    data={trendChartData}
+                    width={CARD_INNER_WIDTH}
+                    height={220}
+                    chartConfig={{
+                      backgroundColor: '#ffffff',
+                      backgroundGradientFrom: '#ffffff',
+                      backgroundGradientTo: '#ffffff',
+                      decimalPlaces: 1,
+                      color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
+                      labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+                      style: { borderRadius: 16 },
+                      propsForDots: { r: '4', strokeWidth: '2', stroke: '#6366f1' },
+                      propsForBackgroundLines: {
+                        strokeDasharray: '5, 5',
+                        strokeWidth: 1,
+                        stroke: '#e2e8f0',
+                      },
+                    }}
+                    bezier
+                    withVerticalLines={false}
+                    withHorizontalLines={true}
+                    style={{
+                      ...styles.chart,
+                      paddingRight: 40,
+                    }}
+                    yAxisLabel=""
+                    yAxisSuffix="h"
+                    onDataPointClick={(data) => {
+                      setTrendTooltip({
+                        visible: true,
+                        x: data.x,
+                        y: data.y,
+                        index: data.index,
+                      });
+                    }}
+                  />
+                  {trendTooltip?.visible && weeklyTrend[trendTooltip.index] && (
+                    <View style={{
+                      position: 'absolute',
+                      left: Math.max(0, Math.min(trendTooltip.x - 60, CARD_INNER_WIDTH - 120)),
+                      top: Math.max(0, trendTooltip.y - 80),
+                      backgroundColor: 'white',
+                      padding: 10,
+                      borderRadius: 8,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                      elevation: 4,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                      zIndex: 100,
+                    }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#1e293b', marginBottom: 4 }}>
+                        {dateFnsFormat(new Date(weeklyTrend[trendTooltip.index].week), 'MMM d')}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#6366f1', fontWeight: '600' }}>
+                        Avg/Person: {(weeklyTrend[trendTooltip.index].totalHours / (weeklyTrend[trendTooltip.index].employeeCount || 1)).toFixed(2)}h
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#22c55e', fontWeight: '600' }}>
+                        Total Hours: {weeklyTrend[trendTooltip.index].totalHours.toFixed(2)}h
+                      </Text>
+                    </View>
+                  )}
+                </View>
               ) : (
                 <EmptyChart message="Not enough weekly data to show trends" />
               )}
@@ -1143,35 +1212,42 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
             <View style={styles.chartCard}>
               <SectionHeader icon={BarChart2} title="Department Workload" color="#8b5cf6" subtitle="Total productive hours per department" />
               {deptData.length > 0 ? (
-                <BarChart
-                  data={deptChartData}
-                  width={CARD_INNER_WIDTH}
-                  height={220}
-                  chartConfig={{
-                    backgroundColor: '#ffffff',
-                    backgroundGradientFrom: '#ffffff',
-                    backgroundGradientTo: '#ffffff',
-                    decimalPlaces: 0,
-                    color: (opacity = 1, index = 0) => PALETTE[index % PALETTE.length],
-                    labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
-                    style: { borderRadius: 16 },
-                    barPercentage: 0.6,
-                    propsForBackgroundLines: {
-                      strokeDasharray: '5, 5',
-                      strokeWidth: 1,
-                      stroke: '#e2e8f0',
-                    },
-                  }}
-                  style={{
-                    ...styles.chart,
-                    paddingRight: 40,
-                  }}
-                  fromZero
-                  showValuesOnTopOfBars
-                  withCustomBarColorFromData
-                  yAxisLabel=""
-                  yAxisSuffix="h"
-                />
+                <View style={{ alignItems: 'center' }}>
+                  <BarChart
+                    data={deptChartData}
+                    width={CARD_INNER_WIDTH}
+                    height={240}
+                    chartConfig={{
+                      backgroundColor: '#ffffff',
+                      backgroundGradientFrom: '#ffffff',
+                      backgroundGradientTo: '#ffffff',
+                      decimalPlaces: 0,
+                      color: (opacity = 1, index = 0) => PALETTE[index % PALETTE.length],
+                      labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+                      style: { borderRadius: 16 },
+                      barPercentage: 0.4, // Reduced bar width
+                      propsForLabels: {
+                        fontSize: 10, // Smaller font for rotated labels
+                      },
+                      propsForBackgroundLines: {
+                        strokeDasharray: '5, 5',
+                        strokeWidth: 1,
+                        stroke: '#e2e8f0',
+                      },
+                    }}
+                    verticalLabelRotation={45}
+                    style={{
+                      ...styles.chart,
+                      paddingRight: 0,
+                      marginLeft: -10, // Shift left slightly to balance Y-axis labels
+                    }}
+                    fromZero
+                    showValuesOnTopOfBars
+                    withCustomBarColorFromData
+                    yAxisLabel=""
+                    yAxisSuffix="h"
+                  />
+                </View>
               ) : (
                 <EmptyChart message="No department data available" />
               )}
@@ -1304,7 +1380,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    width: SCREEN_WIDTH > 600 ? (SCREEN_WIDTH - 44) / 2 : '100%'
+    flexGrow: 1,
+    width: '47%',
+    maxWidth: '100%',
   },
   kpiIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   kpiContent: { flex: 1 },

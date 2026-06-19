@@ -252,14 +252,15 @@ export async function downloadFileFromUrl(
         console.warn('Direct write failed, falling back to cache:', writeErr);
         // Fallback to cache
         const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
-        await RNFS.downloadFile({ fromUrl: url, toFile: cachePath, headers }).promise;
+        const fallbackRes = await RNFS.downloadFile({ fromUrl: url, toFile: cachePath, headers }).promise;
+        if (fallbackRes.statusCode !== 200) throw new Error('Failed to download from server. Code: ' + fallbackRes.statusCode);
 
         Alert.alert('Download Complete', `File downloaded securely.\n\nWould you like to open it now?`, [
           { text: 'Cancel' },
           {
             text: 'Open File', onPress: async () => {
               try { await FileViewer.openFile(cachePath, fileType); }
-              catch (e) { Alert.alert('PDF Viewer Required', 'No application found to open this PDF. Please install a PDF viewer to open it.'); }
+              catch (e: any) { Alert.alert('PDF Viewer Required', `Error: ${e.message}\nNo application found to open this PDF.`); }
             }
           }
         ]);

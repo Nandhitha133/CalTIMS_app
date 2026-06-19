@@ -17,7 +17,7 @@ import {
   Clock,
   FileText
 } from 'lucide-react-native';
-import { userAPI, leaveAPI, timesheetAPI } from '../../services/endpoints';
+import { userAPI, leaveAPI, timesheetAPI, payrollAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import { useAuthStore } from '../../store/authStore';
 import { format } from 'date-fns';
@@ -37,13 +37,15 @@ export default function EmployeeDetail() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
-    if (userId) {
-      fetchData();
-    } else if (passedInfo?._id) {
-      // Fallback: use _id from the passed employee info
-      fetchDataWithId(passedInfo._id);
+    let resolvedId = userId;
+    if (!resolvedId && passedInfo) {
+      resolvedId = passedInfo.userId || passedInfo.user?._id || passedInfo.user || passedInfo.employee?.userId || passedInfo._id;
     }
-  }, [userId]);
+    
+    if (resolvedId) {
+      fetchDataCore(resolvedId);
+    }
+  }, [userId, passedInfo]);
 
   const extractData = (response: any, defaultValue: any = null): any => {
     if (!response) return defaultValue;
@@ -64,39 +66,77 @@ export default function EmployeeDetail() {
     try {
       setLoading(true);
       
+      let actualUserId = id;
+
+      // 1. Check if the provided ID is actually a Payroll Profile ID
+      // by trying to fetch the profile. If it succeeds, extract the true User ID.
+      let pData = null;
+      try {
+        const pRes = await payrollAPI.getProfile(id);
+        pData = extractData(pRes);
+        if (pData && (pData.user || pData.employee?.userId)) {
+          actualUserId = pData.user?._id || pData.user || pData.employee?.userId;
+        }
+      } catch (err) {
+        // ID might already be the correct User ID, continue
+      }
+
       // Fetch user profile
-      const userRes = await userAPI.getById(id);
+      const userRes = await userAPI.getById(actualUserId);
       const userData = extractData(userRes);
       if (userData) setEmployee(userData);
 
-      // Fetch leave balance
-      try {
-        const leaveRes = await leaveAPI.getBalance(id);
-        const leaveData = extractData(leaveRes);
-        if (leaveData) {
-          // Handle Mongoose Map - convert to plain object if needed
+      let foundBalance = false;
+
+      // 1. Fetch leave balance from Payroll Profile (Employee Profile)
+      if (pData) {
+        const lb = pData?.leaveBalance || pData?.employee?.leaveBalance || pData?.balances;
+        if (lb && typeof lb === 'object' && Object.keys(lb).length > 0) {
           const balance: any = {};
-          if (leaveData instanceof Map || typeof leaveData?.get === 'function') {
-            leaveData.forEach((val: number, key: string) => { balance[key] = val; });
-          } else if (typeof leaveData === 'object') {
-            Object.assign(balance, leaveData);
-          }
+          Object.assign(balance, lb);
           setLeaveBalance(balance);
+          foundBalance = true;
         }
-      } catch (leaveErr) {
-        console.log('Leave balance not available:', leaveErr);
-        // Try to use leaveBalance from user profile if available
-        if (userData?.leaveBalance) {
-          const lb = userData.leaveBalance;
-          const balance: any = {};
-          if (typeof lb === 'object') Object.assign(balance, lb);
-          setLeaveBalance(balance);
+      }
+
+      // 2. Try to use leaveBalance from user profile if available
+      if (!foundBalance && userData?.leaveBalance) {
+        const balance: any = {};
+        if (typeof userData.leaveBalance === 'object') Object.assign(balance, userData.leaveBalance);
+        setLeaveBalance(balance);
+        foundBalance = true;
+      }
+
+      // 3. Try to use passedInfo leaveBalance
+      if (!foundBalance && passedInfo?.leaveBalance) {
+        const balance: any = {};
+        if (typeof passedInfo.leaveBalance === 'object') Object.assign(balance, passedInfo.leaveBalance);
+        setLeaveBalance(balance);
+        foundBalance = true;
+      }
+
+      // 4. Fetch leave balance from Leave module as last resort
+      if (!foundBalance) {
+        try {
+          const leaveRes = await leaveAPI.getBalance(actualUserId);
+          const leaveData = extractData(leaveRes);
+          if (leaveData) {
+            const balance: any = {};
+            if (leaveData instanceof Map || typeof leaveData?.get === 'function') {
+              leaveData.forEach((val: number, key: string) => { balance[key] = val; });
+            } else if (typeof leaveData === 'object') {
+              Object.assign(balance, leaveData);
+            }
+            setLeaveBalance(balance);
+          }
+        } catch (leaveErr) {
+          console.log('Leave balance not available from leave module:', leaveErr);
         }
       }
 
       // Fetch recent timesheets
       try {
-        const tsRes = await timesheetAPI.getHistory({ userId: id, limit: 5 });
+        const tsRes = await timesheetAPI.getHistory({ userId: actualUserId, limit: 5 });
         const tsData = extractData(tsRes, []);
         if (Array.isArray(tsData)) setTimesheets(tsData.slice(0, 5));
       } catch (tsErr) {
@@ -179,23 +219,7 @@ export default function EmployeeDetail() {
               </View>
             </View>
 
-            {/* Leave Balance Card */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Leave Balance</Text>
-              <View style={styles.leaveGrid}>
-                {[
-                  { label: 'Annual Leave', value: leaveBalance?.annual ?? leaveBalance?.annualLeave ?? 0 },
-                  { label: 'Sick Leave', value: leaveBalance?.sick ?? leaveBalance?.sickLeave ?? 0 },
-                  { label: 'Casual Leave', value: leaveBalance?.casual ?? leaveBalance?.casualLeave ?? 0 },
-                  { label: 'Loss Of Pay', value: leaveBalance?.lop ?? leaveBalance?.lossOfPay ?? 0 },
-                ].map((item, idx) => (
-                  <View key={idx} style={styles.leaveBox}>
-                    <Text style={styles.leaveValue}>{item.value}</Text>
-                    <Text style={styles.leaveLabel}>{item.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
+
 
             {/* Recent Timesheets Card */}
             <View style={styles.sectionCard}>

@@ -9,7 +9,8 @@ import {
   TextInput,
   Alert,
   Modal,
-  Platform
+  Platform,
+  Linking
 } from 'react-native';
 import {
   FileText,
@@ -32,7 +33,9 @@ import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
 import { useNavigation } from '@react-navigation/native';
 import StatementPreviewModal from './StatementPreviewModal';
-import { exportFile, convertToCSV } from '../../utils/exportHelper';
+import { exportFile, downloadFileFromUrl, convertToCSV } from '../../utils/exportHelper';
+import { BASE_URL } from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
@@ -128,193 +131,16 @@ export default function PayrollPayslips() {
       const payslip = payslips.find(p => (p._id || p.id) === id);
       if (!payslip) throw new Error('Payslip data not found');
 
-      let rawEarnings = [];
-      if (Array.isArray(payslip.earnings)) {
-         rawEarnings = payslip.earnings;
-      } else if (Array.isArray(payslip.breakdown?.earnings)) {
-         rawEarnings = payslip.breakdown.earnings;
-      } else if (payslip.breakdown?.earnings?.components) {
-         rawEarnings = payslip.breakdown.earnings.components;
-      } else {
-         rawEarnings = [
-            { name: 'Basic Salary', val: payslip.breakdown?.basic || 0 },
-            { name: 'House Rent Allowance', val: payslip.breakdown?.hra || 0 },
-            { name: 'Special Allowance', val: payslip.breakdown?.specialAllowance || 0 }
-         ];
-      }
-
-      let rawDeductions = [];
-      if (Array.isArray(payslip.deductions)) {
-         rawDeductions = payslip.deductions;
-      } else if (Array.isArray(payslip.breakdown?.deductions)) {
-         rawDeductions = payslip.breakdown.deductions;
-      } else if (payslip.breakdown?.deductions?.components) {
-         rawDeductions = payslip.breakdown.deductions.components;
-      } else {
-         rawDeductions = [
-            { name: 'Provident Fund (PF)', val: payslip.breakdown?.pf || 0 },
-            { name: 'Professional Tax (PT)', val: payslip.breakdown?.pt || 0 },
-            { name: 'Leave Deductions', val: payslip.breakdown?.lopDeduction || 0 }
-         ];
-      }
+      const base64Data = await payrollAPI.downloadPayslip(id);
+      const fileName = `Payslip_${name.replace(/\\s+/g, '_')}_${months[month - 1]}_${year}.pdf`;
       
-      const earningsList = rawEarnings.filter((x: any) => (x.val || x.amount) > 0);
-      const deductionsList = rawDeductions.filter((x: any) => (x.val || x.amount) > 0);
-
-      const grossValue = payslip.gross || payslip.grossYield || payslip.breakdown?.earnings?.grossEarnings || payslip.breakdown?.grossPay || payslip.totalAmount || earningsList.reduce((sum: number, item: any) => sum + Number(item.val || item.amount || 0), 0) || 0;
-      const deductionValue = payslip.totalDeductions || payslip.liability || payslip.breakdown?.deductions?.totalDeductions || deductionsList.reduce((sum: number, item: any) => sum + Number(item.val || item.amount || 0), 0) || 0;
-      const netValue = payslip.netPay || payslip.netSalary || payslip.totalAmount || Math.max(0, grossValue - deductionValue) || 0;
-
-      const maxRows = Math.max(earningsList.length, deductionsList.length, 3);
-      let tableRows = '';
-      for (let i = 0; i < maxRows; i++) {
-        const e = earningsList[i] || { name: '', val: 0, amount: 0 };
-        const d = deductionsList[i] || { name: '', val: 0, amount: 0 };
-        const eVal = e.val || e.amount || 0;
-        const dVal = d.val || d.amount || 0;
-        tableRows += `
-          <tr>
-            <td>${e.name || ''}</td>
-            <td>${eVal ? '₹' + formatCurrency(eVal) : ''}</td>
-            <td>${d.name || ''}</td>
-            <td>${dVal ? '-₹' + formatCurrency(dVal) : ''}</td>
-          </tr>
-        `;
+      if (base64Data) {
+        await exportFile(base64Data as string, fileName, 'application/pdf', true);
+      } else {
+        throw new Error('Failed to fetch the PDF data.');
       }
-
-      const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Payslip - ${name}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; color: #1e293b; margin: 0; padding: 40px; background: #fff; max-width: 800px; margin: 0 auto; }
-    .top-header { display: flex; justify-content: space-between; margin-bottom: 40px; }
-    .company-info h1 { font-size: 28px; font-weight: 900; color: #0f172a; margin: 0; letter-spacing: 1px; line-height: 1.1; }
-    .period-info { text-align: right; }
-    .period-info .label { font-size: 10px; font-weight: 800; color: #3b82f6; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
-    .period-info .value { font-size: 20px; font-weight: 800; color: #1e293b; margin: 0; }
-    
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
-    .info-section .sec-title { font-size: 11px; font-weight: 800; color: #3b82f6; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; }
-    .info-row { display: flex; font-size: 11px; margin-bottom: 12px; align-items: flex-start; }
-    .info-row span:first-child { width: 120px; color: #64748b; font-weight: 500; flex-shrink: 0; }
-    .info-row span:last-child { font-weight: 700; color: #0f172a; flex: 1; word-wrap: break-word; }
-    
-    .financial-table { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; margin-bottom: 30px; }
-    .financial-table th, .financial-table td { padding: 12px 16px; font-size: 11px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; }
-    .financial-table th:last-child, .financial-table td:last-child { border-right: none; }
-    .financial-table th { background: #f8fafc; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-    .financial-table th:nth-child(1), .financial-table th:nth-child(2) { color: #3b82f6; }
-    .financial-table th:nth-child(3), .financial-table th:nth-child(4) { color: #ef4444; }
-    .financial-table th:nth-child(2), .financial-table th:nth-child(4), .financial-table td:nth-child(2), .financial-table td:nth-child(4) { text-align: right; }
-    .financial-table td { color: #64748b; font-weight: 500; }
-    .financial-table td:nth-child(2) { color: #0f172a; font-weight: 700; }
-    .financial-table td:nth-child(4) { color: #ef4444; font-weight: 700; }
-    
-    .financial-table tr.total-row td { background: #f8fafc; font-weight: 800; font-size: 12px; border-bottom: none; }
-    .financial-table tr.total-row td:nth-child(1), .financial-table tr.total-row td:nth-child(2) { color: #3b82f6; }
-    .financial-table tr.total-row td:nth-child(3), .financial-table tr.total-row td:nth-child(4) { color: #ef4444; }
-    
-    .net-pay-box { background: #0f172a; border-radius: 12px; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; color: white; margin-bottom: 60px; }
-    .net-pay-left .label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
-    .net-pay-left .amount { font-size: 32px; font-weight: 800; margin: 0; letter-spacing: -1px; }
-    .net-pay-right { text-align: right; }
-    .net-pay-right .label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-    .net-pay-right .words { font-size: 12px; font-weight: 600; font-style: italic; color: #f8fafc; max-width: 250px; line-height: 1.4; }
-    
-    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 60px; }
-    .footer-left { font-size: 8px; font-weight: 600; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1px; }
-    .footer-right { text-align: right; }
-    .footer-right .sign { font-size: 11px; font-weight: 800; color: #3b82f6; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 1px; }
-    .footer-right .note { font-size: 8px; font-weight: 500; color: #94a3b8; }
-
-    @media print {
-      body { padding: 0; }
-      .print-btn { display: none !important; }
-    }
-    .print-btn { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; display: block; margin: 0 auto 40px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5); }
-  </style>
-</head>
-<body>
-  <button class="print-btn" onclick="window.print()">Save as PDF</button>
-
-  <div class="top-header">
-    <div class="company-info">
-      <h1>CALTIMS</h1>
-      <h1>SYSTEM</h1>
-    </div>
-    <div class="period-info">
-      <div class="label">Payslip Period</div>
-      <div class="value">${months[month - 1]} ${year}</div>
-    </div>
-  </div>
-
-  <div class="info-grid">
-    <div class="info-section">
-      <div class="sec-title">Employee Details</div>
-      <div class="info-row"><span>Name</span><span>: ${name}</span></div>
-      <div class="info-row"><span>Employee ID</span><span>: ${payslip.employeeInfo?.employeeId || 'NA'}</span></div>
-      <div class="info-row"><span>Designation</span><span>: ${payslip.employeeInfo?.designation || 'Staff'}</span></div>
-      <div class="info-row"><span>Joining Date</span><span>: ${payslip.employeeInfo?.joiningDate ? format(new Date(payslip.employeeInfo.joiningDate), 'dd/MM/yyyy') : 'NA'}</span></div>
-    </div>
-    <div class="info-section">
-      <div class="sec-title">Attendance & Banking</div>
-      <div class="info-row"><span>Working Days</span><span>: ${payslip.attendance?.totalDays || 30}</span></div>
-      <div class="info-row"><span>Payable Days</span><span style="color:#3b82f6">: ${payslip.attendance?.presentDays || 24}</span></div>
-      <div class="info-row"><span>Bank Name</span><span>: ${payslip.employeeInfo?.bankName || 'NA'}</span></div>
-      <div class="info-row"><span>Account No</span><span>: ************${(payslip.employeeInfo?.accountNumber || '0000').slice(-4)}</span></div>
-    </div>
-  </div>
-
-  <table class="financial-table">
-    <thead>
-      <tr>
-        <th>Earnings</th>
-        <th>Amount</th>
-        <th>Deductions</th>
-        <th>Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows}
-      <tr class="total-row">
-        <td>Gross Total</td>
-        <td>₹${formatCurrency(grossValue)}</td>
-        <td>Total Deductions</td>
-        <td>₹${formatCurrency(deductionValue)}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="net-pay-box">
-    <div class="net-pay-left">
-      <div class="label">Net Monthly Salary Payable</div>
-      <h2 class="amount">₹${formatCurrency(netValue)}</h2>
-    </div>
-    <div class="net-pay-right">
-      <div class="label">Amount In Words</div>
-      <div class="words">${numberToWords(netValue)}</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <div class="footer-left">Verification Token: ${(payslip._id || payslip.id || 'N/A').toString().substring(0, 8).toUpperCase()}</div>
-    <div class="footer-right">
-      <div class="sign">Authorized Signatory</div>
-      <div class="note">Computer Generated - No Signature Required</div>
-    </div>
-  </div>
-</body>
-</html>`;
-
-
-      await exportFile(htmlContent, `Payslip_${name.replace(/\s+/g, '_')}_${months[month - 1]}_${year}.html`, 'text/html', false);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to open payslip online');
+      Alert.alert('Error', err.message || 'Failed to download payslip');
     }
   };
 
@@ -867,8 +693,8 @@ const styles = StyleSheet.create({
   pickerBox: { flexDirection: 'row', alignItems: 'center', gap: scale(6), paddingHorizontal: scale(12), paddingVertical: verticalScale(8), backgroundColor: '#f8fafc', borderRadius: scale(8) },
   pickerText: { fontSize: moderateScale(13), fontWeight: '700', color: '#0f172a' },
 
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(8), backgroundColor: '#fff', paddingHorizontal: scale(12), borderRadius: scale(12), borderWidth: 1, borderColor: '#e2e8f0' },
-  searchInput: { flex: 1, height: verticalScale(40), fontSize: moderateScale(13), color: '#0f172a' },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(8), backgroundColor: '#fff', paddingHorizontal: scale(12), borderRadius: scale(12), borderWidth: 1, borderColor: '#e2e8f0', minHeight: verticalScale(48) },
+  searchInput: { flex: 1, fontSize: moderateScale(13), color: '#0f172a', paddingVertical: 0, height: '100%' },
 
   filtersBottomRow: { gap: scale(8) },
   filterPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: scale(20), borderWidth: 1, borderColor: '#e2e8f0' },

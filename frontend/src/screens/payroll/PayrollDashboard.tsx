@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert
+  Alert,
+  Modal
 } from 'react-native';
 import {
   Wallet,
@@ -16,7 +17,9 @@ import {
   Play,
   AlertCircle,
   ExternalLink,
-  Calendar
+  Calendar,
+  ChevronDown,
+  CheckCircle2
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
@@ -40,6 +43,8 @@ export default function PayrollDashboard() {
   const [history, setHistory] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [showYearPicker, setShowYearPicker] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -100,9 +105,17 @@ export default function PayrollDashboard() {
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header Options */}
         <View style={styles.headerControls}>
-          <View style={styles.dateSelector}>
-            <Calendar size={18} color="#4f46e5" style={{ marginRight: 8 }} />
-            <Text style={styles.dateText}>{months[selectedMonth - 1]} {selectedYear}</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={styles.dateSelector} onPress={() => setShowMonthPicker(true)}>
+              <Calendar size={18} color="#4f46e5" style={{ marginRight: 8 }} />
+              <Text style={styles.dateText}>{months[selectedMonth - 1].slice(0,3)}</Text>
+              <ChevronDown size={16} color="#94a3b8" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.dateSelector} onPress={() => setShowYearPicker(true)}>
+              <Text style={styles.dateText}>{selectedYear}</Text>
+              <ChevronDown size={16} color="#94a3b8" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.runBtn} onPress={() => navigation.navigate('PayrollRun')}>
             <Play size={16} color="#fff" />
@@ -256,6 +269,66 @@ export default function PayrollDashboard() {
           </View>
         )}
       </ScrollView>
+
+      {/* Month Picker Modal */}
+      <Modal visible={showMonthPicker} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Month</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {months.map((mName, i) => {
+                const m = i + 1;
+                const isSelected = m === selectedMonth;
+                return (
+                  <TouchableOpacity 
+                    key={i} 
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => { setSelectedMonth(m); setShowMonthPicker(false); }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#4f46e5' : '#334155' }}>
+                      {mName}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={18} color="#4f46e5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 20, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => setShowMonthPicker(false)}>
+              <Text style={{ fontWeight: '800', color: '#64748b' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Year Picker Modal */}
+      <Modal visible={showYearPicker} transparent animationType="fade">
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, width: '80%', maxHeight: '60%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10 }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, textAlign: 'center' }}>Select Year</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {Array.from({ length: 5 }).map((_, i) => {
+                const y = new Date().getFullYear() - i;
+                const isSelected = y === selectedYear;
+                return (
+                  <TouchableOpacity 
+                    key={y} 
+                    style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => { setSelectedYear(y); setShowYearPicker(false); }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#4f46e5' : '#334155' }}>
+                      {y}
+                    </Text>
+                    {isSelected && <CheckCircle2 size={18} color="#4f46e5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 20, backgroundColor: '#f1f5f9', padding: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => setShowYearPicker(false)}>
+              <Text style={{ fontWeight: '800', color: '#64748b' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Layout>
   );
 }

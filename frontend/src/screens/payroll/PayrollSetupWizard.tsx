@@ -249,12 +249,49 @@ export default function PayrollSetupWizard() {
     setIsSaving(true);
     const annualCTC = ctcType === 'annual' ? parseFloat(ctcValue) : parseFloat(ctcValue) * 12;
 
+    const cleanedDeductions = structure.deductions.filter(d => {
+      const name = (d.name || '').toLowerCase();
+      const isPF = name.includes('provident fund') || name === 'pf';
+      const isESI = name.includes('esi') || name.includes('state insurance');
+      const isPT = name.includes('professional tax') || name === 'pt';
+      const isStatutoryCandidate = (isPF && globalPolicy?.statutory?.pf?.enabled) || 
+                                   (isESI && globalPolicy?.statutory?.esi?.enabled) || 
+                                   (isPT && globalPolicy?.statutory?.pt?.enabled);
+      return !isStatutoryCandidate;
+    });
+
+    const finalDeductions = [...cleanedDeductions];
+    const gratuity = breakdown.statutoryDeductions?.find((d: any) => d.name === 'Gratuity');
+    if (gratuity && globalPolicy?.statutory?.gratuity?.includeInCTC) {
+      if (!finalDeductions.find(d => d.name === 'Gratuity')) {
+        finalDeductions.push({ 
+          name: 'Gratuity', 
+          value: gratuity.calculatedValue, 
+          calculationType: 'Fixed', 
+          basedOn: 'Basic Salary', 
+          isStatutory: true 
+        } as any);
+      }
+    }
+
+    const earningsWithMeta = [
+      ...structure.earnings,
+      { 
+        _isStatutoryConfig: true, 
+        _config: statutoryConfig, 
+        _attendance: attendanceConfig,
+        name: 'Statutory Metadata', 
+        value: 0, 
+        hidden: true 
+      } as any
+    ];
+
     setupProfileMutation.mutate({
       userId: selectedUser?.id || selectedUser?._id,
       employeeId: selectedUser?.employee?.id,
       annualCTC,
-      earnings: structure.earnings,
-      deductions: structure.deductions,
+      earnings: earningsWithMeta,
+      deductions: finalDeductions,
       bankDetails
     });
   };
@@ -578,7 +615,7 @@ export default function PayrollSetupWizard() {
               </View>
               <View style={styles.overrideToggleGroup}>
                 {['default', 'enabled', 'disabled'].map(mode => (
-                  <TouchableOpacity key={mode} disabled={true} style={[styles.overrideToggleBtn, statutoryConfig.pf.mode === mode && styles.overrideToggleBtnActive, { opacity: 0.6 }]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pf: { mode, enabled: mode !== 'disabled' } })}>
+                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.pf.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pf: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.pf.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
@@ -594,7 +631,7 @@ export default function PayrollSetupWizard() {
               </View>
               <View style={styles.overrideToggleGroup}>
                 {['default', 'enabled', 'disabled'].map(mode => (
-                  <TouchableOpacity key={mode} disabled={true} style={[styles.overrideToggleBtn, statutoryConfig.esi.mode === mode && styles.overrideToggleBtnActive, { opacity: 0.6 }]} onPress={() => setStatutoryConfig({ ...statutoryConfig, esi: { mode, enabled: mode !== 'disabled' } })}>
+                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.esi.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, esi: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.esi.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
@@ -610,7 +647,7 @@ export default function PayrollSetupWizard() {
               </View>
               <View style={styles.overrideToggleGroup}>
                 {['default', 'enabled', 'disabled'].map(mode => (
-                  <TouchableOpacity key={mode} disabled={true} style={[styles.overrideToggleBtn, statutoryConfig.pt.mode === mode && styles.overrideToggleBtnActive, { opacity: 0.6 }]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pt: { mode, enabled: mode !== 'disabled' } })}>
+                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.pt.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pt: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.pt.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
@@ -631,11 +668,31 @@ export default function PayrollSetupWizard() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.overrideTitle, { color: '#0f172a' }]}>CALCULATION MODE</Text>
               </View>
-              <TouchableOpacity disabled={true} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: 0.6 }} onPress={() => setAttendanceConfig({ mode: attendanceConfig.mode === 'POLICY_DEFAULT' ? 'FIXED_DAYS' : 'POLICY_DEFAULT', workingDays: 26 })}>
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => setAttendanceConfig({ mode: attendanceConfig.mode === 'POLICY_DEFAULT' ? 'CUSTOM' : 'POLICY_DEFAULT', workingDays: 26 })}>
                 <Text style={{ fontSize: 10, fontWeight: '800', color: '#4f46e5' }}>{attendanceConfig.mode.replace('_', ' ')}</Text>
                 <ChevronDown size={14} color="#4f46e5" />
               </TouchableOpacity>
             </View>
+
+            {attendanceConfig.mode === 'CUSTOM' && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.complianceLabel}>WORKING DAYS PER MONTH</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#fef08a', borderRadius: 12, paddingHorizontal: 12 }}>
+                  <TextInput
+                    style={{ flex: 1, padding: 12, fontSize: 13, color: '#0f172a', fontWeight: '700' }}
+                    value={attendanceConfig.workingDays.toString()}
+                    onChangeText={(v) => {
+                      let val = parseInt(v);
+                      if (isNaN(val)) val = 0;
+                      if (val > 31) val = 31;
+                      setAttendanceConfig({ ...attendanceConfig, workingDays: val });
+                    }}
+                    keyboardType="numeric"
+                  />
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8' }}>DAYS</Text>
+                </View>
+              </View>
+            )}
           </View>
 
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 40 }}>
