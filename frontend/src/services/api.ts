@@ -5,10 +5,17 @@ import { arrayBufferToBase64 } from '../utils/base64';
 
 // Get base URL based on environment
 const getBaseUrl = () => {
-  // Main live link - do not change
+  // ⚠️ URGENT NOTE ABOUT THE 500 ERROR ⚠️
+  // If you are getting a it is because this app
+  // is pointing to the LIVE production server below, which still has the backend bug!
+  // The fix we made is currently ONLY on your local computer.
+  // To test the PDF download fix, comment out PRODUCTION_URL and use LOCAL_URL with your IPv4 address:
+  
+  // Main live link - do not change (unless testing backend fixes locally)
   const PRODUCTION_URL = 'https://caldimproducts.com/caltims/api/v1';
+  // const LOCAL_URL = 'http://YOUR_LOCAL_IPV4_ADDRESS:5000/api/v1'; 
 
-  return PRODUCTION_URL;
+  return PRODUCTION_URL; // Change this to return LOCAL_URL if you want to test the local fix
 };
 
 export const BASE_URL = getBaseUrl();

@@ -71,7 +71,7 @@ const PayrollPolicySchema = new mongoose.Schema({
     multiplier: { type: Number, default: 1.5 },
     maxHours: { type: Number, default: 40 }
   },
-  
+
   compliance: {
     timesheetFreezeDay: { type: Number, default: 28 },
     allowBackdatedEntries: { type: Boolean, default: true }
@@ -92,7 +92,7 @@ const PayrollPolicySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Ensure only one active policy per company
-PayrollPolicySchema.pre('save', async function(next) {
+PayrollPolicySchema.pre('save', async function (next) {
   if (this.isActive) {
     await this.constructor.updateMany(
       { organizationId: this.organizationId, _id: { $ne: this._id } },

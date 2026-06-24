@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Switch,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
@@ -214,6 +216,7 @@ export default function PayrollPolicyTab() {
   const [activeTab, setActiveTab] = useState("statutory");
   const [simulationSalary, setSimulationSalary] = useState(50000);
   const [initialState, setInitialState] = useState<string | null>(null);
+  const [stateModalVisible, setStateModalVisible] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -402,15 +405,17 @@ export default function PayrollPolicyTab() {
                             style={styles.input}
                             keyboardType="numeric"
                             value={String(policy?.statutory?.pf?.employeePercent ?? 0)}
-                            onChangeText={(val) => 
+                            onChangeText={(val) => {
+                              let num = parseFloat(val) || 0;
+                              if (num > 100) num = 100;
                               setPolicy({
                                 ...policy,
                                 statutory: {
                                   ...policy.statutory,
-                                  pf: { ...policy.statutory.pf, employeePercent: parseFloat(val) || 0 }
+                                  pf: { ...policy.statutory.pf, employeePercent: num }
                                 }
-                              })
-                            }
+                              });
+                            }}
                           />
                           <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
                         </View>
@@ -422,15 +427,17 @@ export default function PayrollPolicyTab() {
                             style={styles.input}
                             keyboardType="numeric"
                             value={String(policy?.statutory?.pf?.employerPercent ?? 0)}
-                            onChangeText={(val) => 
+                            onChangeText={(val) => {
+                              let num = parseFloat(val) || 0;
+                              if (num > 100) num = 100;
                               setPolicy({
                                 ...policy,
                                 statutory: {
                                   ...policy.statutory,
-                                  pf: { ...policy.statutory.pf, employerPercent: parseFloat(val) || 0 }
+                                  pf: { ...policy.statutory.pf, employerPercent: num }
                                 }
-                              })
-                            }
+                              });
+                            }}
                           />
                           <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
                         </View>
@@ -494,15 +501,17 @@ export default function PayrollPolicyTab() {
                             style={styles.input}
                             keyboardType="numeric"
                             value={String(policy?.statutory?.esi?.employeePercent ?? 0)}
-                            onChangeText={(val) => 
+                            onChangeText={(val) => {
+                              let num = parseFloat(val) || 0;
+                              if (num > 100) num = 100;
                               setPolicy({
                                 ...policy,
                                 statutory: {
                                   ...policy.statutory,
-                                  esi: { ...policy.statutory.esi, employeePercent: parseFloat(val) || 0 }
+                                  esi: { ...policy.statutory.esi, employeePercent: num }
                                 }
-                              })
-                            }
+                              });
+                            }}
                           />
                           <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
                         </View>
@@ -565,23 +574,12 @@ export default function PayrollPolicyTab() {
                       <Text style={styles.inputLabel}>WORK STATE</Text>
                       <TouchableOpacity 
                         style={styles.selector}
-                        onPress={() => {
-                          // Simple state picker logic
-                          const states = Object.keys(PT_STATE_CONFIGS);
-                          Alert.alert(
-                            "Select State",
-                            "Choose the applicable work state",
-                            states.map(s => ({
-                              text: PT_STATE_CONFIGS[s].name,
-                              onPress: () => handlePTStateChange(s)
-                            })) as any
-                          );
-                        }}
+                        onPress={() => setStateModalVisible(true)}
                       >
                         <Text style={styles.selectorText}>
                           {PT_STATE_CONFIGS[policy?.statutory?.pt?.state]?.name || "Select State"}
                         </Text>
-                        <RefreshCcw size={14} color="#6366f1" />
+                        <ChevronDown size={16} color="#6366f1" />
                       </TouchableOpacity>
                     </View>
 
@@ -644,6 +642,166 @@ export default function PayrollPolicyTab() {
                         </TouchableOpacity>
                       </View>
                     ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Gratuity Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#fef2f2' }]}>
+                      <IndianRupee size={20} color="#ef4444" />
+                    </View>
+                    <View>
+                      <Text style={styles.cardTitle}>Gratuity Benefit</Text>
+                      <Text style={styles.cardSubtitle}>STATUTORY COMPLIANCE</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={policy?.statutory?.gratuity?.enabled}
+                    onValueChange={(val) => 
+                      setPolicy({
+                        ...policy,
+                        statutory: {
+                          ...policy.statutory,
+                          gratuity: { ...policy.statutory.gratuity, enabled: val }
+                        }
+                      })
+                    }
+                    trackColor={{ false: "#e2e8f0", true: "#ef4444" }}
+                  />
+                </View>
+
+                {policy?.statutory?.gratuity?.enabled && (
+                  <View style={styles.cardBody}>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>GRATUITY RATE %</Text>
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={String(policy?.statutory?.gratuity?.employeePercent ?? 4.86)}
+                            onChangeText={(val) => {
+                              let num = parseFloat(val) || 0;
+                              if (num > 100) num = 100;
+                              setPolicy({
+                                ...policy,
+                                statutory: {
+                                  ...policy.statutory,
+                                  gratuity: { 
+                                    ...policy.statutory.gratuity, 
+                                    employeePercent: num,
+                                    employeeRate: num,
+                                    employerPercent: num,
+                                    employerRate: num
+                                  }
+                                }
+                              });
+                            }}
+                          />
+                          <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.checkboxRow}>
+                      <Text style={styles.checkboxLabel}>Include Gratuity in CTC Calculations</Text>
+                      <Switch
+                        value={policy?.statutory?.gratuity?.includeInCTC}
+                        onValueChange={(val) => 
+                          setPolicy({
+                            ...policy,
+                            statutory: {
+                              ...policy.statutory,
+                              gratuity: { ...policy.statutory.gratuity, includeInCTC: val }
+                            }
+                          })
+                        }
+                        trackColor={{ false: "#e2e8f0", true: "#ef4444" }}
+                        style={{ transform: [{ scale: 0.8 }] }}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Retirement Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleContainer}>
+                    <View style={[styles.iconBox, { backgroundColor: '#f0fdf4' }]}>
+                      <ShieldCheck size={20} color="#22c55e" />
+                    </View>
+                    <View>
+                      <Text style={styles.cardTitle}>Retirement Benefit</Text>
+                      <Text style={styles.cardSubtitle}>STATUTORY COMPLIANCE</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={policy?.statutory?.retirement?.enabled}
+                    onValueChange={(val) => 
+                      setPolicy({
+                        ...policy,
+                        statutory: {
+                          ...policy.statutory,
+                          retirement: { ...policy.statutory.retirement, enabled: val }
+                        }
+                      })
+                    }
+                    trackColor={{ false: "#e2e8f0", true: "#22c55e" }}
+                  />
+                </View>
+
+                {policy?.statutory?.retirement?.enabled && (
+                  <View style={styles.cardBody}>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>RETIREMENT RATE %</Text>
+                        <View style={styles.inputWrapper}>
+                          <TextInput
+                            style={styles.input}
+                            keyboardType="numeric"
+                            value={String(policy?.statutory?.retirement?.employeePercent ?? 5.0)}
+                            onChangeText={(val) => {
+                              let num = parseFloat(val) || 0;
+                              if (num > 100) num = 100;
+                              setPolicy({
+                                ...policy,
+                                statutory: {
+                                  ...policy.statutory,
+                                  retirement: { 
+                                    ...policy.statutory.retirement, 
+                                    employeePercent: num,
+                                    employeeRate: num,
+                                    employerPercent: num,
+                                    employerRate: num
+                                  }
+                                }
+                              });
+                            }}
+                          />
+                          <Percent size={14} color="#94a3b8" style={styles.inputIcon} />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.checkboxRow}>
+                      <Text style={styles.checkboxLabel}>Include Retirement in CTC Calculations</Text>
+                      <Switch
+                        value={policy?.statutory?.retirement?.includeInCTC}
+                        onValueChange={(val) => 
+                          setPolicy({
+                            ...policy,
+                            statutory: {
+                              ...policy.statutory,
+                              retirement: { ...policy.statutory.retirement, includeInCTC: val }
+                            }
+                          })
+                        }
+                        trackColor={{ false: "#e2e8f0", true: "#22c55e" }}
+                        style={{ transform: [{ scale: 0.8 }] }}
+                      />
+                    </View>
                   </View>
                 )}
               </View>
@@ -843,7 +1001,7 @@ export default function PayrollPolicyTab() {
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <>
-              <Save size={18} color="#fff" />
+              <Save size={18} color="#fff" style={{ marginRight: 10 }} />
               <Text style={styles.saveButtonText}>SAVE CHANGES</Text>
             </>
           )}
@@ -851,6 +1009,77 @@ export default function PayrollPolicyTab() {
         
         <View style={{ height: 40 }} />
       </View>
+
+      <Modal
+        visible={stateModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setStateModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
+          onPress={() => setStateModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Work State</Text>
+              <TouchableOpacity onPress={() => setStateModalVisible(false)}>
+                <Text style={styles.modalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalList}>
+              <Text style={styles.modalSectionHeader}>PT Applicable States</Text>
+              {Object.keys(PT_STATE_CONFIGS)
+                .filter(key => PT_STATE_CONFIGS[key].isApplicable)
+                .map(key => (
+                  <TouchableOpacity 
+                    key={key} 
+                    style={[
+                      styles.modalItem,
+                      policy?.statutory?.pt?.state === key && styles.modalItemSelected
+                    ]}
+                    onPress={() => {
+                      handlePTStateChange(key);
+                      setStateModalVisible(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.modalItemText,
+                      policy?.statutory?.pt?.state === key && styles.modalItemTextSelected
+                    ]}>
+                      {PT_STATE_CONFIGS[key].name} ({key})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
+              <Text style={[styles.modalSectionHeader, { marginTop: 15 }]}>Non-PT States</Text>
+              {Object.keys(PT_STATE_CONFIGS)
+                .filter(key => !PT_STATE_CONFIGS[key].isApplicable)
+                .map(key => (
+                  <TouchableOpacity 
+                    key={key} 
+                    style={[
+                      styles.modalItem,
+                      policy?.statutory?.pt?.state === key && styles.modalItemSelected
+                    ]}
+                    onPress={() => {
+                      handlePTStateChange(key);
+                      setStateModalVisible(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.modalItemText,
+                      policy?.statutory?.pt?.state === key && styles.modalItemTextSelected
+                    ]}>
+                      {PT_STATE_CONFIGS[key].name} ({key})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Layout>
   );
 }
@@ -867,7 +1096,7 @@ const styles = StyleSheet.create({
   activeTabButton: { backgroundColor: '#f5f3ff' },
   tabText: { fontSize: moderateScale(12), fontWeight: '600', color: '#64748b' },
   activeTabText: { color: '#6366f1' },
-  content: { padding: moderateScale(16) },
+  content: { padding: moderateScale(16), paddingBottom: verticalScale(120) },
   section: { gap: moderateScale(16) },
   card: { backgroundColor: '#fff', borderRadius: moderateScale(16), borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: moderateScale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
@@ -910,7 +1139,77 @@ const styles = StyleSheet.create({
   settingLabel: { fontSize: moderateScale(13), fontWeight: '700', color: '#1e293b' },
   settingDesc: { fontSize: moderateScale(11), color: '#64748b' },
   smallInput: { width: scale(60), height: verticalScale(36), backgroundColor: '#f8fafc', borderRadius: moderateScale(8), borderWidth: 1, borderColor: '#e2e8f0', textAlign: 'center', fontSize: moderateScale(16), fontWeight: '800', color: '#6366f1' },
-  saveButton: { margin: moderateScale(16), height: verticalScale(52), backgroundColor: '#1e293b', borderRadius: moderateScale(16), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: moderateScale(10), shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  saveButton: { margin: moderateScale(16), height: verticalScale(52), backgroundColor: '#1e293b', borderRadius: moderateScale(16), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
   disabledButton: { opacity: 0.6 },
   saveButtonText: { color: '#fff', fontSize: moderateScale(14), fontWeight: '800', letterSpacing: 1 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: moderateScale(20),
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: moderateScale(16),
+    width: '100%',
+    maxHeight: '80%',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: moderateScale(16),
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  modalTitle: {
+    fontSize: moderateScale(16),
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalCloseText: {
+    fontSize: moderateScale(14),
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  modalList: {
+    padding: moderateScale(16),
+  },
+  modalSectionHeader: {
+    fontSize: moderateScale(12),
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: verticalScale(8),
+    backgroundColor: '#f8fafc',
+    paddingVertical: verticalScale(4),
+    paddingHorizontal: scale(8),
+    borderRadius: moderateScale(4),
+  },
+  modalItem: {
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(12),
+    borderRadius: moderateScale(8),
+    marginBottom: verticalScale(4),
+  },
+  modalItemSelected: {
+    backgroundColor: '#eef2ff',
+  },
+  modalItemText: {
+    fontSize: moderateScale(14),
+    color: '#334155',
+    fontWeight: '500',
+  },
+  modalItemTextSelected: {
+    color: '#6366f1',
+    fontWeight: '700',
+  },
 });

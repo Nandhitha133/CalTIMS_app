@@ -235,7 +235,7 @@ export default function BankTransferExport() {
                   <Text style={styles.kpiBadge}>REAL-TIME</Text>
                 </View>
                 <Text style={styles.kpiLabel}>TOTAL PAYOUT AMOUNT</Text>
-                <Text style={styles.kpiValue}>{currencySymbol}{stats.totalAmount.toLocaleString()}</Text>
+                <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{stats.totalAmount.toLocaleString()}</Text>
                 <Text style={styles.kpiSub}>Calculated Net Pay</Text>
               </View>
 
@@ -245,7 +245,7 @@ export default function BankTransferExport() {
                   <Text style={styles.kpiBadge}>REAL-TIME</Text>
                 </View>
                 <Text style={styles.kpiLabel}>EMPLOYEES READY</Text>
-                <Text style={styles.kpiValue}>{stats.ready}</Text>
+                <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{stats.ready}</Text>
                 <Text style={styles.kpiSub}>Complete Bank Details</Text>
               </View>
 
@@ -255,7 +255,7 @@ export default function BankTransferExport() {
                   <Text style={styles.kpiBadge}>REAL-TIME</Text>
                 </View>
                 <Text style={styles.kpiLabel}>PENDING BANK INFO</Text>
-                <Text style={styles.kpiValue}>{stats.pending}</Text>
+                <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{stats.pending}</Text>
                 <Text style={styles.kpiSub}>Incomplete Records</Text>
               </View>
 
@@ -265,7 +265,7 @@ export default function BankTransferExport() {
                   <Text style={styles.kpiBadge}>REAL-TIME</Text>
                 </View>
                 <Text style={styles.kpiLabel}>FAILED VALIDATIONS</Text>
-                <Text style={styles.kpiValue}>{stats.failed}</Text>
+                <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{stats.failed}</Text>
                 <Text style={styles.kpiSub}>Missing All Details</Text>
               </View>
             </ScrollView>

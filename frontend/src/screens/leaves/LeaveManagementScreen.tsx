@@ -356,7 +356,7 @@ const RejectModal = ({
             <TextInput
               style={styles.reasonInput}
               placeholder="Rejection reason (optional)"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="#64748b"
               multiline
               numberOfLines={3}
               value={reason}
@@ -1190,7 +1190,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
                     <TextInput
                       style={styles.searchInput}
                       placeholder="Search (min. 2 characters)..."
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="#64748b"
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                     />
@@ -1292,7 +1292,7 @@ export default function LeaveManagementScreen({ navigation }: { navigation: any 
                     <TextInput
                       style={styles.searchInput}
                       placeholder="Search employees..."
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="#64748b"
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                     />
@@ -1459,7 +1459,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   statCard: {
-    width: '48%',
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 140,
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 16,
@@ -1493,11 +1495,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  searchBar: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, minHeight: 48, gap: 8 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 48, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b', paddingVertical: 0, height: '100%' },
 
-  filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  filterButton: { width: 48, height: 48, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   filterBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: '#3b82f6', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   filterBadgeText: { color: 'white', fontSize: 10, fontWeight: '700' },

@@ -230,7 +230,7 @@ const TimesheetRow = ({
   }, 0);
 
   const getProjectName = (projectId: string) => {
-    const project = projects?.find((p: any) => (p._id || p.id) === projectId);
+    const project = projects?.find((p: any) => (p.id || p._id) === projectId);
     return project?.name || 'Select Project';
   };
 
@@ -821,18 +821,33 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     return null;
   };
 
-  const fetchProjects = async () => {
+  const fetchProjects = async (currentUser?: any) => {
     try {
-      const response = await projectAPI.getAll({ status: 'active', assignedOnly: true, limit: 1000 });
+      const role = currentUser?.role || user?.role;
+      const isAdmin = ['admin', 'super_admin', 'owner'].includes(role?.toLowerCase());
+      const userId = currentUser?.id || user?.id;
+      const response = await projectAPI.getAll({ 
+        status: 'active', 
+        assignedOnly: !isAdmin,
+        userId: !isAdmin ? userId : undefined
+      });
       const data = extractData(response, []);
       setProjects(data);
-      setProjectOptions(data.map((p: any) => ({ value: p._id || p.id, label: p.name })));
+      setProjectOptions(data.map((p: any) => ({ value: p.id || p._id, label: p.name })));
     } catch (error) { console.error('Error fetching projects:', error); }
   };
 
   const fetchTasks = async (currentUser?: any) => {
     try {
-      const response = await taskAPI.getAll({ limit: 1000 });
+      const role = currentUser?.role || user?.role;
+      const isAdmin = ['admin', 'super_admin', 'owner'].includes(role?.toLowerCase());
+      const userId = currentUser?.id || user?.id;
+      const response = await taskAPI.getAll({ 
+        isActive: true, 
+        assignedOnly: !isAdmin, 
+        userId: !isAdmin ? userId : undefined,
+        limit: 5000 
+      });
       const data = extractData(response, []);
       setAllTasks(data);
     } catch (error) { console.error('Error fetching tasks:', error); }
@@ -901,7 +916,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   const fetchAllData = async (currentUser?: any) => {
     setLoading(true);
     await Promise.all([
-      fetchProjects(),
+      fetchProjects(currentUser),
       fetchTasks(currentUser),
       fetchSettings(),
       fetchFullSettings(),
@@ -923,7 +938,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchAllData();
+    await fetchAllData(user);
     setRefreshing(false);
   };
 
@@ -962,10 +977,10 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     existingTimesheets.forEach((ts: any) => {
       if (!ts.rows) return;
       ts.rows.forEach((r: any) => {
-        const pid = r.projectId?._id || r.projectId?.id || r.projectId;
+        const pid = r.projectId?.id || r.projectId?._id || r.projectId;
         const projectIdStr = pid?.toString() || 'unknown';
         const category = (r.category || 'Select Task').trim();
-        const projectCode = r.projectId?.code || projects?.find((p: any) => (p._id || p.id) === projectIdStr)?.code || '';
+        const projectCode = r.projectId?.code || projects?.find((p: any) => (p.id || p._id) === projectIdStr)?.code || '';
         const isSystemLeave = projectCode === 'LEAVE-SYS';
 
         if (isSystemLeave) {
@@ -1126,6 +1141,11 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
   };
 
   const handleSubmitWeek = async () => {
+    if (!submissionRestriction.allowed) {
+        Alert.alert('Validation Error', `Submission allowed starting ${submissionRestriction.dayName}.`);
+        return;
+    }
+    
     if (!isSubmitAllowed) {
       if (isTimesheetFrozen) {
         Alert.alert('Validation Error', 'This timesheet is frozen and cannot be submitted.');
@@ -1135,10 +1155,24 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       return;
     }
 
-    const hasUnfilledTask = rows.some(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS' && !isPermissionRow(r.taskType) && (!r.taskType || r.taskType === 'Select Task'));
-    if (hasUnfilledTask) {
-      Alert.alert('Validation Error', 'Please select a task for all projects before submitting.');
-      return;
+    const hasIncompleteRow = rows.some(r => {
+        if (r.isLeaveRow || isPermissionRow(r.taskType) || r.projectId === 'LEAVE-SYS') return false;
+        
+        // If project or task type is not selected, the entry is incomplete
+        if (!r.projectId || !r.taskType || r.taskType === 'Select Task' || r.taskType.trim() === '') return true;
+
+        const total = r.dayHours.reduce((acc, time) => {
+            if (!time || time === '-8' || time === '00:00') return acc;
+            const [h, m] = time.split(':').map(Number);
+            return acc + h + (m / 60);
+        }, 0);
+
+        return total === 0;
+    });
+
+    if (hasIncompleteRow) {
+        Alert.alert('Validation Error', 'Please select a project and task for all rows, and ensure no row has 0 working hours before submitting.');
+        return;
     }
 
     // Organization Policy Enforcement
@@ -1168,35 +1202,47 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       }
     }
 
-    setIsSubmitting(true);
-    try {
-      const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS' && !isPermissionRow(r.taskType)).map(row => ({
-        projectId: row.projectId,
-        category: row.taskType,
-        weekStartDate: format(weekStart, 'yyyy-MM-dd'),
-        entries: weekDays.filter(day => isWorkingDay(day)).map((day) => {
-          const i = weekDays.indexOf(day);
-          const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
-          const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
-          let hoursWorked = 0;
-          if (!isFullDay) {
-            const [hStr, mStr] = row.dayHours[i].split(':');
-            const h = parseInt(hStr, 10) || 0;
-            const m = parseInt(mStr, 10) || 0;
-            hoursWorked = h + (m / 60);
+    Alert.alert(
+      'Confirm Submission',
+      'Sure, we will submit the timesheet.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'OK',
+          onPress: async () => {
+            setIsSubmitting(true);
+            try {
+              const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS' && !isPermissionRow(r.taskType)).map(row => ({
+                projectId: row.projectId,
+                category: row.taskType,
+                weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+                entries: weekDays.filter(day => isWorkingDay(day)).map((day) => {
+                  const i = weekDays.indexOf(day);
+                  const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
+                  const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
+                  let hoursWorked = 0;
+                  if (!isFullDay) {
+                    const [hStr, mStr] = row.dayHours[i].split(':');
+                    const h = parseInt(hStr, 10) || 0;
+                    const m = parseInt(mStr, 10) || 0;
+                    hoursWorked = h + (m / 60);
+                  }
+                  return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
+                })
+              }));
+              await timesheetAPI.bulkSubmit(payloads);
+              Alert.alert('Success', 'Week submitted for approval');
+              setIsDirty(false);
+              fetchExistingTimesheets();
+            } catch (error: any) {
+              Alert.alert('Error', error?.message || 'Failed to submit');
+            } finally {
+              setIsSubmitting(false);
+            }
           }
-          return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
-        })
-      }));
-      await timesheetAPI.bulkSubmit(payloads);
-      Alert.alert('Success', 'Week submitted for approval');
-      setIsDirty(false);
-      fetchExistingTimesheets();
-    } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to submit');
-    } finally {
-      setIsSubmitting(false);
-    }
+        }
+      ]
+    );
   };
 
   const handleSaveAndNavigate = async () => {
@@ -1295,47 +1341,28 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     setShowProjectPicker(true);
   };
 
-  const handleSelectProject = async (projectId: string) => {
+  const handleSelectProject = (projectId: string) => {
     if (currentRowId) {
       handleUpdateRow(currentRowId, { projectId, taskType: 'Select Task' });
 
       const projectTasks = allTasks.filter((t: any) => {
-        const pId = t.projectId?.id || t.projectId?._id || t.projectId;
-        return String(pId) === String(projectId);
+        const tPid = (t.projectId?.id || t.projectId?._id || t.projectId || '').toString();
+        return tPid === projectId.toString() && t.name !== 'Not Mapped';
       });
-      if (projectTasks.length > 0) {
-        setTaskOptions(projectTasks.map((t: any) => ({ value: t.name, label: t.name })));
-      } else {
-        setTaskOptions([{ value: 'Loading...', label: 'Loading tasks...' }]);
-      }
-
-      try {
-        const response = await taskAPI.getAll({ projectId, limit: 1000 });
-        const rawTasks = extractData(response, []);
-        const pTasks = Array.isArray(rawTasks) ? rawTasks : [];
-        
-        if (pTasks.length > 0) {
-          setTaskOptions(pTasks.map((t: any) => ({ value: t.name, label: t.name })));
-          setAllTasks(prev => {
-            const newTasks = [...prev];
-            pTasks.forEach((pt: any) => {
-              if (!newTasks.some(existing => (existing._id === pt._id) || (existing.id && existing.id === pt.id))) {
-                newTasks.push(pt);
-              }
-            });
-            return newTasks;
-          });
-        } else {
-          setTaskOptions([{ value: '', label: 'No active tasks found for this project' }]);
-        }
-      } catch (err) {
-        console.error(err);
-        setTaskOptions((taskCategories as string[]).map((t: string) => ({ value: t, label: t })));
-      }
+      
+      const globalTasks = (taskCategories as string[]).filter((t: string) => {
+        return t !== 'Not Mapped' && !projectTasks.some((pt: any) => pt.name === t);
+      });
+      
+      const allTaskOptions = [
+        ...projectTasks.map((t: any) => ({ value: t.name, label: t.name })),
+        ...globalTasks.map((t: string) => ({ value: t, label: t }))
+      ];
+      setTaskOptions(allTaskOptions);
     }
   };
 
-  const handleOpenTaskPicker = async (rowId: number, projectId: string) => {
+  const handleOpenTaskPicker = (rowId: number, projectId: string) => {
     if (!projectId) {
       Alert.alert('Error', 'Please select a project first');
       return;
@@ -1344,46 +1371,23 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     setCurrentProjectId(projectId);
 
     const projectTasks = allTasks.filter((t: any) => {
-      const pId = t.projectId?._id || t.projectId?.id || t.projectId;
-      return String(pId) === String(projectId);
+      const tPid = (t.projectId?.id || t.projectId?._id || t.projectId || '').toString();
+      return tPid === projectId.toString() && t.name !== 'Not Mapped';
     });
-
-    if (projectTasks.length > 0) {
-      setTaskOptions(projectTasks.map((t: any) => ({ value: t.name, label: t.name })));
-    } else {
-      setTaskOptions([{ value: 'Loading...', label: 'Loading tasks...' }]);
-    }
+    
+    const globalTasks = (taskCategories as string[]).filter((t: string) => {
+      return t !== 'Not Mapped' && !projectTasks.some((pt: any) => pt.name === t);
+    });
+    
+    const options = [
+      ...projectTasks.map((t: any) => ({ value: t.name, label: t.name })),
+      ...globalTasks.map((t: string) => ({ value: t, label: t }))
+    ];
+    setTaskOptions(options);
     setShowTaskPicker(true);
-
-    try {
-      const response = await taskAPI.getAll({ projectId, limit: 1000 });
-      const rawTasks = extractData(response, []);
-      const pTasks = Array.isArray(rawTasks) ? rawTasks : [];
-
-      if (pTasks.length > 0) {
-        setTaskOptions(pTasks.map((t: any) => ({ value: t.name, label: t.name })));
-        setAllTasks(prev => {
-          const newTasks = [...prev];
-          pTasks.forEach((pt: any) => {
-            if (!newTasks.some(existing => (existing._id === pt._id) || (existing.id && existing.id === pt.id))) {
-              newTasks.push(pt);
-            }
-          });
-          return newTasks;
-        });
-      } else if (projectTasks.length === 0) {
-        setTaskOptions([{ value: '', label: `No tasks found for project ID: ${String(projectId)}` }]);
-      }
-    } catch (err) {
-      console.error(err);
-      if (projectTasks.length === 0) {
-        setTaskOptions([{ value: '', label: `Error loading project tasks (ID: ${String(projectId)})` }]);
-      }
-    }
   };
 
   const handleSelectTask = (taskName: string) => {
-    if (taskName === 'Loading...') return;
     if (currentRowId) {
       handleUpdateRow(currentRowId, { taskType: taskName });
     }
@@ -1545,34 +1549,35 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     return dayName.charAt(0).toUpperCase() + dayName.slice(1);
   }, [timesheetSettings]);
 
+  const submissionRestriction = useMemo(() => {
+    const isCurrentWeek = isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }));
+    if (!isCurrentWeek) return { allowed: true };
+    if (!timesheetSettings?.submissionDeadline) return { allowed: true };
+
+    const daysLookup: Record<string, number> = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+    const deadlineParts = (timesheetSettings.submissionDeadline || 'Friday').toLowerCase().split(' ');
+    const targetDayName = deadlineParts[0];
+    let targetDayIndex = daysLookup[targetDayName] ?? 5;
+    let currentDayIndex = new Date().getDay();
+
+    const weekStartDay = fullSettings?.general?.weekStartDay || 'monday';
+    if (weekStartDay.toLowerCase() === 'monday') {
+        if (currentDayIndex === 0) currentDayIndex = 7;
+        if (targetDayIndex === 0) targetDayIndex = 7;
+    }
+
+    if (currentDayIndex < targetDayIndex) {
+        return {
+            allowed: false,
+            dayName: targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1)
+        };
+    }
+    return { allowed: true };
+  }, [weekStart, timesheetSettings, fullSettings]);
+
   const isSubmitAllowed = useMemo(() => {
-    if (isTimesheetFrozen) return false;
-
-    const deadline = timesheetSettings?.submissionDeadline || 'Friday 18:00';
-    const targetDayName = deadline.toLowerCase().split(' ')[0];
-    const daysMap: Record<string, number> = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
-    let targetDayIndex = daysMap[targetDayName] ?? 5;
-
-    const wsd = fullSettings?.general?.weekStartDay || 'monday';
-    
-    const today = new Date();
-    const weekStartsOnIndex = (daysMap[wsd.toLowerCase()] ?? 1) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
-    const currentWeekStart = startOfWeek(today, { weekStartsOn: weekStartsOnIndex });
-    let currentDayIndex = today.getDay();
-    
-    if (wsd.toLowerCase() === 'monday') {
-      if (currentDayIndex === 0) currentDayIndex = 7;
-      if (targetDayIndex === 0) targetDayIndex = 7;
-    }
-
-    // Only restrict current week submissions BEFORE the target day (matches backend logic)
-    if (weekStart.getTime() === currentWeekStart.getTime()) {
-      return currentDayIndex >= targetDayIndex;
-    }
-
-    // Past weeks are always allowed until auto-lock freezes them
-    return true;
-  }, [weekStart, timesheetSettings, fullSettings, isTimesheetFrozen]);
+    return !isTimesheetFrozen && submissionRestriction.allowed;
+  }, [isTimesheetFrozen, submissionRestriction]);
 
   const hasActiveRows = useMemo(() => {
     return rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && r.projectId && r.taskType !== 'Select Task');
@@ -2084,14 +2089,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: verticalScale(12),
-    gap: scale(8),
-    flexWrap: 'wrap',
   },
   navWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: scale(16),
+    borderRadius: scale(24),
     paddingVertical: verticalScale(6),
     paddingHorizontal: scale(8),
     borderWidth: 1,
@@ -2102,12 +2105,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: scale(2),
   },
-  navButton: { padding: scale(6), borderRadius: scale(20), backgroundColor: '#f8fafc', flexShrink: 0 },
+  navButton: { padding: scale(6), borderRadius: scale(20), backgroundColor: '#f8fafc' },
   navButtonDisabled: { opacity: 0.5 },
-  weekInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: scale(4), gap: scale(6), flexWrap: 'wrap' },
-  weekMonthText: { fontSize: moderateScale(12), fontWeight: 'bold', color: '#1e293b' },
+  weekInfo: { flexDirection: 'row', alignItems: 'center', marginHorizontal: scale(8), gap: scale(8) },
+  weekMonthText: { fontSize: moderateScale(13), fontWeight: 'bold', color: '#1e293b' },
   navDivider: { width: scale(1), height: verticalScale(16), backgroundColor: '#cbd5e1' },
-  weekSubTextItalic: { fontSize: moderateScale(11), color: '#64748b', fontStyle: 'italic', flexShrink: 1, textAlign: 'center' },
+  weekSubTextItalic: { fontSize: moderateScale(12), color: '#64748b', fontStyle: 'italic' },
 
   deadlineBadge: {
     flexDirection: 'row',
@@ -2117,12 +2120,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(12),
     borderRadius: scale(24),
     gap: scale(6),
-    flexShrink: 1,
   },
   deadlineText: {
-    fontSize: moderateScale(11),
+    fontSize: moderateScale(12),
     color: '#475569',
-    flexShrink: 1,
   },
   deadlineTextBold: {
     fontWeight: 'bold',

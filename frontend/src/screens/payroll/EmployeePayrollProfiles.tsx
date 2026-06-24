@@ -62,7 +62,7 @@ export default function EmployeePayrollProfiles() {
     try {
       setLoading(true);
       const [uRes, pRes, sRes, polRes]: any[] = await Promise.all([
-        userAPI.getAll({ limit: 1000 }),
+        userAPI.getAll({ limit: 1000, status: 'active' }),
         payrollAPI.getProfiles(),
         settingsAPI.getSettings(),
         policyAPI.getPolicy()
@@ -151,7 +151,7 @@ export default function EmployeePayrollProfiles() {
       </View>
       <View style={styles.kpiContent}>
         <Text style={styles.kpiLabel}>{label}</Text>
-        <Text style={styles.kpiValue}>{value}</Text>
+        <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
       </View>
     </View>
   );
@@ -195,9 +195,9 @@ export default function EmployeePayrollProfiles() {
         {/* KPIs */}
         <View style={styles.kpiGrid}>
           {renderKpiCard('Total Emp', users.length, Users, '#3b82f6', '#eff6ff')}
-          {renderKpiCard('Active', profiles.length, CheckCircle2, '#10b981', '#ecfdf5')}
-          {renderKpiCard('Pending', users.length - profiles.length, Clock, '#f59e0b', '#fffbeb')}
-          {renderKpiCard('Critical', enrichedUsers.filter(u => u.bankStatus === 'Missing' || u.payrollStatus === 'Warning').length, AlertCircle, '#ef4444', '#fef2f2')}
+          {renderKpiCard('Active', enrichedUsers.filter(u => u.payrollStatus === 'Active').length, CheckCircle2, '#10b981', '#ecfdf5')}
+          {renderKpiCard('Pending', enrichedUsers.filter(u => u.payrollStatus === 'Not Configured').length, Clock, '#f59e0b', '#fffbeb')}
+          {renderKpiCard('Warning', enrichedUsers.filter(u => u.bankStatus === 'Missing' || u.payrollStatus === 'Warning').length, AlertCircle, '#ef4444', '#fef2f2')}
         </View>
 
         {/* Search & Filter */}
@@ -324,7 +324,7 @@ export default function EmployeePayrollProfiles() {
                 options={[
                   { label: 'All Statuses', value: 'All' },
                   { label: 'Active', value: 'Active' },
-                  { label: 'Warning', value: 'Warning' },
+                  {label:"Warning", value:"Warning"},
                   { label: 'Pending', value: 'Pending' }
                 ]}
                 selectedValue={statusFilter}

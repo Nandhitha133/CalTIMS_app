@@ -109,9 +109,13 @@ export async function exportFile(
               text: 'Open File',
               onPress: async () => {
                 try {
-                  await FileViewer.openFile(downloadPath, fileType);
-                } catch (openErr) {
-                  Alert.alert('Error', 'No application found to open this file. You can open it from your device Downloads folder.');
+                  if (FileViewer && FileViewer.openFile) {
+                    await FileViewer.openFile(downloadPath, fileType);
+                  } else {
+                    Alert.alert('Error', 'File Viewer module is not available.');
+                  }
+                } catch (openErr: any) {
+                  Alert.alert('Error', 'Something went wrong while trying to open the file: ' + openErr.message);
                 }
               }
             }
@@ -134,16 +138,20 @@ export async function exportFile(
 
           Alert.alert(
             'Download Complete',
-            `File downloaded to secure Cache storage.\n\nWould you like to open it now?`,
+            `File downloaded to secure Cache storage.\n\nWould you like to open it?`,
             [
               { text: 'Cancel' },
               {
                 text: 'Open File',
                 onPress: async () => {
                   try {
-                    await FileViewer.openFile(cachePath, fileType);
-                  } catch (openErr) {
-                    Alert.alert('Error', 'No application found to open this file.');
+                    if (FileViewer && FileViewer.openFile) {
+                      await FileViewer.openFile(cachePath, fileType);
+                    } else {
+                      Alert.alert('Error', 'File Viewer module is not available.');
+                    }
+                  } catch (openErr: any) {
+                    Alert.alert('Error', 'Something went wrong while trying to open the file: ' + openErr.message);
                   }
                 }
               }
@@ -234,33 +242,60 @@ export async function downloadFileFromUrl(
 
         const res = await RNFS.downloadFile(options).promise;
 
-        if (res.statusCode !== 200) throw new Error('Download failed with status: ' + res.statusCode);
+        if (res.statusCode !== 200) {
+          if (res.statusCode === 500) {
+            throw new Error('Server crashed (500 Error). Please deploy the backend fix to production!');
+          }
+          throw new Error('Download failed with status: ' + res.statusCode);
+        }
 
         try { await RNFS.scanFile(downloadPath); } catch (e) { }
 
-        Alert.alert('Download Complete', `File has been saved successfully to your Downloads folder:\n\n${fileName}`, [
-          { text: 'OK' },
+        Alert.alert('Download Complete', `File saved to Downloads.\n\nWould you like to open it?`, [
+          { text: 'Cancel' },
           {
-            text: 'Open File', onPress: async () => {
-              try { await FileViewer.openFile(downloadPath, fileType); }
-              catch (e) { Alert.alert('PDF Viewer Required', 'No application found to open this PDF. Please install a PDF viewer (like Google PDF Viewer or Adobe Reader) to open it. The file is saved in your Downloads folder.'); }
+            text: 'Open File',
+            onPress: async () => {
+              try {
+                if (FileViewer && FileViewer.openFile) {
+                  await FileViewer.openFile(downloadPath, fileType);
+                } else {
+                  Alert.alert('Error', 'File Viewer module is not available.');
+                }
+              } catch (openErr: any) {
+                Alert.alert('Error', 'Something went wrong while trying to open the file: ' + openErr.message);
+              }
             }
           }
         ]);
         return true;
-      } catch (writeErr) {
+      } catch (writeErr: any) {
+        if (writeErr.message.includes('500 Error')) throw writeErr;
         console.warn('Direct write failed, falling back to cache:', writeErr);
         // Fallback to cache
         const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
         const fallbackRes = await RNFS.downloadFile({ fromUrl: url, toFile: cachePath, headers }).promise;
-        if (fallbackRes.statusCode !== 200) throw new Error('Failed to download from server. Code: ' + fallbackRes.statusCode);
+        if (fallbackRes.statusCode !== 200) {
+          if (fallbackRes.statusCode === 500) {
+            throw new Error('Server crashed (500 Error). Please deploy the backend fix to production!');
+          }
+          throw new Error('Failed to download from server. Code: ' + fallbackRes.statusCode);
+        }
 
-        Alert.alert('Download Complete', `File downloaded securely.\n\nWould you like to open it now?`, [
+        Alert.alert('Download Complete', `File downloaded securely.\n\nWould you like to open it?`, [
           { text: 'Cancel' },
           {
-            text: 'Open File', onPress: async () => {
-              try { await FileViewer.openFile(cachePath, fileType); }
-              catch (e: any) { Alert.alert('PDF Viewer Required', `Error: ${e.message}\nNo application found to open this PDF.`); }
+            text: 'Open File',
+            onPress: async () => {
+              try {
+                if (FileViewer && FileViewer.openFile) {
+                  await FileViewer.openFile(cachePath, fileType);
+                } else {
+                  Alert.alert('Error', 'File Viewer module is not available.');
+                }
+              } catch (openErr: any) {
+                Alert.alert('Error', `Something went wrong while trying to open the file: ` + openErr.message);
+              }
             }
           }
         ]);
@@ -282,7 +317,11 @@ export async function downloadFileFromUrl(
     return true;
   } catch (err: any) {
     console.error('Direct download error:', err);
-    Alert.alert('Download Failed', 'Could not fetch the file from the server.');
+    if (err.message.includes('500 Error')) {
+      Alert.alert('Server Error 500', 'The live server crashed when trying to generate the PDF. Please deploy the local backend fix to production, or test locally!');
+    } else {
+      Alert.alert('Download Failed', 'Could not fetch the file from the server.');
+    }
     return false;
   }
 }

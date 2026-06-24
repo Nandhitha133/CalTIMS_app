@@ -79,8 +79,22 @@ export const calculatePT = (grossSalary, policy, monthIndex = 0) => {
   return amount;
 };
 
+export const calculateGratuity = (basicSalary, policy) => {
+  if (!policy?.enabled) return 0;
+  const percent = policy.employeePercent !== undefined ? policy.employeePercent : (policy.employeeRate !== undefined ? policy.employeeRate : 4.86);
+  return Math.round(basicSalary * (percent / 100));
+};
+
+export const calculateRetirement = (basicSalary, policy) => {
+  if (!policy?.enabled) return 0;
+  const percent = policy.employeePercent !== undefined ? policy.employeePercent : (policy.employeeRate !== undefined ? policy.employeeRate : 5.0);
+  return Math.round(basicSalary * (percent / 100));
+};
+
 export const complianceEngine = {
   calculatePF,
   calculateESI,
-  calculatePT
+  calculatePT,
+  calculateGratuity,
+  calculateRetirement
 };

@@ -274,6 +274,18 @@ export default function Header({
     }
   };
 
+  const clearAllNotifications = async () => {
+    try {
+      if (notificationAPI?.clearAll) {
+        await notificationAPI.clearAll();
+      }
+      setNotifications([]);
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+    }
+  };
+
   const getNotificationColor = (type: string) => {
     const typeLower = (type || '').toLowerCase();
     if (
@@ -319,6 +331,11 @@ export default function Header({
               {unreadCount > 0 && (
                 <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
                   <Text style={styles.markAllText}>Mark all read</Text>
+                </TouchableOpacity>
+              )}
+              {notifications.length > 0 && (
+                <TouchableOpacity onPress={clearAllNotifications} style={styles.markAllButton}>
+                  <Text style={[styles.markAllText, { color: '#ef4444' }]}>Clear</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={() => setShowNotifications(false)}>

@@ -69,10 +69,10 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 },
   loadingContainer: { minHeight: 400, justifyContent: 'center', alignItems: 'center' },
   
-  searchContainer: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, minHeight: 48, gap: 8 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 48, gap: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#1e293b', paddingVertical: 0, height: '100%' },
-  filterButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  filterButton: { width: 48, height: 48, borderRadius: 12, backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   exportButton: {
     flexDirection: 'row',
@@ -823,26 +823,26 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
           
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Full Name *</Text>
-            <TextInput style={[modalStyles.input, errors.name ? { borderColor: '#ef4444' } : null]} placeholder="Enter full name" value={data.name} onChangeText={(text) => handleChange('name', text)} />
+            <TextInput style={[modalStyles.input, errors.name ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Enter full name" value={data.name} onChangeText={(text) => handleChange('name', text)} />
             {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
           </View>
 
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Email Address *</Text>
-            <TextInput style={[modalStyles.input, errors.email ? { borderColor: '#ef4444' } : null]} placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" value={data.email} onChangeText={(text) => handleChange('email', text)} />
+            <TextInput style={[modalStyles.input, errors.email ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" value={data.email} onChangeText={(text) => handleChange('email', text)} />
             {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
           </View>
 
           {!isEdit ? (
             <View style={modalStyles.field}>
               <Text style={modalStyles.label}>Password *</Text>
-              <TextInput style={[modalStyles.input, errors.password ? { borderColor: '#ef4444' } : null]} placeholder="Min 8 characters" secureTextEntry value={data.password} onChangeText={(text) => handleChange('password', text)} />
+              <TextInput style={[modalStyles.input, errors.password ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Min 8 characters" secureTextEntry value={data.password} onChangeText={(text) => handleChange('password', text)} />
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
           ) : (
             <View style={modalStyles.field}>
               <Text style={modalStyles.label}>Reset Password (Optional)</Text>
-              <TextInput style={[modalStyles.input, errors.newPassword ? { borderColor: '#ef4444' } : null]} placeholder="Min 8 characters" secureTextEntry value={data.newPassword} onChangeText={(text) => handleChange('newPassword', text)} />
+              <TextInput style={[modalStyles.input, errors.newPassword ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Min 8 characters" secureTextEntry value={data.newPassword} onChangeText={(text) => handleChange('newPassword', text)} />
               {errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
             </View>
           )}
@@ -858,25 +858,25 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
 
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Department *</Text>
-            <TextInput style={[modalStyles.input, errors.department ? { borderColor: '#ef4444' } : null]} placeholder="Enter department" value={data.department} onChangeText={(text) => handleChange('department', text)} />
+            <TextInput style={[modalStyles.input, errors.department ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Enter department" value={data.department} onChangeText={(text) => handleChange('department', text)} />
             {errors.department ? <Text style={styles.errorText}>{errors.department}</Text> : null}
           </View>
 
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Designation *</Text>
-            <TextInput style={[modalStyles.input, errors.designation ? { borderColor: '#ef4444' } : null]} placeholder="e.g. Senior Developer" value={data.designation} onChangeText={(text) => handleChange('designation', text)} />
+            <TextInput style={[modalStyles.input, errors.designation ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="e.g. Senior Developer" value={data.designation} onChangeText={(text) => handleChange('designation', text)} />
             {errors.designation ? <Text style={styles.errorText}>{errors.designation}</Text> : null}
           </View>
 
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Phone Number *</Text>
-            <TextInput style={[modalStyles.input, errors.phone ? { borderColor: '#ef4444' } : null]} placeholder="10 digit number" keyboardType="phone-pad" maxLength={10} value={data.phone} onChangeText={(text) => handleChange('phone', text)} />
+            <TextInput style={[modalStyles.input, errors.phone ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="10 digit number" keyboardType="phone-pad" maxLength={10} value={data.phone} onChangeText={(text) => handleChange('phone', text)} />
             {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
           </View>
 
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Employee ID</Text>
-            <TextInput style={modalStyles.input} placeholder="e.g. EMP001" value={data.employeeId} onChangeText={(text) => handleChange('employeeId', text)} />
+            <TextInput style={modalStyles.input} placeholderTextColor="#64748b" placeholder="e.g. EMP001" value={data.employeeId} onChangeText={(text) => handleChange('employeeId', text)} />
           </View>
 
           <View style={modalStyles.field}>
@@ -891,39 +891,39 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
           <Text style={[modalStyles.sectionTitle, { marginTop: 12 }]}>Bank Details</Text>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Bank Name *</Text>
-            <TextInput style={[modalStyles.input, errors.bankName ? { borderColor: '#ef4444' } : null]} placeholder="Enter bank name" value={data.bankName} onChangeText={(text) => handleChange('bankName', text)} />
+            <TextInput style={[modalStyles.input, errors.bankName ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Enter bank name" value={data.bankName} onChangeText={(text) => handleChange('bankName', text)} />
             {errors.bankName ? <Text style={styles.errorText}>{errors.bankName}</Text> : null}
           </View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Account Number *</Text>
-            <TextInput style={[modalStyles.input, errors.accountNumber ? { borderColor: '#ef4444' } : null]} placeholder="10 to 17 digit account number" keyboardType="numeric" maxLength={17} value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} />
+            <TextInput style={[modalStyles.input, errors.accountNumber ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="10 to 17 digit account number" keyboardType="numeric" maxLength={17} value={data.accountNumber} onChangeText={(text) => handleChange('accountNumber', text)} />
             {errors.accountNumber ? <Text style={styles.errorText}>{errors.accountNumber}</Text> : null}
           </View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Branch Name *</Text>
-            <TextInput style={[modalStyles.input, errors.branchName ? { borderColor: '#ef4444' } : null]} placeholder="Enter branch name" value={data.branchName} onChangeText={(text) => handleChange('branchName', text)} />
+            <TextInput style={[modalStyles.input, errors.branchName ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="Enter branch name" value={data.branchName} onChangeText={(text) => handleChange('branchName', text)} />
             {errors.branchName ? <Text style={styles.errorText}>{errors.branchName}</Text> : null}
           </View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>IFSC Code *</Text>
-            <TextInput style={[modalStyles.input, errors.ifscCode ? { borderColor: '#ef4444' } : null]} placeholder="e.g. SBIN0001234" autoCapitalize="characters" maxLength={11} value={data.ifscCode} onChangeText={(text) => handleChange('ifscCode', text)} />
+            <TextInput style={[modalStyles.input, errors.ifscCode ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="e.g. SBIN0001234" autoCapitalize="characters" maxLength={11} value={data.ifscCode} onChangeText={(text) => handleChange('ifscCode', text)} />
             {errors.ifscCode ? <Text style={styles.errorText}>{errors.ifscCode}</Text> : null}
           </View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>UAN *</Text>
-            <TextInput style={[modalStyles.input, errors.uan ? { borderColor: '#ef4444' } : null]} placeholder="12 digit UAN" keyboardType="numeric" maxLength={12} value={data.uan} onChangeText={(text) => handleChange('uan', text)} />
+            <TextInput style={[modalStyles.input, errors.uan ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="12 digit UAN" keyboardType="numeric" maxLength={12} value={data.uan} onChangeText={(text) => handleChange('uan', text)} />
             {errors.uan ? <Text style={styles.errorText}>{errors.uan}</Text> : null}
           </View>
 
           <Text style={[modalStyles.sectionTitle, { marginTop: 12 }]}>Personal IDs</Text>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>PAN *</Text>
-            <TextInput style={[modalStyles.input, errors.pan ? { borderColor: '#ef4444' } : null]} placeholder="e.g. ABCDE1234F" autoCapitalize="characters" maxLength={10} value={data.pan} onChangeText={(text) => handleChange('pan', text)} />
+            <TextInput style={[modalStyles.input, errors.pan ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="e.g. ABCDE1234F" autoCapitalize="characters" maxLength={10} value={data.pan} onChangeText={(text) => handleChange('pan', text)} />
             {errors.pan ? <Text style={styles.errorText}>{errors.pan}</Text> : null}
           </View>
           <View style={modalStyles.field}>
             <Text style={modalStyles.label}>Aadhaar *</Text>
-            <TextInput style={[modalStyles.input, errors.aadhaar ? { borderColor: '#ef4444' } : null]} placeholder="12 digit number" keyboardType="numeric" maxLength={12} value={data.aadhaar} onChangeText={(text) => handleChange('aadhaar', text)} />
+            <TextInput style={[modalStyles.input, errors.aadhaar ? { borderColor: '#ef4444' } : null]} placeholderTextColor="#64748b" placeholder="12 digit number" keyboardType="numeric" maxLength={12} value={data.aadhaar} onChangeText={(text) => handleChange('aadhaar', text)} />
             {errors.aadhaar ? <Text style={styles.errorText}>{errors.aadhaar}</Text> : null}
           </View>
         </View>
@@ -972,7 +972,7 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
               <TextInput 
                 style={styles.searchInput} 
                 placeholder="Search (min. 2 characters)..." 
-                placeholderTextColor="#94a3b8" 
+                placeholderTextColor="#64748b" 
                 value={searchQuery} 
                 onChangeText={setSearchQuery} 
                  onSubmitEditing={() => {

@@ -165,6 +165,8 @@ export const notificationAPI = {
     apiService.patch(`/notifications/${id}/read`),
   markAllRead: () => 
     apiService.patch('/notifications/mark-all-read'),
+  clearAll: () => 
+    apiService.delete('/notifications/clear-all'),
 };
 
 // ==================== CALENDAR API ====================

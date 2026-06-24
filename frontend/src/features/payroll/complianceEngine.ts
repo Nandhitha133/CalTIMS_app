@@ -11,7 +11,7 @@ export const complianceEngine = {
     const pfWage = config.restrictToCeiling ? Math.min(wage, ceiling) : wage;
 
     const employeePF = Math.round(pfWage * (config.employeePercent / 100));
-    
+
     // Employer split: 8.33% to EPS (capped at ceiling), rest to EPF
     const epsWage = Math.min(wage, ceiling);
     const employerEPS = Math.round(epsWage * (8.33 / 100));
@@ -49,5 +49,21 @@ export const complianceEngine = {
 
     const slab = config.slabs.find((s: any) => salary >= s.min && salary <= s.max);
     return slab ? slab.amount : 0;
+  },
+
+  calculateGratuity: (basic: number, config: any) => {
+    if (!config || !config.enabled) {
+      return 0;
+    }
+    const percent = config.employeePercent !== undefined ? config.employeePercent : (config.employeeRate !== undefined ? config.employeeRate : 4.86);
+    return Math.round(basic * (percent / 100));
+  },
+
+  calculateRetirement: (basic: number, config: any) => {
+    if (!config || !config.enabled) {
+      return 0;
+    }
+    const percent = config.employeePercent !== undefined ? config.employeePercent : (config.employeeRate !== undefined ? config.employeeRate : 5.0);
+    return Math.round(basic * (percent / 100));
   }
 };

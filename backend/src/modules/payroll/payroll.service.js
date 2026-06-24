@@ -40,28 +40,28 @@ const resolveComponentValue = (component, context, monthlyCTC) => {
     if (calcType === 'FIXED') {
       return value;
     }
-    
+
     if (calcType === 'FORMULA') {
       return evaluateFormula(formula, context);
     }
-    
+
     if (calcType === 'PERCENTAGE') {
       let base = 0;
       const lowerFormula = formula.toLowerCase();
-      
+
       if (lowerFormula.includes('ctc') || name.includes('basic')) {
         base = monthlyCTC || 0;
-      } 
+      }
       else if (lowerFormula.includes('basic')) {
         base = context['Basic Salary'] || context['Basic'] || context['basic salary'] || 0;
-      } 
+      }
       else if (lowerFormula.includes('gross')) {
         base = context.gross || 0;
       }
       else {
         base = context['Basic Salary'] || context['Basic'] || context['basic salary'] || monthlyCTC || 0;
       }
-      
+
       return (base * value) / 100;
     }
 
@@ -93,15 +93,15 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
 
   let lopDays = 0;
   let paidLeaveDays = 0;
-  
+
   // Use Policy Engine Leave Types
   const leavePolicyTypes = policy.leave?.types || [];
-  
+
   leaves.forEach(l => {
     // Determine paid vs unpaid based on organization policy dynamically
     const pType = leavePolicyTypes.find(t => t.name.toLowerCase() === (l.leaveType || '').toLowerCase());
     const isPaid = pType ? pType.paid : (l.leaveType?.toLowerCase() !== 'unpaid' && l.leaveType?.toLowerCase() !== 'lop');
-    
+
     if (isPaid) {
       paidLeaveDays += l.totalDays || 0;
     } else {
@@ -115,12 +115,12 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
     organizationId,
     weekStartDate: { $lte: endDate }, weekEndDate: { $gte: startDate }
   }).lean();
-  
+
   let approvedHours = 0;
   let workedDays = 0;
   timesheets.forEach(ts => {
     approvedHours += ts.totalHours || 0;
-    
+
     // Calculate worked days from timesheet entries
     if (ts.rows) {
       ts.rows.forEach(row => {
@@ -152,17 +152,17 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   // Calculate based on business rules: 
   // Paid leave -> dynamic hoursPerDay
   const totalHours = approvedHours + (paidLeaveDays * hoursPerDay);
-  
+
   // BANK-GRADE FIX: If no timesheets are recorded, default to full working days minus LOP.
   // This ensures fixed-salary employees (no timesheets) are still paid correctly.
-  const payableDays = (totalHours > 0 || paidLeaveDays > 0) 
-    ? (totalHours / hoursPerDay) 
+  const payableDays = (totalHours > 0 || paidLeaveDays > 0)
+    ? (totalHours / hoursPerDay)
     : (workingDays - lopDays);
 
   const standardMonthlyHours = workingDays * hoursPerDay;
   let overtimeHours = 0;
   if (policy.overtime?.enabled && totalHours > standardMonthlyHours) {
-      overtimeHours = totalHours - standardMonthlyHours;
+    overtimeHours = totalHours - standardMonthlyHours;
   }
 
   return { totalHours, payableDays, lopDays, workedDays, approvedHours, payableWeeks, overtimeHours, workingDays, hoursPerDay };
@@ -179,8 +179,8 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
   let overtimePay = 0;
   const standardMonthlyHours = workingDays * hoursPerDay;
   if (policy.overtime?.enabled && overtimeHours > 0) {
-      const hourlyRate = (userCTC / standardMonthlyHours);
-      overtimePay = overtimeHours * (hourlyRate * (policy.overtime.multiplier || 1.5));
+    const hourlyRate = (userCTC / standardMonthlyHours);
+    overtimePay = overtimeHours * (hourlyRate * (policy.overtime.multiplier || 1.5));
   }
 
   const breakdown = {
@@ -199,13 +199,13 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
   if (effectivePayrollType === 'Monthly' || effectivePayrollType === 'Yearly') {
     // 1. Calculate Earnings from Profile (or Structure/Policy if no profile components defined)
     const earnings = (profile?.earnings?.length > 0)
-        ? profile.earnings
-        : (salaryStructure?.earnings?.length > 0) 
-            ? salaryStructure.earnings 
-            : policy.salaryComponents.filter(c => c.type === 'EARNING');
-    
+      ? profile.earnings
+      : (salaryStructure?.earnings?.length > 0)
+        ? salaryStructure.earnings
+        : policy.salaryComponents.filter(c => c.type === 'EARNING');
+
     // Add type EARNING to structure components if missing
-    earnings.forEach(e => { if(!e.type) e.type = 'EARNING'; });
+    earnings.forEach(e => { if (!e.type) e.type = 'EARNING'; });
 
     const orderedEarnings = resolveExecutionOrder(earnings);
 
@@ -221,27 +221,27 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
         val = 0;
         error = err.message;
       }
-      
+
       let proratedVal = val;
       if (policy.attendance?.prorateSalary) {
-         proratedVal = (val / workingDays) * payableDays;
+        proratedVal = (val / workingDays) * payableDays;
       }
-      
+
       breakdown.earnings.components.push({ name: comp.name, value: proratedVal });
       context[comp.name] = proratedVal;
       context[comp.name.toUpperCase()] = proratedVal;
-      
+
       if (comp.name.toUpperCase().includes('BASIC')) context.BASIC = proratedVal;
-      
+
       breakdown.grossEarnings += proratedVal;
       breakdown.earnings.grossEarnings += proratedVal;
 
       breakdown.executionLog.push({
-          component: comp.name,
-          type: 'Earning',
-          formula: (comp.formula || comp.value || 'Fixed').toString(),
-          result: proratedVal,
-          error: error
+        component: comp.name,
+        type: 'Earning',
+        formula: (comp.formula || comp.value || 'Fixed').toString(),
+        result: proratedVal,
+        error: error
       });
     });
 
@@ -252,15 +252,15 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
     if (lopDays > 0 && policy.attendance?.lopCalculation) {
       const basic = context['Basic Salary'] || context['Basic'] || context['basic salary'] || context.BASIC || 0;
       const hra = context['House Rent Allowance (HRA)'] || context['HRA'] || context['hra'] || 0;
-      const baseForLop = basic + hra; 
-      
+      const baseForLop = basic + hra;
+
       let lopVal = 0;
       if (policy.attendance.lopCalculation === 'PER_DAY') {
-         lopVal = (baseForLop / workingDays) * lopDays;
+        lopVal = (baseForLop / workingDays) * lopDays;
       } else if (policy.attendance.lopCalculation === 'PER_HOUR') {
-         lopVal = (baseForLop / standardMonthlyHours) * (lopDays * hoursPerDay);
+        lopVal = (baseForLop / standardMonthlyHours) * (lopDays * hoursPerDay);
       } else {
-         lopVal = (baseForLop / totalDaysInMonth) * lopDays;
+        lopVal = (baseForLop / totalDaysInMonth) * lopDays;
       }
 
       breakdown.lopDeduction = Math.round(lopVal * 100) / 100;
@@ -273,79 +273,79 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
 
     // PF Calculation
     if (statutory.pf?.enabled) {
-        const basic = context.BASIC || context.gross * 0.4;
-        const pfBase = Math.min(basic, statutory.pf.wageLimit || 15000);
-        const pfVal = (pfBase * (statutory.pf.employeeRate || 12)) / 100;
-        breakdown.deductions.components.push({ name: 'PF', value: pfVal });
-        breakdown.totalDeductions += pfVal;
-        breakdown.deductions.totalDeductions += pfVal;
-        context.PF = pfVal;
+      const basic = context.BASIC || context.gross * 0.4;
+      const pfBase = Math.min(basic, statutory.pf.wageLimit || 15000);
+      const pfVal = (pfBase * (statutory.pf.employeeRate || 12)) / 100;
+      breakdown.deductions.components.push({ name: 'PF', value: pfVal });
+      breakdown.totalDeductions += pfVal;
+      breakdown.deductions.totalDeductions += pfVal;
+      context.PF = pfVal;
     }
 
     // ESI Calculation
     if (statutory.esi?.enabled && breakdown.grossEarnings <= (statutory.esi.wageLimit || 21000)) {
-        const esiVal = (breakdown.grossEarnings * (statutory.esi.employeeRate || 0.75)) / 100;
-        breakdown.deductions.components.push({ name: 'ESI', value: esiVal });
-        breakdown.totalDeductions += esiVal;
-        breakdown.deductions.totalDeductions += esiVal;
-        context.ESI = esiVal;
+      const esiVal = (breakdown.grossEarnings * (statutory.esi.employeeRate || 0.75)) / 100;
+      breakdown.deductions.components.push({ name: 'ESI', value: esiVal });
+      breakdown.totalDeductions += esiVal;
+      breakdown.deductions.totalDeductions += esiVal;
+      context.ESI = esiVal;
     }
 
     // PT Calculation
     if (statutory.pt?.enabled) {
-        const slab = statutory.pt.slabs.find(s => breakdown.grossEarnings >= s.min && (breakdown.grossEarnings <= s.max || !s.max));
-        const ptVal = slab ? slab.amount : 0;
-        if (ptVal > 0) {
-            breakdown.deductions.components.push({ name: 'Professional Tax', value: ptVal });
-            breakdown.totalDeductions += ptVal;
-            breakdown.deductions.totalDeductions += ptVal;
-            context.PT = ptVal;
-        }
+      const slab = statutory.pt.slabs.find(s => breakdown.grossEarnings >= s.min && (breakdown.grossEarnings <= s.max || !s.max));
+      const ptVal = slab ? slab.amount : 0;
+      if (ptVal > 0) {
+        breakdown.deductions.components.push({ name: 'Professional Tax', value: ptVal });
+        breakdown.totalDeductions += ptVal;
+        breakdown.deductions.totalDeductions += ptVal;
+        context.PT = ptVal;
+      }
     }
 
     // TDS Calculation
     if (statutory.tds?.enabled && breakdown.grossEarnings * 12 > (statutory.tds.threshold || 0)) {
-        const annualGross = (breakdown.grossEarnings * 12);
-        let tax = 0;
-        statutory.tds.slabs.forEach(slab => {
-            if (annualGross > slab.min) {
-                const taxable = Math.min(annualGross, slab.max || Infinity) - slab.min;
-                tax += (taxable * (slab.rate || 0)) / 100;
-            }
-        });
-        const tdsVal = Math.round(tax / 12);
-        breakdown.deductions.components.push({ name: 'TDS', value: tdsVal });
-        breakdown.totalDeductions += tdsVal;
-        breakdown.deductions.totalDeductions += tdsVal;
-        context.TDS = tdsVal;
+      const annualGross = (breakdown.grossEarnings * 12);
+      let tax = 0;
+      statutory.tds.slabs.forEach(slab => {
+        if (annualGross > slab.min) {
+          const taxable = Math.min(annualGross, slab.max || Infinity) - slab.min;
+          tax += (taxable * (slab.rate || 0)) / 100;
+        }
+      });
+      const tdsVal = Math.round(tax / 12);
+      breakdown.deductions.components.push({ name: 'TDS', value: tdsVal });
+      breakdown.totalDeductions += tdsVal;
+      breakdown.deductions.totalDeductions += tdsVal;
+      context.TDS = tdsVal;
     }
 
     // 4. Other Deductions from Profile/Policy/Structure
     const structuralDeductions = (profile?.deductions?.length > 0)
-        ? profile.deductions
-        : (salaryStructure?.deductions?.length > 0)
-            ? salaryStructure.deductions
-            : policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory);
-    
+      ? profile.deductions
+      : (salaryStructure?.deductions?.length > 0)
+        ? salaryStructure.deductions
+        : policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory);
+
     structuralDeductions.forEach(comp => {
-        if (!comp.type) comp.type = 'DEDUCTION';
-        let val = 0;
-        try {
-            if (comp.condition && !evaluateCondition(comp.condition, context)) return;
-            val = resolveComponentValue(comp, context, userCTC);
-        } catch (err) {
-            logger.error(`Deduction fail: [${comp.name}] - ${err.message}`);
-        }
-        breakdown.deductions.components.push({ name: comp.name, value: val });
-        breakdown.totalDeductions += val;
-        breakdown.deductions.totalDeductions += val;
-        context[comp.name] = val;
+      if (!comp.type) comp.type = 'DEDUCTION';
+      let val = 0;
+      try {
+        if (comp.condition && !evaluateCondition(comp.condition, context)) return;
+        val = resolveComponentValue(comp, context, userCTC);
+      } catch (err) {
+        logger.error(`Deduction fail: [${comp.name}] - ${err.message}`);
+      }
+      breakdown.deductions.components.push({ name: comp.name, value: val });
+      breakdown.totalDeductions += val;
+      breakdown.deductions.totalDeductions += val;
+      context[comp.name] = val;
     });
 
     // 5. Add Overtime Earnings 
     if (overtimePay > 0) {
-        breakdown.earnings.components.push({ name: 'Overtime Pay', value: Math.round(overtimePay) });
-        breakdown.grossEarnings += Math.round(overtimePay);
+      breakdown.earnings.components.push({ name: 'Overtime Pay', value: Math.round(overtimePay) });
+      breakdown.grossEarnings += Math.round(overtimePay);
     }
 
   } else {
@@ -368,9 +368,9 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
   // Rounding
   const rounding = policy.rounding || { decimals: 2, rule: 'ROUND_OFF' };
   const applyRounding = (val) => {
-      if (rounding.rule === 'ROUND_UP') return Math.ceil(val);
-      if (rounding.rule === 'ROUND_DOWN') return Math.floor(val);
-      return Math.round(val * Math.pow(10, rounding.decimals)) / Math.pow(10, rounding.decimals);
+    if (rounding.rule === 'ROUND_UP') return Math.ceil(val);
+    if (rounding.rule === 'ROUND_DOWN') return Math.floor(val);
+    return Math.round(val * Math.pow(10, rounding.decimals)) / Math.pow(10, rounding.decimals);
   };
 
   breakdown.grossEarnings = applyRounding(breakdown.grossEarnings);
@@ -398,37 +398,37 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
 
   const payrollDate = new Date(year, month - 1, 1);
   let profile = await PayrollProfile.findOne({ user: userId, organizationId }).lean();
-  
+
   // Bank-Grade: Resolve Effective-Dated Salary Structure (Fallback if Profile is not yet migrated)
   let salaryStructure = null;
   if (!profile?.earnings?.length && !profile?.deductions?.length) {
     if (profile?.salaryStructureId) {
-        const baseStructure = await prisma.roleSalaryStructure.findUnique({ where: { id: profile.salaryStructureId } });
-        if (baseStructure) {
-            salaryStructure = await RoleSalaryStructure.findOne({
-                organizationId,
-                name: baseStructure.name,
-                isDeleted: false,
-                effectiveFrom: { $lte: payrollDate },
-                $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
-            }).sort({ effectiveFrom: -1 }).lean();
-        }
-    } else if (profile?.salaryMode === 'Role-Based' && user.role) {
-        // Fallback: Resolve by Role Name if no direct ID is linked
+      const baseStructure = await prisma.roleSalaryStructure.findUnique({ where: { id: profile.salaryStructureId } });
+      if (baseStructure) {
         salaryStructure = await RoleSalaryStructure.findOne({
-            organizationId,
-            name: user.role, 
-            type: 'Role-Based',
-            isDeleted: false,
-            isActive: true,
-            effectiveFrom: { $lte: payrollDate },
-            $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
+          organizationId,
+          name: baseStructure.name,
+          isDeleted: false,
+          effectiveFrom: { $lte: payrollDate },
+          $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
         }).sort({ effectiveFrom: -1 }).lean();
+      }
+    } else if (profile?.salaryMode === 'Role-Based' && user.role) {
+      // Fallback: Resolve by Role Name if no direct ID is linked
+      salaryStructure = await RoleSalaryStructure.findOne({
+        organizationId,
+        name: user.role,
+        type: 'Role-Based',
+        isDeleted: false,
+        isActive: true,
+        effectiveFrom: { $lte: payrollDate },
+        $or: [{ effectiveTo: null }, { effectiveTo: { $gte: payrollDate } }]
+      }).sort({ effectiveFrom: -1 }).lean();
     }
   }
 
   const effectivePayrollType = policy.attendance?.calculationBasis || profile?.payrollType || 'Monthly';
-  
+
   let calcMonthlyCTC = profile?.monthlyCTC || 0;
   if (effectivePayrollType === 'Yearly') {
     calcMonthlyCTC = (profile?.monthlyCTC || 0) / 12;
@@ -475,14 +475,14 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
     year,
     currencySymbol: policy.currencySymbol || '₹',
     paymentType: effectivePayrollType,
-    attendance: { 
-      lopDays: attendance.lopDays, 
-      approvedHours: attendance.approvedHours, 
-      workedDays: attendance.workedDays, 
-      payableWeeks: attendance.payableWeeks, 
-      overtimeHours: attendance.overtimeHours, 
-      totalHours: attendance.totalHours, 
-      payableDays: attendance.payableDays 
+    attendance: {
+      lopDays: attendance.lopDays,
+      approvedHours: attendance.approvedHours,
+      workedDays: attendance.workedDays,
+      payableWeeks: attendance.payableWeeks,
+      overtimeHours: attendance.overtimeHours,
+      totalHours: attendance.totalHours,
+      payableDays: attendance.payableDays
     },
     breakdown
   };
@@ -493,17 +493,17 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
  * Default status is 'Completed'.
  */
 const ensureBatchExists = async (month, year, organizationId) => {
-    let batch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!batch) {
-        batch = await PayrollBatch.create({
-            month,
-            year,
-            organizationId,
-            status: 'Completed',
-            executionSummary: `Cycle initialized for ${month}/${year}`
-        });
-    }
-    return batch;
+  let batch = await PayrollBatch.findOne({ month, year, organizationId });
+  if (!batch) {
+    batch = await PayrollBatch.create({
+      month,
+      year,
+      organizationId,
+      status: 'Completed',
+      executionSummary: `Cycle initialized for ${month}/${year}`
+    });
+  }
+  return batch;
 };
 
 
@@ -515,7 +515,7 @@ const ensureBatchExists = async (month, year, organizationId) => {
 const runPayroll = async ({ month, year, organizationId, processedBy, payslipTemplateId }) => {
   const session = await mongoose.startSession();
   const isReplicaSet = !!(await mongoose.connection.db.admin().command({ isMaster: 1 })).setName;
-  
+
   if (isReplicaSet) session.startTransaction();
 
   try {
@@ -530,28 +530,28 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
 
     // 2. Fetch dependencies
     const query = { isActive: true, organizationId };
-    
+
     const activeEmployees = await User.find(query).lean();
     if (!activeEmployees || activeEmployees.length === 0) {
-        throw new Error('No active employees found for processing.');
+      throw new Error('No active employees found for processing.');
     }
 
     // Safety: Find already paid records to skip
-    const paidRecords = await ProcessedPayroll.find({ 
-        month, 
-        year, 
-        organizationId, 
-        isPaid: true 
+    const paidRecords = await ProcessedPayroll.find({
+      month,
+      year,
+      organizationId,
+      isPaid: true
     }).select('user').lean();
     const paidUserIds = new Set(paidRecords.map(r => r.user.toString()));
 
     const employeesToProcess = activeEmployees.filter(u => !paidUserIds.has(u._id.toString()));
 
     if (employeesToProcess.length === 0) {
-        batch.status = 'Completed';
-        await batch.save({ session });
-        if (isReplicaSet) await session.commitTransaction();
-        return { success: true, message: 'All active employees for this period are already paid.', details: [] };
+      batch.status = 'Completed';
+      await batch.save({ session });
+      if (isReplicaSet) await session.commitTransaction();
+      return { success: true, message: 'All active employees for this period are already paid.', details: [] };
     }
 
     const settings = await Settings.findOne({ organizationId }).lean();
@@ -560,8 +560,8 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
     // 3. Pre-run Structure Validation
     const allStructures = await RoleSalaryStructure.find({ isActive: true, organizationId }).lean();
     for (const struct of allStructures) {
-        resolveExecutionOrder(struct.earnings || []);
-        resolveExecutionOrder(struct.deductions || []);
+      resolveExecutionOrder(struct.earnings || []);
+      resolveExecutionOrder(struct.deductions || []);
     }
 
     const payrollResults = [];
@@ -571,83 +571,83 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
 
     // 4. Parallel Simulation
     const results = await Promise.all(employeesToProcess.map(async (user) => {
-        try {
-            const payrollData = await simulateUserPayroll(user._id, month, year, organizationId);
-            const hasAnomalies = payrollData.breakdown.executionLog.some(log => log.error);
-            
-            return { success: true, user, data: payrollData, hasAnomalies };
-        } catch (error) {
-            return { success: false, user, error: error.message };
-        }
+      try {
+        const payrollData = await simulateUserPayroll(user._id, month, year, organizationId);
+        const hasAnomalies = payrollData.breakdown.executionLog.some(log => log.error);
+
+        return { success: true, user, data: payrollData, hasAnomalies };
+      } catch (error) {
+        return { success: false, user, error: error.message };
+      }
     }));
 
     // 5. Post-Simulation Aggregation & Formatting
     results.forEach(res => {
-        if (res.success) {
-            const { data: payrollData, user, hasAnomalies } = res;
-            if (hasAnomalies) anomalyCount++;
+      if (res.success) {
+        const { data: payrollData, user, hasAnomalies } = res;
+        if (hasAnomalies) anomalyCount++;
 
-            const formatted = {
-                organizationId,
-                user: user._id,
-                month,
-                year,
-                paymentType: payrollData.paymentType,
-                currencySymbol: payrollConfig.currencySymbol || '₹',
-                attendance: payrollData.attendance,
-                breakdown: payrollData.breakdown,
-                grossYield: Math.round((payrollData.breakdown.summary.gross || 0) * 100) / 100,
-                liability: Math.round((payrollData.breakdown.summary.deductions || 0) * 100) / 100,
-                netPay: Math.round((payrollData.breakdown.summary.net || 0) * 100) / 100,
-                profileVersion: payrollData.profileVersion || 1,
-                isPaid: false,
-                processedAt: new Date(),
-                payslipTemplateId: payslipTemplateId || null,
-                employeeInfo: {
-                    name: user.name,
-                    employeeId: user.employeeId,
-                    department: user.department || 'General',
-                    designation: user.designation || 'Staff',
-                    branch: user.branch || 'Head Office'
-                },
-                bankDetails: {
-                    bankName: user.bankName,
-                    accountNumber: user.accountNumber,
-                    ifscCode: user.ifscCode,
-                    uan: user.uan,
-                    pan: user.pan,
-                    aadhaar: user.aadhaar
-                }
-            };
+        const formatted = {
+          organizationId,
+          user: user._id,
+          month,
+          year,
+          paymentType: payrollData.paymentType,
+          currencySymbol: payrollConfig.currencySymbol || '₹',
+          attendance: payrollData.attendance,
+          breakdown: payrollData.breakdown,
+          grossYield: Math.round((payrollData.breakdown.summary.gross || 0) * 100) / 100,
+          liability: Math.round((payrollData.breakdown.summary.deductions || 0) * 100) / 100,
+          netPay: Math.round((payrollData.breakdown.summary.net || 0) * 100) / 100,
+          profileVersion: payrollData.profileVersion || 1,
+          isPaid: false,
+          processedAt: new Date(),
+          payslipTemplateId: payslipTemplateId || null,
+          employeeInfo: {
+            name: user.name,
+            employeeId: user.employeeId,
+            department: user.department || 'General',
+            designation: user.designation || 'Staff',
+            branch: user.branch || 'Head Office'
+          },
+          bankDetails: {
+            bankName: user.bankName,
+            accountNumber: user.accountNumber,
+            ifscCode: user.ifscCode,
+            uan: user.uan,
+            pan: user.pan,
+            aadhaar: user.aadhaar
+          }
+        };
 
-            payrollResults.push(formatted);
-            summaryStats.totalGross += formatted.grossYield;
-            summaryStats.totalDeductions += formatted.liability;
-            summaryStats.totalNetPay += formatted.netPay;
+        payrollResults.push(formatted);
+        summaryStats.totalGross += formatted.grossYield;
+        summaryStats.totalDeductions += formatted.liability;
+        summaryStats.totalNetPay += formatted.netPay;
 
-            if (hasAnomalies) {
-               batchErrors.push({ userId: user._id, error: `Telemetry issues detected for ${user.name}. Check execution log.` });
-            }
-        } else {
-            batchErrors.push({ userId: res.user._id, error: res.error });
+        if (hasAnomalies) {
+          batchErrors.push({ userId: user._id, error: `Telemetry issues detected for ${user.name}. Check execution log.` });
         }
+      } else {
+        batchErrors.push({ userId: res.user._id, error: res.error });
+      }
     });
 
     if (payrollResults.length === 0) {
-        throw new Error(`Zero-record execution: ${batchErrors.length} critical failures prevented processing.`);
+      throw new Error(`Zero-record execution: ${batchErrors.length} critical failures prevented processing.`);
     }
 
     // 6. Persistence within Transaction - Only delete non-paid records
     await ProcessedPayroll.deleteMany({ month, year, organizationId, isPaid: false }, { session });
     const saved = await ProcessedPayroll.insertMany(payrollResults, { session });
-    
+
     // 7. Update Batch Final State
     const finalBatchStatus = (batchErrors.length > 0) ? 'Error' : 'Completed';
 
     const departmentTotals = {};
     payrollResults.forEach(pr => {
-        const dept = pr.employeeInfo.department;
-        departmentTotals[dept] = (departmentTotals[dept] || 0) + pr.netPay;
+      const dept = pr.employeeInfo.department;
+      departmentTotals[dept] = (departmentTotals[dept] || 0) + pr.netPay;
     });
 
     batch.totalEmployees = saved.length + paidUserIds.size;
@@ -662,46 +662,46 @@ const runPayroll = async ({ month, year, organizationId, processedBy, payslipTem
     batch.departmentDistribution = departmentTotals;
     batch.executionSummary = `Enterprise run complete. ${saved.length} successful, ${anomalyCount} warnings, ${batchErrors.length} failures. ${paidUserIds.size} skipped (already paid).`;
     batch.organizationId = organizationId;
-    
+
     await batch.save({ session });
 
     // Bank-Grade: Immutable Audit Ledger
     await PayrollLedger.create([{
-        organizationId,
-        action: 'PAYROLL_RUN',
-        batchId: batch._id,
-        performedBy: processedBy,
-        metadata: {
-            employees: saved.length,
-            totalNet: summaryStats.totalNetPay,
-            errors: batchErrors.length
-        }
+      organizationId,
+      action: 'PAYROLL_RUN',
+      batchId: batch._id,
+      performedBy: processedBy,
+      metadata: {
+        employees: saved.length,
+        totalNet: summaryStats.totalNetPay,
+        errors: batchErrors.length
+      }
     }], { session });
 
     if (isReplicaSet) await session.commitTransaction();
     logger.info(`[PAYROLL PIPELINE] Committed ${finalBatchStatus} for cycle ${month}/${year}`);
 
     // Real-time synchronization: Notify all clients (Web & Mobile)
-    socketService.emit('PAYROLL_UPDATED', { 
-        organizationId, 
-        action: 'RUN_PAYROLL', 
-        month, 
-        year,
-        status: finalBatchStatus 
+    socketService.emit('PAYROLL_UPDATED', {
+      organizationId,
+      action: 'RUN_PAYROLL',
+      month,
+      year,
+      status: finalBatchStatus
     });
 
     return {
-        success: batchErrors.length === 0,
-        batchStatus: finalBatchStatus,
-        totalEmployeesProcessed: saved.length,
-        summaryStats,
-        errors: batchErrors,
-        details: saved
+      success: batchErrors.length === 0,
+      batchStatus: finalBatchStatus,
+      totalEmployeesProcessed: saved.length,
+      summaryStats,
+      errors: batchErrors,
+      details: saved
     };
 
   } catch (err) {
     if (isReplicaSet) {
-        await session.abortTransaction();
+      await session.abortTransaction();
     }
     logger.error(`[PAYROLL PIPELINE CRITICAL FAULT] ${err.message}`, { stack: err.stack });
     throw err;
@@ -718,22 +718,22 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
   const payrollConfig = settings?.payroll || {};
 
   const existingPayroll = await ProcessedPayroll.findOne({ user: userId, month: payrollData.month, year: payrollData.year, organizationId });
-  
+
   if (existingPayroll && existingPayroll.isPaid) {
-      throw new Error(`Execution halted: Payroll for ${userData.name} is ALREADY PAID. Modifications prohibited.`);
+    throw new Error(`Execution halted: Payroll for ${userData.name} is ALREADY PAID. Modifications prohibited.`);
   }
 
   // Update or Create
   const result = await ProcessedPayroll.findOneAndUpdate(
     { user: userId, month: payrollData.month, year: payrollData.year, organizationId },
-    { 
-      ...updateContent, 
-      user: userId, 
+    {
+      ...updateContent,
+      user: userId,
       organizationId,
       grossYield: payrollData.breakdown.summary ? payrollData.breakdown.summary.gross : (payrollData.breakdown.grossYield || 0),
       liability: payrollData.breakdown.summary ? payrollData.breakdown.summary.deductions : (payrollData.breakdown.liability || 0),
       netPay: payrollData.breakdown.summary ? payrollData.breakdown.summary.net : (payrollData.breakdown.netPay || 0),
-      isPaid: false, 
+      isPaid: false,
       processedAt: new Date(),
       currencySymbol: payrollConfig.currencySymbol || '₹',
       employeeInfo: {
@@ -757,12 +757,12 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
   );
 
   // Real-time synchronization
-  socketService.emit('PAYROLL_UPDATED', { 
-    organizationId, 
-    action: 'SAVE_PAYROLL', 
-    month: payrollData.month, 
+  socketService.emit('PAYROLL_UPDATED', {
+    organizationId,
+    action: 'SAVE_PAYROLL',
+    month: payrollData.month,
     year: payrollData.year,
-    userId 
+    userId
   });
 
   return result;
@@ -774,7 +774,7 @@ const saveProcessedPayroll = async (payrollData, organizationId) => {
  */
 const getPayrollSummary = async (month, year, organizationId) => {
   const data = await ProcessedPayroll.find({ month, year, organizationId });
-  
+
   const summary = {
     totalEmployees: data.length,
     totalGross: 0,
@@ -790,7 +790,7 @@ const getPayrollSummary = async (month, year, organizationId) => {
     summary.totalDeductions += p.liability || p.breakdown?.deductions?.totalDeductions || 0;
     summary.totalNetPay += p.netPay || p.breakdown?.netPay || 0;
     summary.totalLopDays += p.attendance?.lopDays || 0;
-    
+
     summary.statusBreakdown[p.status] = (summary.statusBreakdown[p.status] || 0) + 1;
   });
 
@@ -802,7 +802,7 @@ const getPayrollSummary = async (month, year, organizationId) => {
  */
 const getDepartmentCostAnalysis = async (month, year, organizationId) => {
   const data = await ProcessedPayroll.find({ month, year, organizationId });
-  
+
   const deptMap = {};
 
   data.forEach(p => {
@@ -816,7 +816,7 @@ const getDepartmentCostAnalysis = async (month, year, organizationId) => {
         totalDeductions: 0
       };
     }
-    
+
     const d = deptMap[dept];
     d.employeeCount += 1;
     d.totalGross += p.breakdown.grossEarnings || 0;
@@ -832,7 +832,7 @@ const getDepartmentCostAnalysis = async (month, year, organizationId) => {
  */
 const formatProfile = (profile) => {
   if (!profile) return null;
-  
+
   const formatted = {
     ...profile,
     _id: profile.id || profile._id,
@@ -865,7 +865,7 @@ const formatProfile = (profile) => {
 const getPayrollDashboard = async (month, year, organizationId) => {
   const startDate = startOfMonth(new Date(year, month - 1));
   const endDate = endOfMonth(startDate);
-  
+
   // Previous Month
   let prevMonth = month - 1;
   let prevYear = year;
@@ -875,14 +875,17 @@ const getPayrollDashboard = async (month, year, organizationId) => {
   // NOTE: Uses top-level `grossYield`, `liability`, `netPay` fields which are always
   // written by saveProcessedPayroll(). breakdown.* nested paths had mismatched keys.
   const payrollStats = await ProcessedPayroll.aggregate([
-    { $match: { 
+    {
+      $match: {
         organizationId: new mongoose.Types.ObjectId(organizationId),
         $or: [
-            { month, year },
-            { month: prevMonth, year: prevYear }
-        ] 
-    }},
-    { $group: {
+          { month, year },
+          { month: prevMonth, year: prevYear }
+        ]
+      }
+    },
+    {
+      $group: {
         _id: { month: "$month", year: "$year" },
         totalPayroll: { $sum: "$netPay" },
         totalEarnings: { $sum: "$grossYield" },
@@ -890,63 +893,71 @@ const getPayrollDashboard = async (month, year, organizationId) => {
         processedEmployees: { $sum: 1 },
         paidPayments: { $sum: { $cond: ["$isPaid", 1, 0] } },
 
-        tds: { $sum: { 
+        tds: {
+          $sum: {
             $reduce: {
-                input: "$breakdown.deductions.components",
-                initialValue: 0,
-                in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /TDS|Income Tax/i } }, "$$this.value", 0] }] }
+              input: "$breakdown.deductions.components",
+              initialValue: 0,
+              in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /TDS|Income Tax/i } }, "$$this.value", 0] }] }
             }
-        }},
-        pf: { $sum: { 
+          }
+        },
+        pf: {
+          $sum: {
             $reduce: {
-                input: "$breakdown.deductions.components",
-                initialValue: 0,
-                in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /PF|Provident Fund|Employee PF/i } }, "$$this.value", 0] }] }
+              input: "$breakdown.deductions.components",
+              initialValue: 0,
+              in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /PF|Provident Fund|Employee PF/i } }, "$$this.value", 0] }] }
             }
-        }},
-        esi: { $sum: { 
+          }
+        },
+        esi: {
+          $sum: {
             $reduce: {
-                input: "$breakdown.deductions.components",
-                initialValue: 0,
-                in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /ESI/i } }, "$$this.value", 0] }] }
+              input: "$breakdown.deductions.components",
+              initialValue: 0,
+              in: { $add: ["$$value", { $cond: [{ $regexMatch: { input: "$$this.name", regex: /ESI/i } }, "$$this.value", 0] }] }
             }
-        }},
+          }
+        },
         lopDays: { $sum: "$attendance.lopDays" },
         lopDeductions: { $sum: "$breakdown.lopDeduction" }
-    }}
+      }
+    }
   ]);
 
-  const currentStats = payrollStats.find(s => s._id.month === month && s._id.year === year) || 
+  const currentStats = payrollStats.find(s => s._id.month === month && s._id.year === year) ||
     { totalPayroll: 0, totalEarnings: 0, totalDeductions: 0, processedEmployees: 0, paidPayments: 0, tds: 0, pf: 0, esi: 0, lopDays: 0, lopDeductions: 0 };
   const prevStats = payrollStats.find(s => s._id.month === prevMonth && s._id.year === prevYear) || { totalPayroll: 0 };
 
   const growthPercentage = prevStats.totalPayroll === 0 ? 0 : ((currentStats.totalPayroll - prevStats.totalPayroll) / prevStats.totalPayroll) * 100;
 
   // 2. Optimized lookup for Counts & Compliance
-  const activeEmployeesCount = await User.countDocuments({ isActive: true, organizationId });
-  const usersWithMissingBank = await User.countDocuments({ 
-    isActive: true, 
-    organizationId, 
-    $or: [
-        { accountNumber: { $exists: false } }, 
-        { accountNumber: "" }, 
-        { bankName: { $exists: false } }, 
-        { bankName: "" }
-    ] 
+  const activeEmployeeIds = await User.distinct("_id", {
+    isActive: true,
+    organizationId,
+    role: { $ne: 'super_admin' }
   });
-  
-  // Efficiently find users who have active profiles
-  // A profile is considered valid if it has a salary structure OR defined earnings/CTC
-  const validProfileUserIds = await PayrollProfile.distinct("user", { 
+
+  const activeEmployeesCount = activeEmployeeIds.length;
+
+  const usersWithMissingBank = await User.countDocuments({
+    _id: { $in: activeEmployeeIds },
     organizationId,
     $or: [
-      { salaryStructureId: { $ne: null } },
-      { annualCTC: { $gt: 0 } },
-      { monthlyCTC: { $gt: 0 } },
-      { "earnings.0": { $exists: true } }
+      { accountNumber: { $exists: false } },
+      { accountNumber: "" },
+      { bankName: { $exists: false } },
+      { bankName: "" }
     ]
   });
-  
+
+  // A profile is considered valid if it exists, matching the frontend's "Pending" definition
+  const validProfileUserIds = await PayrollProfile.distinct("user", {
+    organizationId,
+    user: { $in: activeEmployeeIds }
+  });
+
   const usersWithMissingStructure = Math.max(0, activeEmployeesCount - validProfileUserIds.length);
 
   // Ready Employees: Active + Has Profile + Has Bank Details
@@ -960,28 +971,32 @@ const getPayrollDashboard = async (month, year, organizationId) => {
 
   // 3. Leave Aggregation
   const leaveStats = await Leave.aggregate([
-    { $match: { 
+    {
+      $match: {
         organizationId: new mongoose.Types.ObjectId(organizationId),
         status: 'approved',
         $or: [{ startDate: { $lte: endDate }, endDate: { $gte: startDate } }]
-    }},
-    { $group: {
+      }
+    },
+    {
+      $group: {
         _id: null,
-        unpaidLeaves: { 
-          $sum: { 
-            $cond: [{ 
-              $regexMatch: { input: { $ifNull: ["$leaveType", ""] }, regex: /unpaid|lop/i } 
-            }, { $ifNull: ["$totalDays", 0] }, 0] 
+        unpaidLeaves: {
+          $sum: {
+            $cond: [{
+              $regexMatch: { input: { $ifNull: ["$leaveType", ""] }, regex: /unpaid|lop/i }
+            }, { $ifNull: ["$totalDays", 0] }, 0]
           }
         },
-        paidLeaves: { 
-          $sum: { 
-            $cond: [{ 
+        paidLeaves: {
+          $sum: {
+            $cond: [{
               $not: [{ $regexMatch: { input: { $ifNull: ["$leaveType", ""] }, regex: /unpaid|lop/i } }]
-            }, { $ifNull: ["$totalDays", 0] }, 0] 
+            }, { $ifNull: ["$totalDays", 0] }, 0]
           }
         }
-    }}
+      }
+    }
   ]);
   const leaves = leaveStats[0] || { paidLeaves: 0, unpaidLeaves: 0 };
 
@@ -1050,44 +1065,44 @@ const getPayrollDashboard = async (month, year, organizationId) => {
  * Trend Visualization Data
  */
 const getDashboardTrends = async (organizationId) => {
-    // Last 6 months trend — uses top-level fields for accuracy
-    const trends = await ProcessedPayroll.aggregate([
-        { $match: { organizationId: new mongoose.Types.ObjectId(organizationId) } },
-        {
-            $group: {
-                _id: { month: "$month", year: "$year" },
-                totalCost: { $sum: "$netPay" },
-                totalGross: { $sum: "$grossYield" },
-                totalDeductions: { $sum: "$liability" }
-            }
-        },
-        { $sort: { "_id.year": -1, "_id.month": -1 } },
-        { $limit: 6 }
-    ]);
+  // Last 6 months trend — uses top-level fields for accuracy
+  const trends = await ProcessedPayroll.aggregate([
+    { $match: { organizationId: new mongoose.Types.ObjectId(organizationId) } },
+    {
+      $group: {
+        _id: { month: "$month", year: "$year" },
+        totalCost: { $sum: "$netPay" },
+        totalGross: { $sum: "$grossYield" },
+        totalDeductions: { $sum: "$liability" }
+      }
+    },
+    { $sort: { "_id.year": -1, "_id.month": -1 } },
+    { $limit: 6 }
+  ]);
 
-    // Dept wise distribution (latest month)
-    const latestMonth = trends[0]?._id || { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
-    const deptDistribution = await ProcessedPayroll.aggregate([
-        { $match: { month: latestMonth.month, year: latestMonth.year, organizationId: new mongoose.Types.ObjectId(organizationId) } },
-        { 
-            $group: { 
-                _id: "$employeeInfo.department", 
-                value: { $sum: "$breakdown.netPay" } 
-            } 
-        },
-        { $project: { name: { $ifNull: ["$_id", "Unassigned"] }, value: 1, _id: 0 } }
-    ]);
+  // Dept wise distribution (latest month)
+  const latestMonth = trends[0]?._id || { month: new Date().getMonth() + 1, year: new Date().getFullYear() };
+  const deptDistribution = await ProcessedPayroll.aggregate([
+    { $match: { month: latestMonth.month, year: latestMonth.year, organizationId: new mongoose.Types.ObjectId(organizationId) } },
+    {
+      $group: {
+        _id: "$employeeInfo.department",
+        value: { $sum: "$breakdown.netPay" }
+      }
+    },
+    { $project: { name: { $ifNull: ["$_id", "Unassigned"] }, value: 1, _id: 0 } }
+  ]);
 
-    return {
-        monthlyTrend: trends.map(t => ({
-            name: `${t._id.month}/${t._id.year}`,
-            netPay: t.totalCost,
-            grossPay: t.totalGross,
-            deductions: t.totalDeductions
-        })).reverse(),
+  return {
+    monthlyTrend: trends.map(t => ({
+      name: `${t._id.month}/${t._id.year}`,
+      netPay: t.totalCost,
+      grossPay: t.totalGross,
+      deductions: t.totalDeductions
+    })).reverse(),
 
-        deptDistribution
-    };
+    deptDistribution
+  };
 };
 
 /**
@@ -1095,89 +1110,93 @@ const getDashboardTrends = async (organizationId) => {
  * Performs multi-stage aggregation to provide Zoho-style visualization data.
  */
 const getPayrollAnalytics = async (filters) => {
-    const { month, year, department, organizationId } = filters;
-    
-    const match = { organizationId: new mongoose.Types.ObjectId(organizationId) };
-    if (month) match.month = parseInt(month);
-    if (year) match.year = parseInt(year);
-    if (department && department !== 'All') match['employeeInfo.department'] = department;
+  const { month, year, department, organizationId } = filters;
 
-    // 1. Summary Metrics — use top-level fields stored by saveProcessedPayroll
-    const summary = await ProcessedPayroll.aggregate([
-        { $match: match },
-        { $group: {
-            _id: null,
-            totalCost: { $sum: "$grossYield" },
-            totalNetPay: { $sum: "$netPay" },
-            totalDeductions: { $sum: "$liability" },
-            employeeCount: { $sum: 1 }
-        }}
-    ]);
+  const match = { organizationId: new mongoose.Types.ObjectId(organizationId) };
+  if (month) match.month = parseInt(month);
+  if (year) match.year = parseInt(year);
+  if (department && department !== 'All') match['employeeInfo.department'] = department;
 
-    // 2. Monthly Trend (Last 12 months)
-    // If department filter is active, we trend only for that department
-    const trendMatch = { organizationId: new mongoose.Types.ObjectId(organizationId) };
-    if (department && department !== 'All') trendMatch['employeeInfo.department'] = department;
-    const trend = await ProcessedPayroll.aggregate([
-        { $match: trendMatch },
-        { $group: {
-            _id: { month: "$month", year: "$year" },
-            gross: { $sum: "$grossYield" },
-            net: { $sum: "$netPay" }
-        }},
-        { $sort: { "_id.year": -1, "_id.month": -1 } },
-        { $limit: 12 }
-    ]);
+  // 1. Summary Metrics — use top-level fields stored by saveProcessedPayroll
+  const summary = await ProcessedPayroll.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        totalCost: { $sum: "$grossYield" },
+        totalNetPay: { $sum: "$netPay" },
+        totalDeductions: { $sum: "$liability" },
+        employeeCount: { $sum: 1 }
+      }
+    }
+  ]);
 
-    // 3. Department Distribution (for selected month/year)
-    const deptDist = await ProcessedPayroll.aggregate([
-        { $match: { month: parseInt(month), year: parseInt(year), organizationId: new mongoose.Types.ObjectId(organizationId) } },
-        { 
-            $group: { 
-                _id: "$employeeInfo.department", 
-                value: { $sum: "$grossYield" } 
-            } 
-        },
-        { $project: { name: { $ifNull: ["$_id", "Unassigned"] }, value: 1, _id: 0 } }
-    ]);
+  // 2. Monthly Trend (Last 12 months)
+  // If department filter is active, we trend only for that department
+  const trendMatch = { organizationId: new mongoose.Types.ObjectId(organizationId) };
+  if (department && department !== 'All') trendMatch['employeeInfo.department'] = department;
+  const trend = await ProcessedPayroll.aggregate([
+    { $match: trendMatch },
+    {
+      $group: {
+        _id: { month: "$month", year: "$year" },
+        gross: { $sum: "$grossYield" },
+        net: { $sum: "$netPay" }
+      }
+    },
+    { $sort: { "_id.year": -1, "_id.month": -1 } },
+    { $limit: 12 }
+  ]);
 
-    // 4. Detailed Earnings vs Deductions Breakdown (selected month/year)
-    const earningComponents = await ProcessedPayroll.aggregate([
-        { $match: match },
-        { $unwind: "$breakdown.earnings.components" },
-        { 
-            $group: { 
-                _id: "$breakdown.earnings.components.name", 
-                value: { $sum: "$breakdown.earnings.components.value" } 
-            } 
-        }
-    ]);
+  // 3. Department Distribution (for selected month/year)
+  const deptDist = await ProcessedPayroll.aggregate([
+    { $match: { month: parseInt(month), year: parseInt(year), organizationId: new mongoose.Types.ObjectId(organizationId) } },
+    {
+      $group: {
+        _id: "$employeeInfo.department",
+        value: { $sum: "$netPay" }
+      }
+    },
+    { $project: { name: { $ifNull: ["$_id", "Unassigned"] }, value: 1, _id: 0 } }
+  ]);
 
-    const deductionComponents = await ProcessedPayroll.aggregate([
-        { $match: match },
-        { $unwind: "$breakdown.deductions.components" },
-        { 
-            $group: { 
-                _id: "$breakdown.deductions.components.name", 
-                value: { $sum: "$breakdown.deductions.components.value" } 
-            } 
-        }
-    ]);
+  // 4. Detailed Earnings vs Deductions Breakdown (selected month/year)
+  const earningComponents = await ProcessedPayroll.aggregate([
+    { $match: match },
+    { $unwind: "$breakdown.earnings.components" },
+    {
+      $group: {
+        _id: "$breakdown.earnings.components.name",
+        value: { $sum: "$breakdown.earnings.components.value" }
+      }
+    }
+  ]);
 
-    return {
-        summary: summary[0] || { totalCost: 0, totalNetPay: 0, totalDeductions: 0, employeeCount: 0 },
-        trend: trend.map(t => ({
-            name: `${t._id.month}/${t._id.year}`,
-            grossPay: t.gross,
-            netPay: t.net
-        })).reverse(),
+  const deductionComponents = await ProcessedPayroll.aggregate([
+    { $match: match },
+    { $unwind: "$breakdown.deductions.components" },
+    {
+      $group: {
+        _id: "$breakdown.deductions.components.name",
+        value: { $sum: "$breakdown.deductions.components.value" }
+      }
+    }
+  ]);
 
-        departmentDistribution: deptDist,
-        breakdown: [
-            ...earningComponents.map(e => ({ name: e._id, value: Math.round(e.value), type: 'Earning' })),
-            ...deductionComponents.map(d => ({ name: d._id, value: Math.round(d.value), type: 'Deduction' }))
-        ]
-    };
+  return {
+    summary: summary[0] || { totalCost: 0, totalNetPay: 0, totalDeductions: 0, employeeCount: 0 },
+    trend: trend.map(t => ({
+      name: `${t._id.month}/${t._id.year}`,
+      grossPay: t.gross,
+      netPay: t.net
+    })).reverse(),
+
+    departmentDistribution: deptDist,
+    breakdown: [
+      ...earningComponents.map(e => ({ name: e._id, value: Math.round(e.value), type: 'Earning' })),
+      ...deductionComponents.map(d => ({ name: d._id, value: Math.round(d.value), type: 'Deduction' }))
+    ]
+  };
 };
 
 /**
@@ -1194,194 +1213,194 @@ const getPayrollBatches = async (organizationId) => {
  * Marks a payroll batch as PAID.
  */
 const markAsPaid = async ({ month, year, ids, organizationId, processedBy, version, paymentMethod, paymentDate }) => {
-    // Scenario 1: Individual IDs provided (Mobile App Bulk/Single Action)
-    if (ids && Array.isArray(ids) && ids.length > 0) {
-        console.log(`[PayrollService] Marking ${ids.length} records as paid for Org: ${organizationId}`);
-        
-        // 🛡️ Validate IDs are valid ObjectIds to prevent CastError
-        const validIds = ids.filter(id => id && mongoose.Types.ObjectId.isValid(id));
-        if (validIds.length === 0) {
-            throw new AppError('Invalid record IDs provided. Please refresh and try again.', 400);
+  // Scenario 1: Individual IDs provided (Mobile App Bulk/Single Action)
+  if (ids && Array.isArray(ids) && ids.length > 0) {
+    console.log(`[PayrollService] Marking ${ids.length} records as paid for Org: ${organizationId}`);
+
+    // 🛡️ Validate IDs are valid ObjectIds to prevent CastError
+    const validIds = ids.filter(id => id && mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      throw new AppError('Invalid record IDs provided. Please refresh and try again.', 400);
+    }
+
+    const updateResult = await ProcessedPayroll.updateMany(
+      {
+        _id: { $in: validIds },
+        organizationId,
+        isPaid: false
+      },
+      {
+        $set: {
+          isPaid: true,
+          paidAt: paymentDate || new Date(),
+          paidBy: processedBy,
+          paymentMethod: paymentMethod || 'Bank Transfer'
         }
+      }
+    );
 
-        const updateResult = await ProcessedPayroll.updateMany(
-            { 
-                _id: { $in: validIds }, 
-                organizationId, 
-                isPaid: false 
-            },
-            { 
-                $set: { 
-                    isPaid: true, 
-                    paidAt: paymentDate || new Date(),
-                    paidBy: processedBy,
-                    paymentMethod: paymentMethod || 'Bank Transfer'
-                } 
-            }
-        );
-
-        // 🔗 Attempt to find the batch for ledger reporting (wrap in try-catch to avoid 500)
-        try {
-            const sampleRecord = await prisma.processedPayroll.findUnique({ where: { id: validIds[0] } });
-            if (sampleRecord) {
-                const batch = await PayrollBatch.findOne({ 
-                    month: sampleRecord.month, 
-                    year: sampleRecord.year, 
-                    organizationId 
-                });
-
-                if (batch) {
-                    // Bank-Grade: Immutable Audit Ledger
-                    await PayrollLedger.create({
-                        organizationId,
-                        action: 'PAYROLL_MARK_PAID',
-                        batchId: batch._id,
-                        performedBy: processedBy || organizationId, // Fallback to prevent validation error
-                        metadata: { 
-                            type: 'INDIVIDUAL_RECORDS', 
-                            count: validIds.length, 
-                            ids: validIds,
-                            month: sampleRecord.month,
-                            year: sampleRecord.year
-                        }
-                    });
-                }
-            }
-        } catch (ledgerErr) {
-            console.error('[PayrollService] Ledger Creation Failed:', ledgerErr.message);
-            // Don't throw, let the main update succeed
-        }
-
-        // Audit Logging for Individual Marking
-        try {
-            await auditService.log(
-                processedBy, 
-                'MARK_RECORDS_PAID', 
-                'ProcessedPayroll', 
-                validIds[0], 
-                { count: validIds.length, ids: validIds }, 
-                'SUCCESS', 
-                null, 
-                organizationId
-            );
-        } catch (auditErr) {
-            console.error('[PayrollService] Audit Logging Failed:', auditErr.message);
-        }
-
-        // Real-time synchronization
-        socketService.emit('PAYROLL_UPDATED', { 
-            organizationId, 
-            action: 'MARK_PAID', 
-            count: validIds.length,
-            ids: validIds 
+    // 🔗 Attempt to find the batch for ledger reporting (wrap in try-catch to avoid 500)
+    try {
+      const sampleRecord = await prisma.processedPayroll.findUnique({ where: { id: validIds[0] } });
+      if (sampleRecord) {
+        const batch = await PayrollBatch.findOne({
+          month: sampleRecord.month,
+          year: sampleRecord.year,
+          organizationId
         });
 
-        return { 
-            success: true, 
-            modifiedCount: updateResult.modifiedCount,
-            ids: validIds 
-        };
-    }
-
-    // Scenario 2: Batch-wide marking (Web App Action)
-    if (!month || !year) throw new AppError('Month and Year are required for batch-wide processing', 400);
-
-    let checkBatch = await PayrollBatch.findOne({ month, year, organizationId });
-    if (!checkBatch) throw new AppError('Payroll batch not found for the selected period.', 404);
-    if (checkBatch.isPaid) throw new AppError('This payroll batch has already been marked as paid.', 400);
-
-    // Bank-Grade: Optimistic Concurrency Control (OCC)
-    const query = { month, year, organizationId, isPaid: false };
-    if (typeof version !== 'undefined' && version !== null) {
-        query.__v = version;
-    }
-
-    const batch = await PayrollBatch.findOneAndUpdate(
-        query,
-        { 
-            $set: { 
-                isPaid: true,
-                paidAt: paymentDate || new Date(),
-                paidBy: processedBy
-            } 
-        },
-        { new: true }
-    );
-
-    if (!batch) {
-        throw new AppError('Transaction Conflict: Payroll batch was modified by another process. Please refresh and try again.', 409);
-    }
-
-    await ProcessedPayroll.updateMany(
-        { month, year, organizationId, isPaid: false },
-        { 
-            $set: { 
-                isPaid: true, 
-                paidAt: paymentDate || new Date(),
-                paidBy: processedBy,
-                paymentMethod: paymentMethod || 'Bank Transfer'
-            } 
+        if (batch) {
+          // Bank-Grade: Immutable Audit Ledger
+          await PayrollLedger.create({
+            organizationId,
+            action: 'PAYROLL_MARK_PAID',
+            batchId: batch._id,
+            performedBy: processedBy || organizationId, // Fallback to prevent validation error
+            metadata: {
+              type: 'INDIVIDUAL_RECORDS',
+              count: validIds.length,
+              ids: validIds,
+              month: sampleRecord.month,
+              year: sampleRecord.year
+            }
+          });
         }
-    );
+      }
+    } catch (ledgerErr) {
+      console.error('[PayrollService] Ledger Creation Failed:', ledgerErr.message);
+      // Don't throw, let the main update succeed
+    }
 
-    // Bank-Grade: Immutable Audit Ledger
-    await PayrollLedger.create({
-        organizationId,
-        action: 'PAYROLL_MARK_PAID',
-        batchId: batch._id,
-        performedBy: processedBy,
-        metadata: { month, year, totalNet: batch.totalNet }
-    });
-
-    await auditService.log(processedBy, 'MARK_PAYROLL_PAID', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS', null, organizationId);
+    // Audit Logging for Individual Marking
+    try {
+      await auditService.log(
+        processedBy,
+        'MARK_RECORDS_PAID',
+        'ProcessedPayroll',
+        validIds[0],
+        { count: validIds.length, ids: validIds },
+        'SUCCESS',
+        null,
+        organizationId
+      );
+    } catch (auditErr) {
+      console.error('[PayrollService] Audit Logging Failed:', auditErr.message);
+    }
 
     // Real-time synchronization
-    socketService.emit('PAYROLL_UPDATED', { 
-        organizationId, 
-        action: 'MARK_BATCH_PAID', 
-        month, 
-        year 
+    socketService.emit('PAYROLL_UPDATED', {
+      organizationId,
+      action: 'MARK_PAID',
+      count: validIds.length,
+      ids: validIds
     });
 
-    return batch;
+    return {
+      success: true,
+      modifiedCount: updateResult.modifiedCount,
+      ids: validIds
+    };
+  }
+
+  // Scenario 2: Batch-wide marking (Web App Action)
+  if (!month || !year) throw new AppError('Month and Year are required for batch-wide processing', 400);
+
+  let checkBatch = await PayrollBatch.findOne({ month, year, organizationId });
+  if (!checkBatch) throw new AppError('Payroll batch not found for the selected period.', 404);
+  if (checkBatch.isPaid) throw new AppError('This payroll batch has already been marked as paid.', 400);
+
+  // Bank-Grade: Optimistic Concurrency Control (OCC)
+  const query = { month, year, organizationId, isPaid: false };
+  if (typeof version !== 'undefined' && version !== null) {
+    query.__v = version;
+  }
+
+  const batch = await PayrollBatch.findOneAndUpdate(
+    query,
+    {
+      $set: {
+        isPaid: true,
+        paidAt: paymentDate || new Date(),
+        paidBy: processedBy
+      }
+    },
+    { new: true }
+  );
+
+  if (!batch) {
+    throw new AppError('Transaction Conflict: Payroll batch was modified by another process. Please refresh and try again.', 409);
+  }
+
+  await ProcessedPayroll.updateMany(
+    { month, year, organizationId, isPaid: false },
+    {
+      $set: {
+        isPaid: true,
+        paidAt: paymentDate || new Date(),
+        paidBy: processedBy,
+        paymentMethod: paymentMethod || 'Bank Transfer'
+      }
+    }
+  );
+
+  // Bank-Grade: Immutable Audit Ledger
+  await PayrollLedger.create({
+    organizationId,
+    action: 'PAYROLL_MARK_PAID',
+    batchId: batch._id,
+    performedBy: processedBy,
+    metadata: { month, year, totalNet: batch.totalNet }
+  });
+
+  await auditService.log(processedBy, 'MARK_PAYROLL_PAID', 'PayrollBatch', batch._id, { month, year }, 'SUCCESS', null, organizationId);
+
+  // Real-time synchronization
+  socketService.emit('PAYROLL_UPDATED', {
+    organizationId,
+    action: 'MARK_BATCH_PAID',
+    month,
+    year
+  });
+
+  return batch;
 };
 
 const deleteBatch = async (batchId, organizationId, processedBy) => {
-    const batch = await PayrollBatch.findOne({ _id: batchId, organizationId });
-    if (!batch) {
-        throw new AppError('Payroll batch not found.', 404);
-    }
+  const batch = await PayrollBatch.findOne({ _id: batchId, organizationId });
+  if (!batch) {
+    throw new AppError('Payroll batch not found.', 404);
+  }
 
-    if (batch.status === 'Paid') {
-        throw new AppError('Cannot delete a payroll batch that has already been marked as Paid.', 400);
-    }
+  if (batch.status === 'Paid') {
+    throw new AppError('Cannot delete a payroll batch that has already been marked as Paid.', 400);
+  }
 
-    // Delete associated processed payrolls
-    await ProcessedPayroll.deleteMany({ month: batch.month, year: batch.year, organizationId });
+  // Delete associated processed payrolls
+  await ProcessedPayroll.deleteMany({ month: batch.month, year: batch.year, organizationId });
 
-    // Delete the batch
-    await PayrollBatch.deleteOne({ _id: batchId });
+  // Delete the batch
+  await PayrollBatch.deleteOne({ _id: batchId });
 
-    // Bank-Grade: Immutable Audit Ledger
-    await PayrollLedger.create({
-        organizationId,
-        action: 'PAYROLL_BATCH_DELETED',
-        batchId: batch._id,
-        performedBy: processedBy,
-        metadata: { month: batch.month, year: batch.year }
-    });
+  // Bank-Grade: Immutable Audit Ledger
+  await PayrollLedger.create({
+    organizationId,
+    action: 'PAYROLL_BATCH_DELETED',
+    batchId: batch._id,
+    performedBy: processedBy,
+    metadata: { month: batch.month, year: batch.year }
+  });
 
-    await auditService.log(processedBy, 'DELETE_PAYROLL_BATCH', 'PayrollBatch', batch._id, { month: batch.month, year: batch.year }, 'SUCCESS', null, organizationId);
+  await auditService.log(processedBy, 'DELETE_PAYROLL_BATCH', 'PayrollBatch', batch._id, { month: batch.month, year: batch.year }, 'SUCCESS', null, organizationId);
 
-    // Real-time synchronization
-    socketService.emit('PAYROLL_UPDATED', { 
-        organizationId, 
-        action: 'DELETE_BATCH', 
-        month: batch.month, 
-        year: batch.year 
-    });
+  // Real-time synchronization
+  socketService.emit('PAYROLL_UPDATED', {
+    organizationId,
+    action: 'DELETE_BATCH',
+    month: batch.month,
+    year: batch.year
+  });
 
-    return { success: true };
+  return { success: true };
 };
 
 module.exports = {

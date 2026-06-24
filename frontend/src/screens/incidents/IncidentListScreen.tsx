@@ -430,7 +430,7 @@ export default function IncidentListScreen() {
         </View>
 
         <View style={styles.filterRow}>
-          <View style={[styles.filterField, { flex: 1 }]}>
+          <View style={[styles.filterField, { flex: 1, minWidth: 140 }]}>
             <Text style={styles.filterLabel}>STATUS PROTOCOL</Text>
             <TouchableOpacity 
               style={styles.pickerWrapper}
@@ -444,7 +444,7 @@ export default function IncidentListScreen() {
           </View>
 
           {activeTab === 'incidents' && (
-            <View style={[styles.filterField, { flex: 1 }]}>
+            <View style={[styles.filterField, { flex: 1, minWidth: 140 }]}>
               <Text style={styles.filterLabel}>SEVERITY LEVEL</Text>
               <TouchableOpacity 
                 style={styles.pickerWrapper}
@@ -986,7 +986,7 @@ const styles = StyleSheet.create({
   filterLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 },
   filterInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, height: 40, gap: 8 },
   filterInput: { flex: 1, fontSize: 13, color: '#1e293b' },
-  filterRow: { flexDirection: 'row', gap: 12 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   pickerWrapper: { backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', height: 40, justifyContent: 'center', paddingHorizontal: 12 },
   dropdownTrigger: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dropdownValue: { fontSize: 13, color: '#1e293b', fontWeight: '500' },

@@ -542,17 +542,20 @@ exports.getPayslipByUserId = async (req, res, next) => {
 exports.downloadPayslipPDF = async (req, res, next) => {
   try {
     const { id } = req.params;
-    let payslip = await prisma.payslip.findFirst({ 
-        where: { id, organizationId: req.organizationId }
-    });
-    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
     
-    payslip = payrollService.formatPayslip(payslip);
+    const payslip = await prisma.processedPayroll.findUnique({
+        where: { id },
+        include: { employee: { include: { user: true } } }
+    });
+    
+    if (!payslip || payslip.organizationId !== req.organizationId) {
+        return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    }
     
     // Use the optimized payslip service which handles template rendering and PDF generation
-    const pdfBuffer = await payslipService.generatePayslipPdf(payslip.processedPayrollId, req.organizationId);
+    const pdfBuffer = await payslipService.generatePayslipBuffer(payslip, req.organizationId);
     
-    const empId = payslip.employeeInfo?.employeeId || 'NA';
+    const empId = payslip.employeeInfo?.employeeId || payslip.employeeId || 'NA';
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', pdfBuffer.length);
     res.setHeader('Content-Disposition', `attachment; filename="Payslip-${empId}-${payslip.month}-${payslip.year}.pdf"`);
@@ -569,11 +572,11 @@ exports.sendPayslipEmail = async (req, res, next) => {
     const ProcessedPayroll = require('./processedPayroll.model');
     const User = require('../users/user.model');
     
-    let payslip = await ProcessedPayroll.findOne({ 
-        _id: id, organizationId: req.organizationId 
-    });
+    let payslip = await ProcessedPayroll.findById(id);
     
-    if (!payslip) return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    if (!payslip || (payslip.organizationId && payslip.organizationId.toString() !== req.organizationId.toString())) {
+        return res.status(404).json({ success: false, message: 'Payslip record not found' });
+    }
     
     let email = payslip.employeeInfo?.email;
     if (!email) {

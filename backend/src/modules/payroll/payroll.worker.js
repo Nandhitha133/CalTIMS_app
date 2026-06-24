@@ -47,7 +47,9 @@ const processJobs = async () => {
                             attendance: p.attendance,
                             currencySymbol: settings?.payroll?.currencySymbol || '₹',
                             employeeInfo: p.employeeInfo,
-                            bankDetails: p.bankDetails
+                            bankDetails: p.bankDetails,
+                            organizationId: p.organizationId,
+                            companyId: p.organizationId
                         }
                     };
                 }).filter(x => x.email);

@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: moderateScale(16),
-    paddingBottom: verticalScale(32),
+    paddingBottom: verticalScale(120),
   },
   loadingContainer: {
     flex: 1,

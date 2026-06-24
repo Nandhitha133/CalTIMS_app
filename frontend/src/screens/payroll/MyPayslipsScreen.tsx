@@ -80,19 +80,24 @@ export default function MyPayslipsScreen() {
   const handleDownload = async (id?: string) => {
     const targetId = id || payslip?.id || payslip?._id;
     if (!targetId) return;
-    
+
     try {
       setDownloading(true);
       const name = user?.name || payslip?.employeeInfo?.name || 'Employee';
       const m = payslip?.month || selectedMonth;
       const y = payslip?.year || selectedYear;
-      const base64Data = await payrollAPI.downloadPayslip(targetId);
       const fileName = `Payslip_${name.replace(/\\s+/g, '_')}_${months[m - 1]}_${y}.pdf`;
-      
-      if (base64Data) {
-        await exportFile(base64Data as string, fileName, 'application/pdf', true);
-      } else {
-        throw new Error('Failed to fetch the PDF data.');
+      const res = await payrollAPI.downloadPayslip(targetId);
+
+      const success = await exportFile(
+        res as unknown as string,
+        fileName,
+        'application/pdf',
+        true
+      );
+
+      if (!success) {
+        throw new Error('Failed to save the PDF data.');
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to download payslip');
@@ -216,8 +221,8 @@ export default function MyPayslipsScreen() {
             <Text style={styles.modalTitle}>Select Month</Text>
             <ScrollView style={{ maxHeight: 300 }}>
               {months.map((m, index) => (
-                <TouchableOpacity 
-                  key={index} 
+                <TouchableOpacity
+                  key={index}
                   style={[styles.modalItem, selectedMonth === index + 1 && styles.modalItemActive]}
                   onPress={() => { setSelectedMonth(index + 1); setMonthPickerVisible(false); }}
                 >
@@ -236,8 +241,8 @@ export default function MyPayslipsScreen() {
             <Text style={styles.modalTitle}>Select Year</Text>
             <ScrollView style={{ maxHeight: 300 }}>
               {years.map((y, index) => (
-                <TouchableOpacity 
-                  key={index} 
+                <TouchableOpacity
+                  key={index}
                   style={[styles.modalItem, selectedYear === y && styles.modalItemActive]}
                   onPress={() => { setSelectedYear(y); setYearPickerVisible(false); }}
                 >
@@ -282,7 +287,7 @@ const styles = StyleSheet.create({
   actionButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 24 },
   viewBtn: { paddingHorizontal: 14, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#c7d2fe', backgroundColor: '#eff6ff', justifyContent: 'center', alignItems: 'center', minWidth: 90 },
   viewBtnText: { color: '#4f46e5', fontSize: 14, fontWeight: '800' },
-  
+
   emptyState: { backgroundColor: '#fff', padding: 32, borderRadius: 24, alignItems: 'center', borderWidth: 2, borderStyle: 'dashed', borderColor: '#e2e8f0', marginTop: 16 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a', marginBottom: 8, marginTop: 16 },
   emptyDesc: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20 },

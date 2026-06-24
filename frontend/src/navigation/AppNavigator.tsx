@@ -164,6 +164,7 @@ export default function AppNavigator() {
       <Stack.Screen name="ReportsAutomationTab" component={ReportsAutomationTab} />
       <Stack.Screen name="TimesheetPolicyTab" component={TimesheetPolicyTab} />
       <Stack.Screen name="UsersAndRolesTab" component={UsersAndRolesTab} />
+      <Stack.Screen name="NotificationsTab" component={NotificationsTab} />
 
       {/* Payroll Screens */}
       <Stack.Screen name="PayrollDashboard" component={PayrollDashboard} />

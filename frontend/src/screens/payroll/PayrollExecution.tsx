@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   ShieldAlert,
   ExternalLink,
-  Info
+  Info,
+  X
 } from 'lucide-react-native';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
@@ -51,6 +52,8 @@ export default function PayrollExecution() {
   
   const [monthPickerVisible, setMonthPickerVisible] = useState(false);
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
+  const [bulkConfirmVisible, setBulkConfirmVisible] = useState(false);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<any[]>([]);
@@ -113,8 +116,34 @@ export default function PayrollExecution() {
     return { total, payable, paid, pending: payable - paid, blockedCount };
   }, [records]);
 
-  const handleMarkAllPaid = async () => {
-    // Implement bulk mark paid logic via Alert/Modal
+  const handleMarkAllPaid = () => {
+    const eligibleRecords = processedData.filter(r => !r.isPaid && r.payslip && r.payslip.status !== 'PAID' && r.bankDetails?.accountNumber);
+    if (eligibleRecords.length === 0) {
+      Alert.alert('Info', 'No eligible pending records found to mark as paid.');
+      return;
+    }
+    setBulkConfirmVisible(true);
+  };
+
+  const confirmBulkDisbursement = async () => {
+    try {
+      setBulkProcessing(true);
+      const eligibleRecords = processedData.filter(r => !r.isPaid && r.payslip && r.payslip.status !== 'PAID' && r.bankDetails?.accountNumber);
+      const ids = eligibleRecords.map(r => r.payslip._id || r.payslip.id).filter(Boolean);
+      
+      if (ids.length === 0) return;
+
+      const res: any = await payrollAPI.bulkMarkPayslipsAsPaid(ids);
+      if (res?.success) {
+        Alert.alert('Success', `Successfully marked ${ids.length} records as paid.`);
+        await fetchData();
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to process bulk payment');
+    } finally {
+      setBulkProcessing(false);
+      setBulkConfirmVisible(false);
+    }
   };
 
   const handleMarkIndividualPaid = async (row: any) => {
@@ -147,9 +176,9 @@ export default function PayrollExecution() {
           </TouchableOpacity>
           
           <View style={styles.titleRow}>
-            <View>
-              <Text style={styles.pageTitle}>Execution Review</Text>
-              <Text style={styles.pageSubtitle}>Review and complete disbursement</Text>
+            <View style={{ flexShrink: 1, paddingRight: scale(12), minWidth: '50%', marginBottom: verticalScale(8) }}>
+              <Text style={styles.pageTitle} adjustsFontSizeToFit numberOfLines={1}>Execution Review</Text>
+              <Text style={styles.pageSubtitle} numberOfLines={2}>Review and complete disbursement</Text>
             </View>
             <TouchableOpacity style={styles.bulkBtn} onPress={handleMarkAllPaid}>
               <CreditCard size={16} color="#fff" />
@@ -185,22 +214,22 @@ export default function PayrollExecution() {
               <View style={[styles.kpiCard, { backgroundColor: '#eef2ff' }]}>
                 <Users size={20} color="#4f46e5" style={styles.kpiIcon} />
                 <Text style={styles.kpiLabel}>Total Employees</Text>
-                <Text style={[styles.kpiValue, { color: '#0f172a' }]}>{kpis.total}</Text>
+                <Text style={[styles.kpiValue, { color: '#0f172a' }]} numberOfLines={1} adjustsFontSizeToFit>{kpis.total}</Text>
               </View>
               <View style={[styles.kpiCard, { backgroundColor: '#f8fafc' }]}>
                 <Wallet size={20} color="#64748b" style={styles.kpiIcon} />
                 <Text style={styles.kpiLabel}>Total Payable</Text>
-                <Text style={[styles.kpiValue, { color: '#0f172a' }]}>{currencySymbol}{kpis.payable.toLocaleString()}</Text>
+                <Text style={[styles.kpiValue, { color: '#0f172a' }]} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{kpis.payable.toLocaleString()}</Text>
               </View>
               <View style={[styles.kpiCard, { backgroundColor: '#ecfdf5' }]}>
                 <CheckCircle2 size={20} color="#10b981" style={styles.kpiIcon} />
                 <Text style={styles.kpiLabel}>Paid Amount</Text>
-                <Text style={[styles.kpiValue, { color: '#059669' }]}>{currencySymbol}{kpis.paid.toLocaleString()}</Text>
+                <Text style={[styles.kpiValue, { color: '#059669' }]} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{kpis.paid.toLocaleString()}</Text>
               </View>
               <View style={[styles.kpiCard, { backgroundColor: '#fffbeb' }]}>
                 <Clock size={20} color="#d97706" style={styles.kpiIcon} />
                 <Text style={styles.kpiLabel}>Pending Amount</Text>
-                <Text style={[styles.kpiValue, { color: '#d97706' }]}>{currencySymbol}{kpis.pending.toLocaleString()}</Text>
+                <Text style={[styles.kpiValue, { color: '#d97706' }]} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{kpis.pending.toLocaleString()}</Text>
               </View>
             </ScrollView>
 
@@ -251,6 +280,8 @@ export default function PayrollExecution() {
                   onChangeText={setSearchTerm}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
 
@@ -314,48 +345,50 @@ export default function PayrollExecution() {
                       )}
                     </View>
 
-                    <View style={styles.empMetricsGrid}>
-                      <View style={styles.empMetricCol}>
-                        <Text style={styles.empMetricLabel}>BANK STATUS</Text>
-                        {bankMissing ? (
-                          <View style={styles.statusGroup}>
-                            <ShieldAlert size={14} color="#d97706" />
-                            <Text style={[styles.statusText, { color: '#d97706' }]}>MISSING</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.statusGroup}>
-                            <ShieldCheck size={14} color="#10b981" />
-                            <Text style={[styles.statusText, { color: '#10b981' }]}>VERIFIED</Text>
-                          </View>
-                        )}
-                      </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={[styles.empMetricsGrid, { minWidth: scale(300) }]}>
+                        <View style={styles.empMetricCol}>
+                          <Text style={styles.empMetricLabel}>BANK STATUS</Text>
+                          {bankMissing ? (
+                            <View style={styles.statusGroup}>
+                              <ShieldAlert size={14} color="#d97706" />
+                              <Text style={[styles.statusText, { color: '#d97706' }]}>MISSING</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.statusGroup}>
+                              <ShieldCheck size={14} color="#10b981" />
+                              <Text style={[styles.statusText, { color: '#10b981' }]}>VERIFIED</Text>
+                            </View>
+                          )}
+                        </View>
 
-                      <View style={styles.empMetricCol}>
-                        <Text style={styles.empMetricLabel}>NET SALARY</Text>
-                        <Text style={styles.empMetricValueDark}>{currencySymbol}{row.netPay?.toLocaleString()}</Text>
-                      </View>
+                        <View style={styles.empMetricCol}>
+                          <Text style={styles.empMetricLabel}>NET SALARY</Text>
+                          <Text style={styles.empMetricValueDark}>{currencySymbol}{row.netPay?.toLocaleString()}</Text>
+                        </View>
 
-                      <View style={styles.empMetricCol}>
-                        <Text style={styles.empMetricLabel}>PAYMENT</Text>
-                        {isPaid ? (
-                          <View style={[styles.payBadge, { backgroundColor: '#ecfdf5' }]}>
-                            <Text style={[styles.payBadgeText, { color: '#059669' }]}>PAID</Text>
-                          </View>
-                        ) : bankMissing ? (
-                          <View style={[styles.payBadge, { backgroundColor: '#fef2f2' }]}>
-                            <Text style={[styles.payBadgeText, { color: '#dc2626' }]}>BLOCKED</Text>
-                          </View>
-                        ) : payslipGenerated ? (
-                          <View style={[styles.payBadge, { backgroundColor: '#fffbeb' }]}>
-                            <Text style={[styles.payBadgeText, { color: '#d97706' }]}>PENDING</Text>
-                          </View>
-                        ) : (
-                          <View style={[styles.payBadge, { backgroundColor: '#f1f5f9' }]}>
-                            <Text style={[styles.payBadgeText, { color: '#64748b' }]}>DRAFT</Text>
-                          </View>
-                        )}
+                        <View style={styles.empMetricCol}>
+                          <Text style={styles.empMetricLabel}>PAYMENT</Text>
+                          {isPaid ? (
+                            <View style={[styles.payBadge, { backgroundColor: '#ecfdf5' }]}>
+                              <Text style={[styles.payBadgeText, { color: '#059669' }]}>PAID</Text>
+                            </View>
+                          ) : bankMissing ? (
+                            <View style={[styles.payBadge, { backgroundColor: '#fef2f2' }]}>
+                              <Text style={[styles.payBadgeText, { color: '#dc2626' }]}>BLOCKED</Text>
+                            </View>
+                          ) : payslipGenerated ? (
+                            <View style={[styles.payBadge, { backgroundColor: '#fffbeb' }]}>
+                              <Text style={[styles.payBadgeText, { color: '#d97706' }]}>PENDING</Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.payBadge, { backgroundColor: '#f1f5f9' }]}>
+                              <Text style={[styles.payBadgeText, { color: '#64748b' }]}>DRAFT</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
-                    </View>
+                    </ScrollView>
                   </View>
                 );
               }) : (
@@ -409,6 +442,53 @@ export default function PayrollExecution() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Bulk Disbursement Confirmation Modal */}
+      <Modal visible={bulkConfirmVisible} transparent animationType="fade">
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.bulkConfirmModal}>
+            <View style={styles.bulkConfirmHeader}>
+              <Text style={styles.bulkConfirmTitleText}>Confirm Bulk Disbursement?</Text>
+              <TouchableOpacity onPress={() => !bulkProcessing && setBulkConfirmVisible(false)}>
+                <X size={20} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.bulkConfirmBody}>
+              <View style={styles.alertIconWrap}>
+                <ShieldAlert size={28} color="#ef4444" />
+              </View>
+              
+              <Text style={styles.bulkConfirmHeading}>CONFIRM BULK DISBURSEMENT?</Text>
+              <Text style={styles.bulkConfirmDesc}>
+                Are you sure you want to mark all eligible generated payslips as PAID? This will process multiple records at once.
+              </Text>
+            </View>
+
+            <View style={styles.bulkConfirmActions}>
+              <TouchableOpacity 
+                style={styles.bulkCancelBtn} 
+                onPress={() => !bulkProcessing && setBulkConfirmVisible(false)}
+                disabled={bulkProcessing}
+              >
+                <Text style={styles.bulkCancelText}>CANCEL</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.bulkConfirmBtn} 
+                onPress={confirmBulkDisbursement}
+                disabled={bulkProcessing}
+              >
+                {bulkProcessing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.bulkConfirmBtnText}>YES, CONFIRM BULK ACTION</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </Layout>
   );
 }
@@ -419,7 +499,7 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(16) },
   backBtnText: { fontSize: moderateScale(13), fontWeight: '700', color: '#6366f1', marginLeft: scale(4) },
   
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: verticalScale(20) },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginBottom: verticalScale(12) },
   pageTitle: { fontSize: moderateScale(24), fontWeight: '800', color: '#0f172a' },
   pageSubtitle: { fontSize: moderateScale(12), fontWeight: '600', color: '#64748b', marginTop: verticalScale(4) },
   bulkBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#6366f1', paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(12), gap: scale(6) },
@@ -455,9 +535,9 @@ const styles = StyleSheet.create({
   blockBoxValue: { fontSize: moderateScale(16), fontWeight: '800' },
 
   controlsArea: { paddingHorizontal: scale(16), marginBottom: verticalScale(16) },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: scale(16), borderRadius: scale(16), borderWidth: 1, borderColor: '#e2e8f0', height: verticalScale(50), marginBottom: verticalScale(12) },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: scale(16), borderRadius: scale(16), borderWidth: 1, borderColor: '#e2e8f0', height: verticalScale(50), marginBottom: verticalScale(12), width: '100%' },
   searchBarFocused: { borderColor: '#6366f1' },
-  searchInput: { flex: 1, marginLeft: scale(12), fontSize: moderateScale(14), color: '#1e293b', fontWeight: '500' },
+  searchInput: { flex: 1, marginLeft: scale(12), fontSize: moderateScale(14), color: '#1e293b', fontWeight: '500', padding: 0, paddingVertical: 0 },
   
   filterScroll: { gap: scale(8), paddingBottom: verticalScale(8) },
   filterPill: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8), borderRadius: scale(20), backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
@@ -495,5 +575,19 @@ const styles = StyleSheet.create({
   modalItem: { paddingVertical: verticalScale(16), paddingHorizontal: scale(24), borderRadius: scale(16), marginBottom: verticalScale(8), backgroundColor: '#f8fafc' },
   modalItemActive: { backgroundColor: '#eef2ff' },
   modalItemText: { fontSize: moderateScale(16), fontWeight: '700', color: '#475569', textAlign: 'center' },
-  modalItemTextActive: { color: '#4f46e5', fontWeight: '800' }
+  modalItemTextActive: { color: '#4f46e5', fontWeight: '800' },
+
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'center', alignItems: 'center', padding: scale(20) },
+  bulkConfirmModal: { backgroundColor: '#fff', borderRadius: scale(16), width: '100%', overflow: 'hidden' },
+  bulkConfirmHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: scale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  bulkConfirmTitleText: { fontSize: moderateScale(14), fontWeight: '700', color: '#1e293b' },
+  bulkConfirmBody: { alignItems: 'center', padding: scale(24) },
+  alertIconWrap: { width: scale(64), height: scale(64), borderRadius: scale(16), backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(20) },
+  bulkConfirmHeading: { fontSize: moderateScale(16), fontWeight: '900', color: '#0f172a', marginBottom: verticalScale(12), textAlign: 'center' },
+  bulkConfirmDesc: { fontSize: moderateScale(13), color: '#64748b', textAlign: 'center', lineHeight: moderateScale(20) },
+  bulkConfirmActions: { flexDirection: 'row', gap: scale(12), padding: scale(24), paddingTop: 0 },
+  bulkCancelBtn: { flex: 1, backgroundColor: '#f1f5f9', paddingVertical: verticalScale(14), borderRadius: scale(12), alignItems: 'center' },
+  bulkCancelText: { fontSize: moderateScale(12), fontWeight: '800', color: '#64748b', textTransform: 'uppercase' },
+  bulkConfirmBtn: { flex: 1, backgroundColor: '#f43f5e', paddingVertical: verticalScale(14), borderRadius: scale(12), alignItems: 'center', justifyContent: 'center' },
+  bulkConfirmBtnText: { fontSize: moderateScale(11), fontWeight: '800', color: '#fff', textTransform: 'uppercase', textAlign: 'center' }
 });

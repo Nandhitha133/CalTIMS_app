@@ -87,7 +87,7 @@ export default function PayrollHistory() {
               <View style={styles.statIconWrapper}>
                 <History size={20} color="#4f46e5" />
               </View>
-              <Text style={styles.statValueDark}>{stats.totalRuns}</Text>
+              <Text style={styles.statValueDark} numberOfLines={1} adjustsFontSizeToFit>{stats.totalRuns}</Text>
               <Text style={styles.statLabelDark}>Total Cycles</Text>
             </View>
 
@@ -95,7 +95,7 @@ export default function PayrollHistory() {
               <View style={styles.statIconWrapper}>
                 <CreditCard size={20} color="#10b981" />
               </View>
-              <Text style={styles.statValueDark}>{currencySymbol}{(Math.round(stats.totalDisbursed / 1000))}k</Text>
+              <Text style={styles.statValueDark} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{(Math.round(stats.totalDisbursed / 1000))}k</Text>
               <Text style={styles.statLabelDark}>Disbursed</Text>
             </View>
 
@@ -103,7 +103,7 @@ export default function PayrollHistory() {
               <View style={styles.statIconWrapper}>
                 <Banknote size={20} color="#f59e0b" />
               </View>
-              <Text style={styles.statValueDark}>{currencySymbol}{(Math.round(stats.avgCost / 1000))}k</Text>
+              <Text style={styles.statValueDark} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{(Math.round(stats.avgCost / 1000))}k</Text>
               <Text style={styles.statLabelDark}>Avg. Cost</Text>
             </View>
           </ScrollView>
@@ -115,7 +115,7 @@ export default function PayrollHistory() {
             <Search size={20} color={isFocused ? "#6366f1" : "#94a3b8"} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search Year or Month (e.g. 2024-05)"
+              placeholder="Search Year or Month"
               placeholderTextColor="#94a3b8"
               value={searchTerm}
               onChangeText={setSearchTerm}

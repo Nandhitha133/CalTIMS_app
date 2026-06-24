@@ -14,6 +14,7 @@ import {
   TextInput,
   Platform,
   Share,
+  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +25,7 @@ import {
   LineChart,
   PieChart as RNSPieChart,
 } from 'react-native-chart-kit';
+import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 import {
   X,
   Eye,
@@ -305,6 +307,11 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
     { label: 'December', value: '11' },
   ];
 
+  const weekOptions = [
+    { label: 'All Weeks', value: 'all' },
+    ...Array.from({ length: 52 }, (_, i) => ({ label: `Week ${i + 1}`, value: String(i + 1) }))
+  ];
+
   return (
     <Modal visible={visible} animationType="slide" transparent={true}>
       <View style={styles.modalOverlay}>
@@ -400,8 +407,8 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Year</Text>
                 <SafeSelector
-                  options={(filterOptions.years && filterOptions.years.length > 0 
-                    ? filterOptions.years 
+                  options={(filterOptions.years && filterOptions.years.length > 0
+                    ? filterOptions.years
                     : [2024, 2025, 2026, 2027, 2028]
                   ).map((year: number) => ({
                     label: String(year),
@@ -429,13 +436,13 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
                 </View>
                 <View style={[styles.filterField, { flex: 1 }]}>
                   <Text style={styles.filterLabel}>Week</Text>
-                  <TextInput
-                    style={styles.filterInput}
-                    placeholder="Week"
-                    placeholderTextColor="#94a3b8"
-                    keyboardType="numeric"
-                    value={tempFilters.week === 'all' ? '' : String(tempFilters.week)}
-                    onChangeText={(text: string) => setTempFilters((prev: any) => ({ ...prev, week: text }))}
+                  <SafeSelector
+                    options={weekOptions}
+                    selectedValue={tempFilters.week}
+                    onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, week: value }))}
+                    visible={activeSelector === 'week'}
+                    onOpen={() => setActiveSelector('week')}
+                    onClose={() => setActiveSelector(null)}
                   />
                 </View>
               </View>
@@ -538,9 +545,9 @@ const extractData = (response: any, defaultValue: any = null): any => {
 };
 
 export default function ReportsScreen({ navigation }: { navigation: any }) {
-  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
   const CARD_INNER_WIDTH = SCREEN_WIDTH - 64;
-  
+
   const [user, setUser] = useState<any>(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -611,8 +618,9 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
       ...(to && { to }),
       ...(selectedUserId !== 'all' && { userId: selectedUserId }),
       ...(selectedProjectId !== 'all' && { projectId: selectedProjectId }),
+      ...(selectedDepartment !== 'all' && { department: selectedDepartment }),
     };
-  }, [range, selectedYear, selectedMonth, selectedWeek, selectedUserId, selectedProjectId]);
+  }, [range, selectedYear, selectedMonth, selectedWeek, selectedUserId, selectedProjectId, selectedDepartment]);
 
   const loadUserData = async () => {
     try {
@@ -650,10 +658,14 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
 
   const fetchEmployees = async () => {
     try {
-      const response = await userAPI.getAll({ limit: 400 }); // Fetch all staff (Admin, Manager, Employee)
+      const response = await userAPI.getAll({ limit: 400, status: 'active', isActive: true }); // Fetch all active staff
       const data = extractData(response, []);
-      setEmployees(data);
-      const depts = new Set(data.map((e: any) => e.department).filter(Boolean));
+
+      // Filter out inactive employees just in case the API doesn't handle both flags
+      const activeData = data.filter((e: any) => e.status === 'Active' || e.status === 'active' || e.isActive === true);
+
+      setEmployees(activeData);
+      const depts = new Set(activeData.map((e: any) => e.department).filter(Boolean));
       setDepartments(Array.from(depts) as string[]);
     } catch (error) {
       console.error('Error fetching employees:', error);
@@ -735,23 +747,11 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
       if (data && data.length > 0) {
         setInsightsData(data);
       } else {
-        // Fallback to local insights if API returns empty
-        const localInsights = [];
-        if (totalHours > 0) {
-          localInsights.push(`Total productivity for this period is ${totalHours.toFixed(1)} hours across ${uniqueEmployees} employees.`);
-        }
-        if (complianceRate < 80) {
-          localInsights.push(`Action Required: Overall timesheet compliance ( ${complianceRate.toFixed(1)}% ) is below the 80% target.`);
-        } else {
-          localInsights.push(`Keep it up! Your team compliance is strong at ${complianceRate.toFixed(1)}%.`);
-        }
-        setInsightsData(localInsights);
+        setInsightsData([]);
       }
     } catch (error) {
-      console.log('Error fetching smart insights, using fallback');
-      // Local fallback
-      const localInsights = [`Total productivity: ${totalHours.toFixed(1)}h`, `Compliance: ${complianceRate}%`];
-      setInsightsData(localInsights);
+      console.log('Error fetching smart insights');
+      setInsightsData([]);
     }
   };
 
@@ -881,16 +881,35 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
 
   const complianceRate = complianceData.length
     ? Math.round(
-        (complianceData.filter(d => ['Approved', 'Pending Review', 'Admin Resolved', 'Locked'].includes(d.name)).reduce((s, d) => s + d.value, 0)) /
-        complianceData.reduce((s, d) => s + d.value, 0) * 100
-      )
+      (complianceData.filter(d => ['Approved', 'Pending Review', 'Admin Resolved', 'Locked', 'Submitted', 'Draft'].includes(d.name)).reduce((s, d) => s + d.value, 0)) /
+      complianceData.reduce((s, d) => s + d.value, 0) * 100
+    )
     : 0;
 
-  const adminResolvedCount = complianceData.find(d => 
-    d.name === 'Admin Resolved' || 
-    d.name === 'Admin Filled' || 
+  const filteredUserIds = new Set(filteredTsData.map(r => String(r._id?.userId)));
+  const activeEmployeesCount = selectedDepartment !== 'all'
+    ? employees.filter(emp => emp.department === selectedDepartment).length
+    : employees.length;
+
+  const totalTimesheets = complianceData.reduce((s, d) => s + d.value, 0);
+
+  const adminResolvedCount = complianceData.find(d =>
+    d.name === 'Admin Resolved' ||
+    d.name === 'Admin Filled' ||
     d.name === 'admin_filled'
   )?.value || 0;
+
+  const submittedCount = complianceData.filter(d =>
+    ['Submitted', 'Pending Review'].includes(d.name)
+  ).reduce((s, d) => s + d.value, 0);
+
+  const adminResolvedPercentage = totalTimesheets > 0
+    ? Math.round((adminResolvedCount / totalTimesheets) * 100)
+    : 0;
+
+  const combinedPercentage = totalTimesheets > 0
+    ? Math.round(((adminResolvedCount + submittedCount) / totalTimesheets) * 100)
+    : 0;
 
   const weeklyAvg = weeklyTrend.length
     ? (weeklyTrend.reduce((s, w) => s + w.totalHours, 0) / weeklyTrend.length).toFixed(2)
@@ -912,20 +931,12 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
         strokeWidth: 2,
         strokeDashArray: [5, 5],
         withDots: true,
-      },
-      {
-        data: weeklyTrend.map(() => 40), // Standard weekly target
-        color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
-        strokeWidth: 1,
-        strokeDashArray: [2, 4],
-        withDots: false,
       }
     ],
-    legend: ['Avg/Person', 'Total Hours', 'Target'],
   };
 
   const deptChartData = {
-    labels: deptData.map(d => d.department || 'Unassigned').slice(0, 6),
+    labels: deptData.map(d => d.department || 'Unassigned'),
     datasets: [{
       data: deptData.map(d => d.totalHours),
       colors: deptData.map((_, i) => (opacity = 1) => PALETTE[i % PALETTE.length]),
@@ -1012,19 +1023,19 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                 value={`${totalHours.toFixed(2)}h`}
                 color="#6366f1"
                 sub="Approved hours in period"
-                trend={5.2}
+
               />
               <KpiCard
                 icon={ShieldAlert}
                 label="Timesheet Compliance"
                 value={`${complianceRate}%`}
                 color={complianceRate > 80 ? '#22c55e' : '#f59e0b'}
-                sub="Based on submitted vs draft"
+                sub={`Admin Resolved + Submitted: ${combinedPercentage}% (Overall)`}
               />
               <KpiCard
                 icon={Users}
                 label="Active Employees"
-                value={uniqueEmployees}
+                value={activeEmployeesCount}
                 color="#3b82f6"
                 sub={selectedDepartment !== 'all' ? selectedDepartment : 'All departments'}
               />
@@ -1045,24 +1056,41 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
             </View>
 
             {/* Smart Insights */}
-            {insightsData.length > 0 && (
-              <View style={styles.insightsCard}>
-                <View style={styles.insightsHeader}>
-                  <View style={styles.insightsIcon}>
-                    <Zap size={20} color="#6366f1" />
-                  </View>
-                  <Text style={styles.insightsTitle}>Smart Insights</Text>
-                </View>
-                <View style={styles.insightsList}>
-                  {insightsData.map((insight, idx) => (
-                    <View key={idx} style={styles.insightItem}>
-                      <Text style={styles.insightBullet}>•</Text>
-                      <Text style={styles.insightText}>{insight}</Text>
+            {(() => {
+              const displayInsights = insightsData.length > 0 ? insightsData : (() => {
+                const localInsights = [];
+                if (totalHours > 0) {
+                  localInsights.push(`Total productivity for this period is ${totalHours.toFixed(1)} hours across ${uniqueEmployees} employees.`);
+                }
+                if (complianceRate < 80) {
+                  localInsights.push(`Action Required: Overall timesheet compliance ( ${complianceRate.toFixed(1)}% ) is below the 80% target.`);
+                } else {
+                  localInsights.push(`Keep it up! Your team compliance is strong at ${complianceRate.toFixed(1)}%.`);
+                }
+                return localInsights;
+              })();
+
+              if (displayInsights.length === 0) return null;
+
+              return (
+                <View style={styles.insightsCard}>
+                  <View style={styles.insightsHeader}>
+                    <View style={styles.insightsIcon}>
+                      <Zap size={20} color="#6366f1" />
                     </View>
-                  ))}
+                    <Text style={styles.insightsTitle}>Smart Insights</Text>
+                  </View>
+                  <View style={styles.insightsList}>
+                    {displayInsights.map((insight, idx) => (
+                      <View key={idx} style={styles.insightItem}>
+                        <Text style={styles.insightBullet}>•</Text>
+                        <Text style={styles.insightText}>{insight}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            )}
+              );
+            })()}
 
             {/* Compliance Pie Chart */}
             <View style={styles.chartCard}>
@@ -1071,7 +1099,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                 <View style={{ alignItems: 'center' }}>
                   <RNSPieChart
                     data={compliancePieData}
-                    width={SCREEN_WIDTH - 30} // Slightly narrower to prevent clipping
+                    width={CARD_INNER_WIDTH}
                     height={220}
                     chartConfig={{
                       color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
@@ -1079,7 +1107,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                     accessor="value"
                     backgroundColor="transparent"
                     paddingLeft="0"
-                    center={[0, 0]} // Reset center to prevent left-edge clipping
+                    center={[10, 0]}
                     absolute
                   />
                 </View>
@@ -1142,6 +1170,9 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                     }}
                     yAxisLabel=""
                     yAxisSuffix="h"
+                    fromZero={true}
+                    segments={4}
+                    formatYLabel={(yValue) => Math.round(parseFloat(yValue)).toString()}
                     onDataPointClick={(data) => {
                       setTrendTooltip({
                         visible: true,
@@ -1151,6 +1182,16 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                       });
                     }}
                   />
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginTop: 16, marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+                      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#6366f1', marginRight: 6 }} />
+                      <Text style={{ fontSize: 12, color: '#64748b' }}>Avg/Person</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: '#22c55e', marginRight: 6 }} />
+                      <Text style={{ fontSize: 12, color: '#64748b' }}>Total Hours</Text>
+                    </View>
+                  </View>
                   {trendTooltip?.visible && weeklyTrend[trendTooltip.index] && (
                     <View style={{
                       position: 'absolute',
@@ -1212,41 +1253,44 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
             <View style={styles.chartCard}>
               <SectionHeader icon={BarChart2} title="Department Workload" color="#8b5cf6" subtitle="Total productive hours per department" />
               {deptData.length > 0 ? (
-                <View style={{ alignItems: 'center' }}>
-                  <BarChart
-                    data={deptChartData}
-                    width={CARD_INNER_WIDTH}
-                    height={240}
-                    chartConfig={{
-                      backgroundColor: '#ffffff',
-                      backgroundGradientFrom: '#ffffff',
-                      backgroundGradientTo: '#ffffff',
-                      decimalPlaces: 0,
-                      color: (opacity = 1, index = 0) => PALETTE[index % PALETTE.length],
-                      labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
-                      style: { borderRadius: 16 },
-                      barPercentage: 0.4, // Reduced bar width
-                      propsForLabels: {
-                        fontSize: 10, // Smaller font for rotated labels
-                      },
-                      propsForBackgroundLines: {
-                        strokeDasharray: '5, 5',
-                        strokeWidth: 1,
-                        stroke: '#e2e8f0',
-                      },
-                    }}
-                    verticalLabelRotation={45}
-                    style={{
-                      ...styles.chart,
-                      paddingRight: 0,
-                      marginLeft: -10, // Shift left slightly to balance Y-axis labels
-                    }}
-                    fromZero
-                    showValuesOnTopOfBars
-                    withCustomBarColorFromData
-                    yAxisLabel=""
-                    yAxisSuffix="h"
-                  />
+                <View style={{ alignItems: 'flex-start' }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <BarChart
+                      data={deptChartData}
+                      width={Math.max(CARD_INNER_WIDTH, deptData.length * 65)}
+                      height={300}
+                      chartConfig={{
+                        backgroundColor: '#ffffff',
+                        backgroundGradientFrom: '#ffffff',
+                        backgroundGradientTo: '#ffffff',
+                        decimalPlaces: 0,
+                        color: (opacity = 1, index = 0) => PALETTE[index % PALETTE.length],
+                        labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+                        style: { borderRadius: 16 },
+                        barPercentage: 0.4, // Reduced bar width
+                        propsForLabels: {
+                          fontSize: 10, // Smaller font for rotated labels
+                        },
+                        propsForBackgroundLines: {
+                          strokeDasharray: '5, 5',
+                          strokeWidth: 1,
+                          stroke: '#e2e8f0',
+                        },
+                      }}
+                      verticalLabelRotation={45}
+                      style={{
+                        ...styles.chart,
+                        paddingRight: 0,
+                        paddingBottom: 20,
+                        marginLeft: -10, // Shift left slightly to balance Y-axis labels
+                      }}
+                      fromZero
+                      showValuesOnTopOfBars
+                      withCustomBarColorFromData
+                      yAxisLabel=""
+                      yAxisSuffix="h"
+                    />
+                  </ScrollView>
                 </View>
               ) : (
                 <EmptyChart message="No department data available" />
@@ -1262,11 +1306,21 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableHeaderCell, styles.tableCellEmployee]}>Staff Member</Text>
-                      <Text style={[styles.tableHeaderCell, styles.tableCellDept]}>Department</Text>
-                      <Text style={[styles.tableHeaderCell, styles.tableCellProject]}>Project</Text>
-                      <Text style={[styles.tableHeaderCell, styles.tableCellHours]}>Hours</Text>
-                      <Text style={[styles.tableHeaderCell, styles.tableCellAction]}>Action</Text>
+                      <View style={styles.tableCellEmployee}>
+                        <Text style={styles.tableHeaderCell}>Staff Member</Text>
+                      </View>
+                      <View style={styles.tableCellDept}>
+                        <Text style={styles.tableHeaderCell}>Department</Text>
+                      </View>
+                      <View style={styles.tableCellProject}>
+                        <Text style={styles.tableHeaderCell}>Project</Text>
+                      </View>
+                      <View style={styles.tableCellHours}>
+                        <Text style={styles.tableHeaderCell}>Hours</Text>
+                      </View>
+                      <View style={styles.tableCellAction}>
+                        <Text style={styles.tableHeaderCell}>Action</Text>
+                      </View>
                     </View>
                     {filteredTsData.map((row, i) => {
                       const utilPercentage = Math.min(100, Math.round((row.totalHours / 40) * 100));
@@ -1281,10 +1335,14 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                               <Text style={styles.employeeId}>#{row.user?.employeeId}</Text>
                             </View>
                           </View>
-                          <Text style={[styles.tableCell, styles.tableCellDept]}>{row.user?.department || '—'}</Text>
-                          <Text style={[styles.tableCell, styles.tableCellProject]} numberOfLines={1}>
-                            {row.project?.name || '—'}
-                          </Text>
+                          <View style={styles.tableCellDept}>
+                            <Text style={styles.tableCell}>{row.user?.department || '—'}</Text>
+                          </View>
+                          <View style={styles.tableCellProject}>
+                            <Text style={styles.tableCell} numberOfLines={1}>
+                              {row.project?.name || '—'}
+                            </Text>
+                          </View>
                           <View style={styles.tableCellHours}>
                             <Text style={styles.tableCell}>
                               <Text style={styles.hoursValue}>{row.totalHours?.toFixed(2)}</Text>
@@ -1362,167 +1420,168 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
-  content: { paddingHorizontal: 16, paddingBottom: 100 },
+  content: { paddingHorizontal: scale(16), paddingBottom: verticalScale(100) },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
 
-  headerButtons: { flexDirection: 'row', gap: 8 },
-  filterHeaderButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
-  exportHeaderButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
-  exportHeaderText: { color: 'white', fontWeight: '600', fontSize: 13 },
+  headerButtons: { flexDirection: 'row', gap: scale(8) },
+  filterHeaderButton: { width: scale(40), height: scale(40), borderRadius: scale(12), backgroundColor: '#eff6ff', alignItems: 'center', justifyContent: 'center' },
+  exportHeaderButton: { flexDirection: 'row', alignItems: 'center', gap: scale(6), backgroundColor: '#3b82f6', paddingHorizontal: scale(14), paddingVertical: verticalScale(10), borderRadius: scale(12) },
+  exportHeaderText: { color: 'white', fontWeight: '600', fontSize: moderateScale(13) },
 
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, marginBottom: 20 },
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: scale(12), marginBottom: verticalScale(20) },
   kpiCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: scale(14),
     backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: scale(16),
+    padding: scale(16),
     borderWidth: 1,
     borderColor: '#e2e8f0',
     flexGrow: 1,
-    width: '47%',
+    flexBasis: '45%',
+    minWidth: scale(150),
     maxWidth: '100%',
   },
-  kpiIcon: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  kpiIcon: { width: scale(52), height: scale(52), borderRadius: scale(16), alignItems: 'center', justifyContent: 'center' },
   kpiContent: { flex: 1 },
-  kpiLabel: { fontSize: 13, color: '#64748b', fontWeight: '600', marginBottom: 4 },
-  kpiValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 4 },
-  kpiValue: { fontSize: 24, fontWeight: '800', color: '#1e293b' },
-  kpiTrend: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
+  kpiLabel: { fontSize: moderateScale(13), color: '#64748b', fontWeight: '600', marginBottom: verticalScale(4) },
+  kpiValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: scale(8), marginBottom: verticalScale(4) },
+  kpiValue: { fontSize: moderateScale(24), fontWeight: '800', color: '#1e293b' },
+  kpiTrend: { fontSize: moderateScale(11), fontWeight: '700', color: '#94a3b8' },
   kpiTrendPositive: { color: '#10b981' },
-  kpiSub: { fontSize: 11, color: '#94a3b8' },
+  kpiSub: { fontSize: moderateScale(11), color: '#94a3b8' },
 
-  insightsCard: { backgroundColor: '#f0fdf4', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#dcfce7' },
-  insightsHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  insightsIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#6366f115', alignItems: 'center', justifyContent: 'center' },
-  insightsTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
-  insightsList: { gap: 8 },
-  insightItem: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  insightBullet: { fontSize: 14, color: '#6366f1', lineHeight: 20 },
-  insightText: { flex: 1, fontSize: 13, color: '#475569', lineHeight: 20 },
+  insightsCard: { backgroundColor: '#f0fdf4', borderRadius: scale(16), padding: scale(16), marginBottom: verticalScale(20), borderWidth: 1, borderColor: '#dcfce7' },
+  insightsHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(10), marginBottom: verticalScale(12) },
+  insightsIcon: { width: scale(32), height: scale(32), borderRadius: scale(10), backgroundColor: '#6366f115', alignItems: 'center', justifyContent: 'center' },
+  insightsTitle: { fontSize: moderateScale(15), fontWeight: '700', color: '#1e293b' },
+  insightsList: { gap: scale(8) },
+  insightItem: { flexDirection: 'row', gap: scale(8), alignItems: 'flex-start' },
+  insightBullet: { fontSize: moderateScale(14), color: '#6366f1', lineHeight: moderateScale(20) },
+  insightText: { flex: 1, fontSize: moderateScale(13), color: '#475569', lineHeight: moderateScale(20) },
 
-  chartCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  sectionIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
-  sectionSubtitle: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  chartCard: { backgroundColor: 'white', borderRadius: scale(20), padding: scale(16), marginBottom: verticalScale(20), borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(10), marginBottom: verticalScale(16) },
+  sectionIcon: { width: scale(32), height: scale(32), borderRadius: scale(10), alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { fontSize: moderateScale(15), fontWeight: '700', color: '#1e293b' },
+  sectionSubtitle: { fontSize: moderateScale(11), color: '#64748b', marginTop: verticalScale(2) },
 
-  chart: { marginVertical: 8, borderRadius: 16 },
+  chart: { marginVertical: verticalScale(8), borderRadius: scale(16) },
 
-  projectsList: { gap: 16 },
-  progressContainer: { marginBottom: 16 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  progressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  progressLabel: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
-  progressBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, backgroundColor: '#ecfdf5' },
+  projectsList: { gap: scale(16) },
+  progressContainer: { marginBottom: verticalScale(16) },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(6) },
+  progressLabelRow: { flexDirection: 'row', alignItems: 'center', gap: scale(8) },
+  progressLabel: { fontSize: moderateScale(13), fontWeight: '600', color: '#1e293b' },
+  progressBadge: { paddingHorizontal: scale(6), paddingVertical: verticalScale(2), borderRadius: scale(8), backgroundColor: '#ecfdf5' },
   progressBadgeOver: { backgroundColor: '#fef2f2' },
-  progressBadgeText: { fontSize: 9, fontWeight: '700', color: '#10b981' },
+  progressBadgeText: { fontSize: moderateScale(9), fontWeight: '700', color: '#10b981' },
   progressBadgeTextOver: { color: '#ef4444' },
-  progressValue: { fontSize: 12, fontWeight: '600', color: '#1e293b' },
+  progressValue: { fontSize: moderateScale(12), fontWeight: '600', color: '#1e293b' },
   progressValueOver: { color: '#ef4444' },
-  progressMax: { fontSize: 10, fontWeight: '400', color: '#94a3b8' },
-  progressBarTrack: { height: 6, backgroundColor: '#f1f5f9', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', borderRadius: 3 },
+  progressMax: { fontSize: moderateScale(10), fontWeight: '400', color: '#94a3b8' },
+  progressBarTrack: { height: verticalScale(6), backgroundColor: '#f1f5f9', borderRadius: scale(3), overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: scale(3) },
 
-  performersList: { gap: 12 },
-  performerItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  performerRank: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
+  performersList: { gap: scale(12) },
+  performerItem: { flexDirection: 'row', alignItems: 'center', gap: scale(12), paddingVertical: verticalScale(8) },
+  performerRank: { width: scale(32), height: scale(32), borderRadius: scale(16), backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   performerRankGold: { backgroundColor: '#fef3c7' },
   performerRankSilver: { backgroundColor: '#f1f5f9' },
   performerRankBronze: { backgroundColor: '#ffedd5' },
-  performerRankText: { fontSize: 14, fontWeight: '700', color: '#64748b' },
+  performerRankText: { fontSize: moderateScale(14), fontWeight: '700', color: '#64748b' },
   performerInfo: { flex: 1 },
-  performerName: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
-  performerMeta: { fontSize: 10, color: '#64748b', marginTop: 2 },
-  performerHours: { fontSize: 14, fontWeight: '700', color: '#ec4899' },
+  performerName: { fontSize: moderateScale(14), fontWeight: '600', color: '#1e293b' },
+  performerMeta: { fontSize: moderateScale(10), color: '#64748b', marginTop: verticalScale(2) },
+  performerHours: { fontSize: moderateScale(14), fontWeight: '700', color: '#ec4899' },
 
-  tableCard: { backgroundColor: 'white', borderRadius: 20, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, marginBottom: 8 },
-  tableHeaderCell: { fontSize: 10, fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
-  tableCellEmployee: { width: 140 },
-  tableCellDept: { width: 100 },
-  tableCellProject: { width: 120 },
-  tableCellHours: { width: 90, textAlign: 'right', justifyContent: 'center' },
-  tableCellAction: { width: 90, alignItems: 'center', justifyContent: 'center' },
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  tableCell: { fontSize: 12, color: '#475569' },
-  employeeAvatar: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#e0f2fe', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  avatarText: { fontSize: 12, fontWeight: '700', color: '#06b6d4' },
-  employeeName: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
-  employeeId: { fontSize: 9, color: '#94a3b8', marginTop: 1 },
-  hoursValue: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  hoursUnit: { fontSize: 10, color: '#94a3b8' },
-  viewButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#ecfeff', alignSelf: 'center' },
-  viewButtonText: { fontSize: 11, fontWeight: '600', color: '#06b6d4' },
+  tableCard: { backgroundColor: 'white', borderRadius: scale(20), padding: scale(16), marginBottom: verticalScale(20), borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f8fafc', paddingVertical: verticalScale(12), borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  tableHeaderCell: { fontSize: moderateScale(10), fontWeight: '700', color: '#64748b', textTransform: 'uppercase' },
+  tableCellEmployee: { width: scale(110), justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#e2e8f0', paddingHorizontal: scale(8) },
+  tableCellDept: { width: scale(110), justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#e2e8f0', paddingHorizontal: scale(8) },
+  tableCellProject: { width: scale(110), justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#e2e8f0', paddingHorizontal: scale(8) },
+  tableCellHours: { width: scale(110), justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#e2e8f0', paddingHorizontal: scale(8) },
+  tableCellAction: { width: scale(110), alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(8) },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(10), borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  tableCell: { fontSize: moderateScale(12), color: '#475569' },
+  employeeAvatar: { width: scale(32), height: scale(32), borderRadius: scale(10), backgroundColor: '#e0f2fe', alignItems: 'center', justifyContent: 'center', marginRight: scale(8) },
+  avatarText: { fontSize: moderateScale(12), fontWeight: '700', color: '#06b6d4' },
+  employeeName: { fontSize: moderateScale(13), fontWeight: '600', color: '#1e293b' },
+  employeeId: { fontSize: moderateScale(9), color: '#94a3b8', marginTop: verticalScale(1) },
+  hoursValue: { fontSize: moderateScale(13), fontWeight: '700', color: '#1e293b' },
+  hoursUnit: { fontSize: moderateScale(10), color: '#94a3b8' },
+  viewButton: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), backgroundColor: '#ecfeff', alignSelf: 'center' },
+  viewButtonText: { fontSize: moderateScale(11), fontWeight: '600', color: '#06b6d4' },
 
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
-  emptyText: { fontSize: 13, color: '#94a3b8', marginTop: 12, textAlign: 'center' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(40) },
+  emptyText: { fontSize: moderateScale(13), color: '#94a3b8', marginTop: verticalScale(12), textAlign: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  exportModal: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
-  filterModal: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%', padding: 20 },
-  detailModal: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '85%', padding: 20 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginBottom: 16 },
-  modalTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#1e293b' },
+  exportModal: { backgroundColor: 'white', borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), padding: scale(20) },
+  filterModal: { backgroundColor: 'white', borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), maxHeight: '80%', padding: scale(20) },
+  detailModal: { backgroundColor: 'white', borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), maxHeight: '85%', padding: scale(20) },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(12), paddingBottom: verticalScale(16), borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginBottom: verticalScale(16) },
+  modalTitle: { flex: 1, fontSize: moderateScale(18), fontWeight: '700', color: '#1e293b' },
 
-  exportContent: { gap: 16, marginBottom: 20 },
-  exportDescription: { fontSize: 13, color: '#64748b', lineHeight: 18 },
-  formatSection: { gap: 8 },
-  formatLabel: { fontSize: 13, fontWeight: '600', color: '#1e293b' },
-  formatOptions: { flexDirection: 'row', gap: 12 },
-  formatOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  exportContent: { gap: scale(16), marginBottom: verticalScale(20) },
+  exportDescription: { fontSize: moderateScale(13), color: '#64748b', lineHeight: moderateScale(18) },
+  formatSection: { gap: scale(8) },
+  formatLabel: { fontSize: moderateScale(13), fontWeight: '600', color: '#1e293b' },
+  formatOptions: { flexDirection: 'row', gap: scale(12) },
+  formatOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), paddingVertical: verticalScale(12), borderRadius: scale(12), borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
   formatOptionSelected: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
-  formatText: { fontSize: 13, fontWeight: '500', color: '#64748b' },
+  formatText: { fontSize: moderateScale(13), fontWeight: '500', color: '#64748b' },
   formatTextSelected: { color: '#3b82f6', fontWeight: '600' },
 
-  filterContent: { gap: 16, marginBottom: 20 },
-  filterField: { gap: 6 },
-  filterLabel: { fontSize: 12, fontWeight: '600', color: '#64748b' },
-  filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, backgroundColor: '#f8fafc', color: '#1e293b' },
-  dateRangeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dateButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#f8fafc' },
-  dateButtonText: { fontSize: 12, color: '#1e293b' },
-  dateTo: { fontSize: 12, color: '#64748b' },
-  filterRow: { flexDirection: 'row', gap: 12 },
+  filterContent: { gap: scale(16), marginBottom: verticalScale(20) },
+  filterField: { gap: scale(6) },
+  filterLabel: { fontSize: moderateScale(12), fontWeight: '600', color: '#64748b' },
+  filterInput: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: scale(10), paddingHorizontal: scale(12), paddingVertical: verticalScale(10), fontSize: moderateScale(14), backgroundColor: '#f8fafc', color: '#1e293b' },
+  dateRangeRow: { flexDirection: 'row', alignItems: 'center', gap: scale(8) },
+  dateButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: scale(6), borderWidth: 1, borderColor: '#e2e8f0', borderRadius: scale(10), paddingHorizontal: scale(10), paddingVertical: verticalScale(10), backgroundColor: '#f8fafc' },
+  dateButtonText: { fontSize: moderateScale(12), color: '#1e293b' },
+  dateTo: { fontSize: moderateScale(12), color: '#64748b' },
+  filterRow: { flexDirection: 'row', gap: scale(12) },
 
-  modalFooter: { flexDirection: 'row', gap: 12, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
-  cancelButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
-  cancelButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
-  exportButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3b82f6', paddingVertical: 12, borderRadius: 12 },
-  exportButtonText: { fontSize: 14, fontWeight: '700', color: 'white' },
-  resetButton: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
-  resetButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
-  applyButton: { flex: 2, paddingVertical: 12, borderRadius: 12, backgroundColor: '#3b82f6', alignItems: 'center' },
-  applyButtonText: { fontSize: 14, fontWeight: '600', color: 'white' },
+  modalFooter: { flexDirection: 'row', gap: scale(12), paddingTop: verticalScale(16), borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  cancelButton: { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#f1f5f9', alignItems: 'center' },
+  cancelButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: '#64748b' },
+  exportButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), backgroundColor: '#3b82f6', paddingVertical: verticalScale(12), borderRadius: scale(12) },
+  exportButtonText: { fontSize: moderateScale(14), fontWeight: '700', color: 'white' },
+  resetButton: { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#f1f5f9', alignItems: 'center' },
+  resetButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: '#64748b' },
+  applyButton: { flex: 2, paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#3b82f6', alignItems: 'center' },
+  applyButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: 'white' },
   disabledButton: { opacity: 0.5 },
 
-  detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginBottom: 16 },
-  detailAvatar: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#ecfeff', alignItems: 'center', justifyContent: 'center' },
-  detailName: { fontSize: 15, fontWeight: '700', color: '#1e293b' },
-  detailProject: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  detailHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(12), paddingBottom: verticalScale(16), borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginBottom: verticalScale(16) },
+  detailAvatar: { width: scale(48), height: scale(48), borderRadius: scale(16), backgroundColor: '#ecfeff', alignItems: 'center', justifyContent: 'center' },
+  detailName: { fontSize: moderateScale(15), fontWeight: '700', color: '#1e293b' },
+  detailProject: { fontSize: moderateScale(11), color: '#64748b', marginTop: verticalScale(2) },
   detailTotal: { marginLeft: 'auto', alignItems: 'flex-end' },
-  detailTotalLabel: { fontSize: 10, color: '#64748b' },
-  detailTotalValue: { fontSize: 20, fontWeight: '800', color: '#06b6d4' },
-  detailTotalUnit: { fontSize: 12, fontWeight: '400', color: '#94a3b8' },
+  detailTotalLabel: { fontSize: moderateScale(10), color: '#64748b' },
+  detailTotalValue: { fontSize: moderateScale(20), fontWeight: '800', color: '#06b6d4' },
+  detailTotalUnit: { fontSize: moderateScale(12), fontWeight: '400', color: '#94a3b8' },
 
-  loader: { padding: 40 },
+  loader: { padding: scale(40) },
 
-  emptyDetail: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  emptyDetailTitle: { fontSize: 15, fontWeight: '600', color: '#1e293b', marginTop: 12 },
-  emptyDetailText: { fontSize: 12, color: '#64748b', marginTop: 4 },
+  emptyDetail: { alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(48) },
+  emptyDetailTitle: { fontSize: moderateScale(15), fontWeight: '600', color: '#1e293b', marginTop: verticalScale(12) },
+  emptyDetailText: { fontSize: moderateScale(12), color: '#64748b', marginTop: verticalScale(4) },
 
-  taskItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  taskDate: { width: 50, alignItems: 'center' },
-  taskDateDay: { fontSize: 14, fontWeight: '700', color: '#1e293b' },
-  taskDateWeek: { fontSize: 10, color: '#64748b', marginTop: 2 },
+  taskItem: { flexDirection: 'row', alignItems: 'center', gap: scale(12), paddingVertical: verticalScale(12), borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  taskDate: { width: scale(50), alignItems: 'center' },
+  taskDateDay: { fontSize: moderateScale(14), fontWeight: '700', color: '#1e293b' },
+  taskDateWeek: { fontSize: moderateScale(10), color: '#64748b', marginTop: verticalScale(2) },
   taskInfo: { flex: 1 },
-  taskCategory: { backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginBottom: 4 },
-  taskCategoryText: { fontSize: 9, fontWeight: '600', color: '#64748b' },
-  taskDescription: { fontSize: 12, color: '#475569', lineHeight: 16 },
+  taskCategory: { backgroundColor: '#f1f5f9', paddingHorizontal: scale(8), paddingVertical: verticalScale(2), borderRadius: scale(8), alignSelf: 'flex-start', marginBottom: verticalScale(4) },
+  taskCategoryText: { fontSize: moderateScale(9), fontWeight: '600', color: '#64748b' },
+  taskDescription: { fontSize: moderateScale(12), color: '#475569', lineHeight: moderateScale(16) },
   taskHours: { alignItems: 'flex-end' },
-  taskHoursValue: { fontSize: 14, fontWeight: '700', color: '#06b6d4' },
+  taskHoursValue: { fontSize: moderateScale(14), fontWeight: '700', color: '#06b6d4' },
 
-  closeDetailButton: { marginTop: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' },
-  closeDetailButtonText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  closeDetailButton: { marginTop: verticalScale(16), paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#f1f5f9', alignItems: 'center' },
+  closeDetailButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: '#64748b' },
 });

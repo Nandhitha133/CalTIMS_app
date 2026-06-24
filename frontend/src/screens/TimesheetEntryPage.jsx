@@ -1,0 +1,1902 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+    Plus,
+    Trash2,
+    Save,
+    Send,
+    ChevronLeft,
+    ChevronRight,
+    Calendar,
+    PlusSquare,
+    ClipboardCheck,
+    Info,
+    AlertTriangle,
+    Clock,
+    Sparkles,
+    Zap,
+    RefreshCw,
+    CheckCheck,
+    X as XIcon
+} from 'lucide-react'
+import { timesheetAPI, projectAPI, settingsAPI, taskAPI, leaveAPI, calendarAPI, attendanceAPI } from '@/services/endpoints'
+import { useSettingsStore } from '@/store/settingsStore'
+import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
+import Spinner from '@/components/ui/Spinner'
+import {
+    format,
+    startOfWeek,
+    addDays,
+    subDays,
+    isSameDay,
+    getWeek
+} from 'date-fns'
+import toast from 'react-hot-toast'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { clsx } from 'clsx'
+
+const DEFAULT_TASK_TYPES = [
+    'Select Task',
+    'Development',
+    'Bug Fixing',
+    'Design',
+    'Meeting',
+    'Documentation',
+    'Testing'
+]
+
+const DEFAULT_LEAVE_TYPES = ['Annual', 'Sick', 'Casual', 'Unpaid', 'Maternity', 'Paternity']
+const PERMISSION_ROW_MARKER = '__PERMISSION__'
+
+// Detect if a row is a leave row (task is a leave type) — checked dynamically
+const isLeaveTaskType = (taskType, leaveTypes = DEFAULT_LEAVE_TYPES) =>
+    leaveTypes.some(lt => lt.toLowerCase() === taskType?.toLowerCase())
+
+// Detect if a row is a permission row
+const isPermissionRow = (taskType) => taskType === PERMISSION_ROW_MARKER
+
+// Helper to check if a leave type counts as unpaid/loss of pay
+const isLopType = (type) => {
+    if (!type) return false
+    const t = type.toLowerCase()
+    return t.includes('lop') || t.includes('loss of pay') || t.includes('unpaid')
+}
+
+
+import PageHeader from '@/components/ui/PageHeader'
+
+export default function TimesheetEntryPage() {
+    const queryClient = useQueryClient()
+    const navigate = useNavigate()
+    const { user } = useAuthStore()
+    const [searchParams] = useSearchParams()
+    const editId = searchParams.get('id')           // direct timesheet _id for edit
+    const initialDateStr = searchParams.get('date') || searchParams.get('weekStart')
+
+    const { general, fetchGeneralSettings } = useSettingsStore()
+
+    const daysLookup = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+    // Ensure general settings are loaded (needed for weekStartDay and workWeek)
+    useEffect(() => {
+        if (!general) {
+            fetchGeneralSettings()
+        }
+    }, [general, fetchGeneralSettings])
+
+    // Helper to determine if a specific day is a working day based on settings
+    const isWorkingDay = useMemo(() => {
+        const workWeek = general?.workWeek;
+        const daysLookup = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+        // Default to Mon-Fri if no setting is found
+        let activeDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+        if (workWeek) {
+            if (Array.isArray(workWeek)) {
+                activeDays = workWeek;
+            } else if (typeof workWeek === 'string') {
+                if (workWeek === 'Mon-Fri') activeDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+                else if (workWeek === 'Sun-Thu') activeDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+                else if (workWeek === 'Mon-Sat') activeDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                else if (workWeek.includes(',')) activeDays = workWeek.split(',').map(d => d.trim().toLowerCase());
+            }
+        }
+
+        return (date) => {
+            const dayName = daysLookup[date.getDay()];
+            return activeDays.includes(dayName);
+        };
+    }, [general?.workWeek]);
+
+    const workingHoursPerDay = general?.workingHoursPerDay || 8
+    const weekStartDay = general?.weekStartDay || 'monday' // 'monday' or 'sunday'
+    const weekStartsOn = weekStartDay === 'sunday' ? 0 : 1
+
+    const [currentDate, setCurrentDate] = useState(() => {
+        if (!initialDateStr) return new Date()
+        try {
+            // Robust parsing for YYYY-MM-DD or ISO strings to avoid UTC shifts
+            const datePart = initialDateStr.includes('T') ? initialDateStr.split('T')[0] : initialDateStr.trim()
+            const parts = datePart.split(/[- /]/).map(Number)
+            if (parts.length >= 3) {
+                return new Date(parts[0], parts[1] - 1, parts[2]) // Local Midnight
+            }
+            return new Date(initialDateStr)
+        } catch (e) {
+            console.error('Failed to parse date:', initialDateStr)
+            return new Date()
+        }
+    })
+
+    // Calculate week range
+    const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn }), [currentDate, weekStartsOn])
+    const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
+
+    // Local state for rows to allow inline editing
+    const [rows, setRows] = useState([
+        { id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }
+    ])
+
+    const [isDirty, setIsDirty] = useState(false)
+    const setUnsavedChanges = useUIStore(s => s.setUnsavedChanges)
+    const navIntent = useUIStore(s => s.pendingNavTarget)
+    const setNavIntent = useUIStore(s => s.setPendingNavTarget)
+
+    // Sync local isDirty to global store and cleanup on unmount
+    useEffect(() => {
+        setUnsavedChanges(isDirty)
+    }, [isDirty, setUnsavedChanges])
+
+    useEffect(() => {
+        return () => {
+            setUnsavedChanges(false)
+            setNavIntent(null)
+        }
+    }, [setUnsavedChanges, setNavIntent])
+
+    // Detect browser close/refresh
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (isDirty) {
+                e.preventDefault()
+                e.returnValue = ''
+            }
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [isDirty])
+
+    // Shifts state per day
+
+    // Fetch active projects
+    const { data: projects } = useQuery({
+        queryKey: ['projects', 'active', 'assigned'],
+        queryFn: () => projectAPI.getAll({ status: 'active', assignedOnly: true }).then(r => r.data.data),
+    })
+
+    // Fetch dynamic task/leave types from settings
+    const { data: tsSettings } = useQuery({
+        queryKey: ['settings', 'timesheet'],
+        queryFn: () => settingsAPI.getTimesheetSettings().then(r => r.data.data),
+        staleTime: 5 * 60 * 1000,
+    })
+
+    // Fetch active tasks - admins/owners see everything, employees see assigned only
+    const { data: allTasks } = useQuery({
+        queryKey: ['tasks', 'active-list', 'assigned', user?.role],
+        queryFn: () => taskAPI.getAll({
+            isActive: true,
+            assignedOnly: !['admin', 'super_admin', 'owner'].includes(user?.role?.toLowerCase())
+        }).then(r => r.data.data),
+        enabled: !!user
+    })
+
+    // Fetch full settings for integration status
+    const { data: fullSettings } = useQuery({
+        queryKey: ['settings', 'full'],
+        queryFn: () => settingsAPI.getSettings().then(r => r.data.data),
+        staleTime: 5 * 60 * 1000,
+    })
+
+    // Fetch attendance for the week
+    const { data: attendanceLogs } = useQuery({
+        queryKey: ['attendance', format(weekStart, 'yyyy-MM-dd')],
+        queryFn: () => attendanceAPI.getAll({
+            from: format(weekStart, 'yyyy-MM-dd'),
+            to: format(addDays(weekStart, 6), 'yyyy-MM-dd')
+        }).then(r => r.data.data),
+    })
+
+    // Determine if any biometric integration is enabled
+    const isAttendanceEnabled = useMemo(() => {
+        if (!fullSettings?.hardwareGateways) return false;
+        return Object.values(fullSettings.hardwareGateways).some(gw => gw.enabled);
+    }, [fullSettings])
+    const TASK_TYPES = tsSettings?.taskCategories
+        ? ['Select Task', ...tsSettings.taskCategories, 'Leave', 'Holiday']
+        : DEFAULT_TASK_TYPES
+
+    const LEAVE_TASK_TYPES = useMemo(() => {
+        const standard = tsSettings?.leaveTypes || DEFAULT_LEAVE_TYPES
+        const eligible = (tsSettings?.eligibleLeaveTypes || []).map(t => t.charAt(0).toUpperCase() + t.slice(1))
+        return [...new Set([...standard, ...eligible])]
+    }, [tsSettings])
+
+    // Fetch leaves for the week range to inject pending/approved leaves visually
+    const { data: weekLeaves, isLoading: isLoadingLeaves } = useQuery({
+        queryKey: ['leaves', 'week', format(weekStart, 'yyyy-MM-dd')],
+        queryFn: async () => {
+            const from = format(weekStart, 'yyyy-MM-dd')
+            const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
+            const r = await leaveAPI.getAll({ from, to, limit: 100 })
+            return r.data?.data || r.data?.leaves || []
+        },
+        staleTime: 0,
+    })
+
+    // Fetch global holidays for the week
+    const { data: globalHolidays } = useQuery({
+        queryKey: ['calendar-holidays', format(weekStart, 'yyyy-MM-dd')],
+        queryFn: async () => {
+            const from = format(weekStart, 'yyyy-MM-dd')
+            const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
+            const r = await calendarAPI.getAll({ from, to, eventType: 'holiday' })
+            return (r.data?.data || []).filter(e => e.isPublic)
+        },
+        staleTime: 5 * 60 * 1000,
+    })
+
+    const holidays = useMemo(() => {
+        const holidaySet = new Set()
+        globalHolidays?.forEach(event => {
+            const start = new Date(event.startDate)
+            const end = new Date(event.endDate)
+            let curr = new Date(start)
+            while (curr <= end) {
+                holidaySet.add(format(curr, 'yyyy-MM-dd'))
+                curr = addDays(curr, 1)
+            }
+        })
+        return holidaySet
+    }, [globalHolidays])
+
+    // Fetch existing timesheet for the week.
+    // If editing by ID, fetch directly to avoid date-range mismatch.
+    const { data: existingTimesheets, isLoading } = useQuery({
+        queryKey: ['timesheets', 'week', format(weekStart, 'yyyy-MM-dd'), editId],
+        queryFn: async () => {
+            try {
+                if (editId) {
+                    // Fetch the specific draft document directly
+                    const res = await timesheetAPI.getById(editId)
+                    const doc = res.data?.data
+                    if (doc) return [doc]
+                }
+            } catch (err) {
+                console.error('Failed to fetch timesheet by ID, falling back to date search:', err)
+            }
+
+            // Fetch by week range as primary or fallback
+            const from = format(weekStart, 'yyyy-MM-dd')
+            const to = format(addDays(weekStart, 6), 'yyyy-MM-dd')
+
+            // Ensure we always filter by the relevant user. 
+            // If we are editing a specific ID, the backend handle it, but for date lookup, 
+            // we must be explicit, especially for admins who would otherwise see multiple users.
+            const r = await timesheetAPI.getAll({ from, to, userId: user?.id })
+            return r.data?.data || r.data?.timesheets || (Array.isArray(r.data) ? r.data : [])
+        },
+        staleTime: 0,
+    })
+
+    const lastJumpedId = useRef(null)
+
+    // Sync existing timesheets to rows if available
+    useEffect(() => {
+        // Only run when all critical data is loaded to avoid partial mapping race conditions
+        if (existingTimesheets === undefined || projects === undefined || allTasks === undefined) return
+
+        // If we have data from a specific editId and it's not in our current view, 
+        // jump the calendar to where the data is.
+        if (editId && existingTimesheets.length > 0 && lastJumpedId.current !== editId) {
+            const doc = existingTimesheets[0]
+            if (doc) {
+                // Find first date with hours, or fallback to doc's weekStartDate
+                let targetDate = null
+                if (doc.rows) {
+                    for (const r of doc.rows) {
+                        const entry = r.entries?.find(e => (e.hoursWorked || 0) > 0)
+                        if (entry) {
+                            targetDate = new Date(entry.date)
+                            break
+                        }
+                    }
+                }
+                if (!targetDate) targetDate = new Date(doc.weekStartDate)
+
+                // If this target date isn't visible in the current 7-day columns
+                const dayStr = format(targetDate, 'yyyy-MM-dd')
+                const isVisible = weekDays.some(d => format(d, 'yyyy-MM-dd') === dayStr)
+
+                if (!isVisible) {
+                    setCurrentDate(targetDate)
+                    lastJumpedId.current = editId
+                    return // Effect will re-run with new currentDate/weekDays
+                }
+            }
+            lastJumpedId.current = editId
+        }
+
+        // Map rows and merge data across all relevant week documents
+        const rowMap = new Map() // Key: projectId + category
+
+        const leaveMetaArray = Array(7).fill(null)
+        const leaveHoursArray = Array(7).fill('00:00')
+
+        if (existingTimesheets && existingTimesheets.length > 0) {
+            existingTimesheets.forEach(ts => {
+                if (!ts.rows) return
+
+                ts.rows.forEach(r => {
+                    const pid = r.projectId?.id || r.projectId?._id || r.projectId
+                    const projectIdStr = pid?.toString() || 'unknown'
+                    const category = (r.category || 'Select Task').trim()
+                    const projectCode = r.projectId?.code || projects?.find(p => (p.id || p._id) === projectIdStr)?.code || ''
+                    const isSystemLeave = projectCode === 'LEAVE-SYS' || (typeof pid === 'string' && pid === 'LEAVE-SYS') || (pid && projectIdStr.includes('LEAVE-SYS'))
+
+                    if (isSystemLeave) {
+                        weekDays.forEach((day, i) => {
+                            const dayStr = format(day, 'yyyy-MM-dd')
+                            const entry = r.entries?.find(e => {
+                                if (!e.date) return false
+                                try { return format(new Date(e.date), 'yyyy-MM-dd') === dayStr } catch (err) { return false }
+                            })
+
+                            if (entry) {
+                                const hoursVal = entry.hoursWorked || 0
+                                const h = isLopType(category) || isLopType(entry.leaveType) ? 0 : Math.floor(hoursVal)
+                                const m = isLopType(category) || isLopType(entry.leaveType) ? 0 : Math.round((hoursVal - h) * 60)
+                                const isFullDay = (hoursVal >= workingHoursPerDay) || isLopType(category) || isLopType(entry.leaveType);
+
+                                leaveMetaArray[i] = { type: category, isApproved: true, isFullDay }
+                                leaveHoursArray[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                            }
+                        })
+                    } else {
+                        let key = `${projectIdStr}-${category.toLowerCase()}`
+
+                        if (!rowMap.has(key)) {
+                            rowMap.set(key, {
+                                id: (r.id || r._id || `temp-${Math.random()}`),
+                                _id: r.id || r._id,
+                                projectId: pid,
+                                projectCode: projectCode,
+                                taskType: category,
+                                dayHours: Array(7).fill('00:00'),
+                                dayMeta: Array(7).fill(null),
+                                status: ts.status,
+                                isLeaveRow: false
+                            })
+                        }
+
+                        const targetRow = rowMap.get(key)
+                        weekDays.forEach((day, i) => {
+                            const dayStr = format(day, 'yyyy-MM-dd')
+                            const entry = r.entries?.find(e => {
+                                if (!e.date) return false
+                                try { return format(new Date(e.date), 'yyyy-MM-dd') === dayStr } catch (err) { return false }
+                            })
+
+                            if (entry) {
+                                const hours = entry.hoursWorked || 0
+                                const h = Math.floor(hours)
+                                const m = Math.round((hours - h) * 60)
+                                targetRow.dayHours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                            }
+                        })
+                    }
+                })
+            })
+        }
+
+        // Process weekLeaves to inject PENDING & APPROVED leaves
+        if (weekLeaves && weekLeaves.length > 0) {
+            weekLeaves.forEach(leave => {
+                const status = leave.status?.toLowerCase()
+                if (status !== 'pending' && status !== 'approved') return
+
+                const getWorkingDaysBetween = (start, end) => {
+                    const days = [];
+                    const cur = new Date(start);
+                    const e = new Date(end);
+                    cur.setHours(0, 0, 0, 0);
+                    e.setHours(23, 59, 59, 999);
+                    while (cur <= e) {
+                        if (isWorkingDay(cur)) days.push(new Date(cur));
+                        cur.setDate(cur.getDate() + 1);
+                    }
+                    return days;
+                }
+
+                const leaveDays = getWorkingDaysBetween(leave.startDate, leave.endDate)
+                const leaveHours = isLopType(leave.leaveType) ? 0 : (leave.isHalfDay ? workingHoursPerDay / 2 : workingHoursPerDay)
+                const category = leave.leaveType?.charAt(0).toUpperCase() + leave.leaveType?.slice(1)
+
+                weekDays.forEach((day, i) => {
+                    const dayStr = format(day, 'yyyy-MM-dd')
+                    const isLeaveDay = leaveDays.some(ld => format(new Date(ld), 'yyyy-MM-dd') === dayStr)
+
+                    if (isLeaveDay) {
+                        const isFullDay = !leave.isHalfDay;
+                        const isPending = status === 'pending'
+                        const isApproved = status === 'approved'
+
+                        leaveMetaArray[i] = {
+                            type: `${category} (${isPending ? 'Pending' : 'Approved'})`,
+                            isPending,
+                            isApproved,
+                            isFullDay
+                        }
+                        leaveHoursArray[i] = `${String(Math.floor(leaveHours)).padStart(2, '0')}:${String(Math.round((leaveHours % 1) * 60)).padStart(2, '0')}`
+                    }
+                })
+            })
+        }
+
+
+        let finalRows = Array.from(rowMap.values())
+
+        // Handle projectId from URL
+        const urlProjectId = searchParams.get('projectId')
+        if (urlProjectId && !rowMap.has(`${urlProjectId}-select task`) && !rowMap.has(`${urlProjectId}-meeting`)) {
+            // Check if this project is already in finalRows but maybe with a different task
+            const hasProject = finalRows.some(r => {
+                const pid = r.projectId?._id || r.projectId
+                return pid === urlProjectId
+            })
+
+            if (!hasProject) {
+                finalRows.push({
+                    id: Date.now(),
+                    projectId: urlProjectId,
+                    taskType: 'Select Task',
+                    dayHours: Array(7).fill('00:00'),
+                    dayMeta: Array(7).fill(null),
+                    status: 'draft',
+                    isLeaveRow: false
+                })
+            }
+        }
+
+        if (finalRows.length === 0) {
+            finalRows = [{ id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00'), dayMeta: Array(7).fill(null) }]
+        }
+
+        // Apply leave data visually
+        finalRows.forEach((row, rowIndex) => {
+            row.dayMeta = [...leaveMetaArray];
+
+            if (rowIndex === 0) {
+                leaveHoursArray.forEach((h, i) => {
+                    if (leaveMetaArray[i]) {
+                        row.dayHours[i] = h;
+                    }
+                })
+            } else {
+                leaveMetaArray.forEach((m, i) => {
+                    if (m && m.isFullDay) {
+                        row.dayHours[i] = '00:00';
+                    }
+                })
+            }
+        });
+
+        setRows(finalRows)
+        setIsDirty(false)
+    }, [existingTimesheets, weekLeaves, weekStart, weekDays, editId, projects, allTasks, tsSettings, general, searchParams])
+
+    const handleWeekChange = (offset) => {
+        let newDate;
+        if (offset === 0) {
+            newDate = new Date();
+        } else {
+            newDate = addDays(currentDate, offset * 7);
+        }
+
+        const target = `/timesheets?date=${format(newDate, 'yyyy-MM-dd')}`;
+        if (isDirty) {
+            setNavIntent(target);
+            return;
+        }
+        setCurrentDate(newDate);
+        navigate(target);
+    }
+
+
+    const bulkSaveMutation = useMutation({
+        mutationFn: async (rowsToSave) => {
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+            const hasFutureEntry = rowsToSave.some(r => r.dayHours.some((h, idx) => {
+                if (h !== '00:00' && h !== '-8') {
+                    return weekDays[idx].getTime() > today.getTime();
+                }
+                return false;
+            }));
+
+            if (hasFutureEntry) {
+                throw new Error('Cannot save draft with entries for future dates.');
+            }
+
+            const payloads = rowsToSave.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS').map(row => ({
+                projectId: row.projectId,
+                category: row.taskType,
+                weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+                entries: weekDays.map((day, i) => {
+                    const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
+                    const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
+
+                    let hoursWorked = 0;
+                    if (!isFullDay) {
+                        const [h, m] = row.dayHours[i].split(':').map(Number)
+                        hoursWorked = h + (m / 60)
+                    }
+
+                    return {
+                        date: format(day, 'yyyy-MM-dd'),
+                        hoursWorked
+                    }
+                })
+            }))
+
+            if (payloads.length === 0) return null
+            return timesheetAPI.bulkUpsert(payloads)
+        },
+        onSuccess: () => {
+            toast.success('Timesheets saved successfully')
+            queryClient.invalidateQueries({ queryKey: ['timesheets'] })
+            setIsDirty(false)
+            setUnsavedChanges(false)
+
+            if (navIntent) {
+                const target = navIntent
+                setNavIntent(null)
+                navigate(target)
+            }
+        },
+        onError: (err) => {
+            const msg = err.response?.data?.message || err.message || 'Failed to save timesheets'
+            toast.error(msg)
+        }
+    })
+
+    const submitWeekMutation = useMutation({
+        mutationFn: async () => {
+            if (!submissionRestriction.allowed) {
+                throw new Error(`Submission for the current week is restricted. Please submit on or after ${submissionRestriction.dayName}.`)
+            }
+
+            // Basic validation: must have some hours somewhere, unless there's a holiday or leave
+            const hasAnyHours = rows.some(r => r.dayHours.some(h => h !== '00:00'))
+            const hasHolidayOrLeave = holidays.size > 0 || rows.some(r => r.isLeaveRow)
+            if (!hasAnyHours && !hasHolidayOrLeave) {
+                throw new Error('Please enter some hours before submitting.')
+            }
+
+            // Validate that no task/project row has zero total hours or incomplete details
+            const hasIncompleteRow = rows.some(r => {
+                if (r.isLeaveRow || isPermissionRow(r.taskType) || r.projectId === 'LEAVE-SYS') return false;
+
+                // If project or task type is not selected, the entry is incomplete
+                if (!r.projectId || r.taskType === 'Select Task') return true;
+
+                const total = r.dayHours.reduce((acc, time) => {
+                    if (!time || time === '-8' || time === '00:00') return acc;
+                    const [h, m] = time.split(':').map(Number);
+                    return acc + h + (m / 60);
+                }, 0);
+
+                return total === 0;
+            });
+
+            if (hasIncompleteRow) {
+                throw new Error('Please select a project and task for all rows, and ensure no row has 0 working hours before submitting.');
+            }
+
+            // Future date validation
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+            const hasFutureEntry = rows.some(r => r.dayHours.some((h, idx) => {
+                if (h !== '00:00' && h !== '-8') {
+                    return weekDays[idx].getTime() > today.getTime();
+                }
+                return false;
+            }));
+
+            if (hasFutureEntry) {
+                throw new Error('Cannot submit timesheet with entries for future dates.');
+            }
+
+            // Policy-Driven Daily Hours Guardrails (min/max from Timesheet Policy settings)
+            if (isSubjectToEnforcement && (tsSettings?.minHoursPerDay > 0 || tsSettings?.maxHoursPerDay > 0)) {
+                for (let i = 0; i < 7; i++) {
+                    const day = weekDays[i];
+                    if (!isWorkingDay(day)) continue;
+
+                    // Skip fully locked leave days
+                    if (lockedDays[i]) continue;
+
+                    // Compute day total excluding permission rows
+                    const dayTotal = rows.reduce((acc, row) => {
+                        if (isPermissionRow(row.taskType)) return acc; // exclude permission from min check
+                        const time = row.dayHours[i];
+                        if (!time || time === '-8' || time === '00:00') return acc;
+                        const [h, m] = time.split(':').map(Number);
+                        return acc + h + (m / 60);
+                    }, 0);
+
+                    if (dayTotal === 0) continue; // don't block completely empty days
+
+                    const minHrs = tsSettings?.minHoursPerDay || 0;
+                    const maxHrs = tsSettings?.maxHoursPerDay || 24;
+                    const dayName = format(day, 'EEEE, MMM d');
+
+                    if (minHrs > 0 && dayTotal < minHrs) {
+                        throw new Error(`${dayName}: logged ${formatHours(dayTotal)} but minimum is ${minHrs}h. Please add more hours before submitting.`);
+                    }
+                    if (maxHrs > 0 && dayTotal > maxHrs) {
+                        throw new Error(`${dayName}: logged ${formatHours(dayTotal)} exceeds the maximum of ${maxHrs}h.`);
+                    }
+                }
+            }
+
+            const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS').map(row => ({
+                projectId: row.projectId,
+                category: row.taskType,
+                weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+                entries: weekDays.map((day, i) => {
+                    const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
+                    const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
+
+                    let hoursWorked = 0;
+                    if (!isFullDay) {
+                        const [h, m] = row.dayHours[i].split(':').map(Number)
+                        hoursWorked = h + (m / 60)
+                    }
+
+                    return {
+                        date: format(day, 'yyyy-MM-dd'),
+                        hoursWorked
+                    }
+                })
+            }))
+
+            return timesheetAPI.bulkSubmit(payloads)
+        },
+        onSuccess: () => {
+            toast.success('Week submitted for approval')
+            queryClient.invalidateQueries({ queryKey: ['timesheets'] })
+            setIsDirty(false)
+            setUnsavedChanges(false)
+        },
+        onError: (err) => {
+            const msg = err.response?.data?.message || err.message || 'Failed to submit week'
+            toast.error(msg)
+        }
+    })
+
+    const handleAddRow = () => {
+        if (isWeekSubmitted) return
+
+        // Prevent adding multiple empty project rows
+        const hasEmptyRow = rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && (r.projectId === '' || r.taskType === 'Select Task'))
+        if (hasEmptyRow) {
+            toast.error('Please complete the existing empty row first')
+            return
+        }
+
+        setRows([...rows, { id: Date.now(), projectId: '', taskType: 'Select Task', dayHours: Array(7).fill('00:00') }])
+        setIsDirty(true)
+    }
+
+    const handleAddPermission = () => {
+        if (isWeekSubmitted) return
+        const alreadyHasPermission = rows.some(r => isPermissionRow(r.taskType))
+        if (alreadyHasPermission) {
+            toast.error('Only one permission row is allowed per week.')
+            return
+        }
+        setRows([...rows, { id: Date.now(), projectId: PERMISSION_ROW_MARKER, taskType: PERMISSION_ROW_MARKER, dayHours: Array(7).fill('00:00'), permissionNote: '' }])
+        setIsDirty(true)
+    }
+
+    const handleRemoveRow = (id) => {
+        const workRows = rows.filter(r => !r.isLeaveRow)
+        if (workRows.length === 1 && workRows[0].id === id) {
+            toast.error('You cannot delete the last remaining project row. Each week requires at least one entry.')
+            return
+        }
+        setRows(rows.filter(r => r.id !== id))
+        setIsDirty(true)
+    }
+
+    const handleUpdateRow = (id, field, value) => {
+        const currentRow = rows.find(r => r.id === id)
+        if (!currentRow) return
+
+        let nextProjectId = field === 'projectId' ? value : (currentRow.projectId?._id || currentRow.projectId)
+        let nextTaskType = field === 'taskType' ? value : currentRow.taskType
+
+        // Check for duplicates - avoid checking if everything isn't selected yet
+        if (nextProjectId && nextTaskType && nextTaskType !== 'Select Task') {
+            const isDuplicate = rows.some(r => {
+                if (r.id === id) return false
+                const pid = r.projectId?._id || r.projectId
+                return pid === nextProjectId && r.taskType === nextTaskType
+            })
+
+            if (isDuplicate) {
+                toast.error('This project and task combination already exists in your timesheet.')
+                return
+            }
+        }
+
+        setRows(rows.map(r => {
+            if (r.id !== id) return r
+            setIsDirty(true)
+            let updated = { ...r, [field]: value }
+
+            // If project changes, reset task type if it's not a global type or doesn't belong to the new project
+            if (field === 'projectId') {
+                const projectTasks = allTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId || '').toString() === value?.toString()) || []
+                const taskExistsInNewProject = projectTasks.some(t => t.name === r.taskType)
+                const isGlobalType = ['Select Task', ...(LEAVE_TASK_TYPES || [])].includes(r.taskType)
+
+                if (!isGlobalType && !taskExistsInNewProject) {
+                    updated.taskType = 'Select Task'
+                }
+            }
+
+            return updated
+        }))
+    }
+
+    const handleUpdateHour = (rowId, dayIndex, value) => {
+        setRows(rows.map(r => {
+            if (r.id === rowId) {
+                // Prevent manual editing of leave rows
+                if (r.isLeaveRow) return r
+
+                const [hStr, mStr] = value.split(':')
+                const h = parseInt(hStr, 10) || 0
+                const m = parseInt(mStr, 10) || 0
+                const newValueTotalHours = h + (m / 60)
+
+                // 1. Individual entry limit
+                if (newValueTotalHours > 24) {
+                    toast.error('Individual entry cannot exceed 24 hours.')
+                    return r
+                }
+
+                // 2. Day total across all rows limit
+                const otherRowsDayTotal = rows.reduce((acc, otherRow) => {
+                    if (otherRow.id === rowId) return acc
+                    const time = otherRow.dayHours[dayIndex]
+                    if (!time || time === '-8') return acc;
+                    const [oh, om] = time.split(':').map(Number)
+                    return acc + oh + (om / 60)
+                }, 0)
+
+                const maxDayHrs = tsSettings?.maxHoursPerDay || 24;
+                if (otherRowsDayTotal + newValueTotalHours > maxDayHrs) {
+                    toast.error(`Daily hour limit exceeded. Maximum allowed: ${maxDayHrs} hours.`);
+                    return r
+                }
+
+                // 3. Permission row limits
+                if (isPermissionRow(r.taskType)) {
+                    const maxPermHours = tsSettings?.permissionMaxHoursPerDay || 4
+                    const maxPermDays = tsSettings?.permissionMaxDaysPerWeek || 0
+
+                    if (newValueTotalHours > maxPermHours) {
+                        toast.error(`Daily hour limit exceeded. Maximum allowed: ${maxPermHours} hours.`)
+                        return r
+                    }
+
+                    // Check if this is a new day for permissions and if it exceeds weekly limit
+                    const currentPermissionDays = new Set()
+                    rows.forEach(row => {
+                        if (isPermissionRow(row.taskType)) {
+                            row.dayHours.forEach((h, idx) => {
+                                if (h !== '00:00' && h !== '-8' && (row.id !== rowId || idx !== dayIndex)) {
+                                    currentPermissionDays.add(idx)
+                                }
+                            })
+                        }
+                    })
+
+                    // If we are adding hours to a day that didn't have permission hours before
+                    if (newValueTotalHours > 0 && !currentPermissionDays.has(dayIndex)) {
+                        if (maxPermDays > 0 && currentPermissionDays.size >= maxPermDays) {
+                            toast.error(`Weekly days limit exceeded. Maximum allowed: ${maxPermDays} days.`)
+                            return r
+                        }
+                    }
+                }
+
+                const newHours = [...r.dayHours]
+                newHours[dayIndex] = value
+                setIsDirty(true)
+                return { ...r, dayHours: newHours }
+            }
+            return r
+        }))
+    }
+
+    // ─── Auto-fill from attendance ────────────────────────────────────────────
+    // Distribution rule:
+    //   • If attendance logs exist for the day → use net duration (capped at maxHoursPerDay)
+    //   • If no attendance integration → use workingHoursPerDay as daily target
+    //   • Hours are split evenly across active (non-leave, non-permission) project rows
+    const handleAutoFill = () => {
+        const maxHrs = tsSettings?.maxHoursPerDay || 24
+        const defaultHrs = workingHoursPerDay
+
+        // Build a map of dateStr → net hours from attendance logs
+        const attendanceByDate = {}
+        if (attendanceLogs && attendanceLogs.length > 0) {
+            attendanceLogs.forEach(log => {
+                if (!log.date && !log.workDate) return
+                const dateStr = log.date || log.workDate
+                const dateKey = typeof dateStr === 'string'
+                    ? dateStr.split('T')[0]
+                    : format(new Date(dateStr), 'yyyy-MM-dd')
+                const net = parseFloat(log.netHours || log.hoursWorked || log.totalHours || 0)
+                if (net > 0) {
+                    attendanceByDate[dateKey] = Math.min(net, maxHrs)
+                }
+            })
+        }
+
+        const activeRowIndices = rows
+            .map((r, idx) => ({ r, idx }))
+            .filter(({ r }) => !r.isLeaveRow && !isPermissionRow(r.taskType))
+
+        if (activeRowIndices.length === 0) {
+            toast.error('Add at least one project row before auto-filling.')
+            return
+        }
+
+        const today = new Date()
+        today.setHours(23, 59, 59, 999)
+
+        let filledDays = 0
+        const newRows = rows.map(row => ({ ...row, dayHours: [...row.dayHours] }))
+
+        weekDays.forEach((day, i) => {
+            if (!isWorkingDay(day)) return
+            if (day.getTime() > today.getTime()) return   // no future dates
+            if (lockedDays[i]) return                     // leave / holiday day
+            if (holidays.has(format(day, 'yyyy-MM-dd'))) return
+
+            const dateKey = format(day, 'yyyy-MM-dd')
+            const hasAttendance = Object.keys(attendanceByDate).length > 0
+            const dailyTarget = hasAttendance
+                ? (attendanceByDate[dateKey] || 0)
+                : defaultHrs
+
+            if (dailyTarget <= 0) return
+
+            // Check how much is already logged for this day across ALL active rows
+            const alreadyLogged = activeRowIndices.reduce((acc, { r }) => {
+                const t = r.dayHours[i]
+                if (!t || t === '00:00') return acc
+                const [h, m] = t.split(':').map(Number)
+                return acc + h + (m / 60)
+            }, 0)
+
+            if (alreadyLogged > 0) return // day already has data, skip
+
+            const perRowHrs = dailyTarget / activeRowIndices.length
+            const perRowH = Math.floor(perRowHrs)
+            const perRowM = Math.round((perRowHrs - perRowH) * 60)
+
+            activeRowIndices.forEach(({ idx }) => {
+                newRows[idx].dayHours[i] = `${String(perRowH).padStart(2, '0')}:${String(perRowM).padStart(2, '0')}`
+            })
+            filledDays++
+        })
+
+        if (filledDays === 0) {
+            toast.success('All working days already have hours logged.')
+            return
+        }
+
+        setRows(newRows)
+        setIsDirty(true)
+        const src = Object.keys(attendanceByDate).length > 0 ? 'attendance logs' : `${defaultHrs}h daily limit`
+        toast.success(`Auto-filled ${filledDays} day${filledDays > 1 ? 's' : ''} from ${src}`)
+    }
+
+    // ─── Repeat last week ─────────────────────────────────────────────────────
+    const [isRepeatLoading, setIsRepeatLoading] = useState(false)
+
+    const handleRepeatLastWeek = async () => {
+        setIsRepeatLoading(true)
+        try {
+            const lastWeekStart = addDays(weekStart, -7)
+            const from = format(lastWeekStart, 'yyyy-MM-dd')
+            const to = format(addDays(lastWeekStart, 6), 'yyyy-MM-dd')
+            const res = await timesheetAPI.getAll({ from, to, userId: user?.id })
+            const lastWeekTimesheets = res.data?.data || res.data?.timesheets || []
+
+            if (!lastWeekTimesheets.length) {
+                toast.error('No timesheet found for last week to copy.')
+                return
+            }
+
+            // Collect active project IDs for quick lookup
+            const activeProjectIds = new Set((projects || []).map(p => p.id || p._id))
+
+            const rowMap = new Map()
+            lastWeekTimesheets.forEach(ts => {
+                if (!ts.rows) return
+                ts.rows.forEach(r => {
+                    const pid = r.projectId?._id || r.projectId?.id || r.projectId
+                    if (!pid || pid === 'LEAVE-SYS') return
+                    if (!activeProjectIds.has(pid)) return // skip deactivated projects
+
+                    const category = (r.category || r.taskType || 'Select Task').trim()
+                    const key = `${pid}-${category.toLowerCase()}`
+                    if (rowMap.has(key)) return
+
+                    // Map last week's entry indices → current week indices
+                    const newDayHours = Array(7).fill('00:00')
+                    weekDays.forEach((day, i) => {
+                        const dayStr = format(day, 'yyyy-MM-dd')
+                        // Corresponding day in last week
+                        const lastWeekDay = format(addDays(lastWeekStart, i), 'yyyy-MM-dd')
+                        const entry = r.entries?.find(e => {
+                            if (!e.date) return false
+                            try { return format(new Date(e.date), 'yyyy-MM-dd') === lastWeekDay } catch { return false }
+                        })
+                        if (entry) {
+                            const h = Math.floor(entry.hoursWorked || 0)
+                            const m = Math.round(((entry.hoursWorked || 0) - h) * 60)
+                            newDayHours[i] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                        }
+                    })
+
+                    rowMap.set(key, {
+                        id: Date.now() + Math.random(),
+                        projectId: pid,
+                        taskType: category,
+                        dayHours: newDayHours,
+                        dayMeta: Array(7).fill(null)
+                    })
+                })
+            })
+
+            if (rowMap.size === 0) {
+                toast.error('No active project rows found in last week to copy.')
+                return
+            }
+
+            const newRows = Array.from(rowMap.values())
+            setRows(newRows)
+            setIsDirty(true)
+            toast.success(`Copied ${newRows.length} project row${newRows.length > 1 ? 's' : ''} from last week`)
+        } catch (err) {
+            console.error('Repeat last week failed:', err)
+            toast.error('Failed to load last weeks timesheet.')
+        } finally {
+            setIsRepeatLoading(false)
+        }
+    }
+
+    // ─── Fill standard hours ──────────────────────────────────────────────────
+    const handleFillStandardHours = () => {
+        const activeRowIndices = rows
+            .map((r, idx) => ({ r, idx }))
+            .filter(({ r }) => !r.isLeaveRow && !isPermissionRow(r.taskType))
+
+        if (activeRowIndices.length === 0) {
+            toast.error('Add at least one project row before filling.')
+            return
+        }
+
+        const perRowHrs = workingHoursPerDay / activeRowIndices.length
+        const perRowH = Math.floor(perRowHrs)
+        const perRowM = Math.round((perRowHrs - perRowH) * 60)
+        const perRowStr = `${String(perRowH).padStart(2, '0')}:${String(perRowM).padStart(2, '0')}`
+
+        const today = new Date()
+        today.setHours(23, 59, 59, 999)
+        let filledDays = 0
+
+        const newRows = rows.map((row, rowIdx) => {
+            const isActive = activeRowIndices.some(({ idx }) => idx === rowIdx)
+            if (!isActive) return row
+            const newDayHours = [...row.dayHours]
+            weekDays.forEach((day, i) => {
+                if (!isWorkingDay(day)) return
+                if (day.getTime() > today.getTime()) return
+                if (lockedDays[i]) return
+                if (holidays.has(format(day, 'yyyy-MM-dd'))) return
+                // Only fill zero slots
+                const cur = newDayHours[i]
+                if (!cur || cur === '00:00') {
+                    newDayHours[i] = perRowStr
+                    if (rowIdx === activeRowIndices[0].idx) filledDays++
+                }
+            })
+            return { ...row, dayHours: newDayHours }
+        })
+
+        if (filledDays === 0) {
+            toast.success('All working days already have hours logged.')
+            return
+        }
+
+        setRows(newRows)
+        setIsDirty(true)
+        toast.success(`Filled ${filledDays} day${filledDays > 1 ? 's' : ''} with ${workingHoursPerDay}h standard hours`)
+    }
+
+
+    // Calculations
+    const calculateRowTotal = (row) => {
+        return row.dayHours.reduce((acc, time) => {
+            if (!time || time === '-8') return acc;
+            if (!time) return acc;
+            const [h, m] = time.split(':').map(Number)
+            return acc + h + (m / 60)
+        }, 0)
+    }
+
+    const calculateDayTotal = (dayIndex) => {
+        return rows.reduce((acc, row) => {
+            const time = row.dayHours[dayIndex]
+            if (!time || time === '-8') return acc;
+            const [h, m] = time.split(':').map(Number)
+            return acc + h + (m / 60)
+        }, 0)
+    }
+
+    const formatHours = (total) => {
+        const decimal = Number(total) || 0
+        const h = Math.floor(decimal)
+        const m = Math.round((decimal - h) * 60)
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+
+
+    const totalWeekHours = useMemo(() => {
+        return rows.reduce((acc, row) => acc + calculateRowTotal(row), 0)
+    }, [rows])
+
+    const getRowStatus = (row) => {
+        const weekStr = format(weekStart, 'yyyy-MM-dd')
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
+        if (!currentWeekTs) return 'draft'
+        const rowData = currentWeekTs.rows?.find(r => (r.projectId?._id || r.projectId) === row.projectId)
+        return currentWeekTs.status || 'draft'
+    }
+
+    // Derived: is the week already submitted/approved?
+    const isWeekSubmitted = useMemo(() => {
+        const weekStr = format(weekStart, 'yyyy-MM-dd')
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
+        return currentWeekTs ? ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status?.toLowerCase()) : false
+
+    }, [existingTimesheets, weekStart])
+
+    const isCurrentWeek = useMemo(() => {
+        return isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn }))
+    }, [weekStart, weekStartsOn])
+
+    const submissionRestriction = useMemo(() => {
+        if (!isCurrentWeek) return { allowed: true }
+        if (!tsSettings?.submissionDeadline) return { allowed: true }
+
+        const daysLookup = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+        const deadlineParts = (tsSettings.submissionDeadline || 'Friday').toLowerCase().split(' ');
+        const targetDayName = deadlineParts[0];
+        let targetDayIndex = daysLookup[targetDayName] ?? 5; // Default Friday
+        let currentDayIndex = new Date().getDay();
+
+        // Handle Monday week start normalization
+        if (weekStartDay === 'monday') {
+            if (currentDayIndex === 0) currentDayIndex = 7;
+            if (targetDayIndex === 0) targetDayIndex = 7;
+        }
+
+        if (currentDayIndex < targetDayIndex) {
+            return {
+                allowed: false,
+                dayName: targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1)
+            }
+        }
+        return { allowed: true }
+    }, [isCurrentWeek, tsSettings, weekStartDay])
+
+    const isWeekFrozen = useMemo(() => {
+        const weekStr = format(weekStart, 'yyyy-MM-dd')
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
+
+        // Check DB status first
+        if (currentWeekTs?.status?.toLowerCase() === 'frozen') return true;
+
+        // Client-side check: if freeze deadline has passed for this week, treat as frozen
+        // (backend will update DB status on next fetch)
+        if (tsSettings?.freezeTimesheet) {
+            const now = new Date();
+            const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const parts = tsSettings.freezeTimesheet.toLowerCase().trim().split(/\s+/);
+            const dayName = parts[0];
+            const timePart = parts[1] || '23:59';
+            const [hh, mm] = timePart.split(':').map(Number);
+            const targetDayIndex = dayNames.indexOf(dayName);
+            if (targetDayIndex !== -1) {
+                const wsDay = weekStart.getDay();
+                let daysOffset = targetDayIndex - wsDay;
+                if (daysOffset < 0) daysOffset += 7;
+                if (daysOffset === 0) daysOffset = 7;
+                const freezeDeadline = new Date(weekStart);
+                freezeDeadline.setDate(freezeDeadline.getDate() + daysOffset);
+                freezeDeadline.setHours(isNaN(hh) ? 23 : hh, isNaN(mm) ? 59 : mm, 0, 0);
+                if (now > freezeDeadline) return true;
+            }
+        }
+
+        return false;
+    }, [existingTimesheets, weekStart, tsSettings])
+
+    // ─── Suggestions panel visibility (must be after isWeekSubmitted / isWeekFrozen) ───
+    const [showSuggestions, setShowSuggestions] = useState(true)
+    const suggestionsVisible = showSuggestions && !isWeekSubmitted && !isWeekFrozen
+
+    // Check if we're approaching the submission deadline (within 24h) 
+    const deadlineWarning = useMemo(() => {
+        if (!tsSettings?.submissionDeadline || isWeekFrozen || isWeekSubmitted) return null;
+        const now = new Date();
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const parts = (tsSettings.submissionDeadline || 'Friday 18:00').toLowerCase().trim().split(/\s+/);
+        const dayName = parts[0];
+        const timePart = parts[1] || '18:00';
+        const [hh, mm] = timePart.split(':').map(Number);
+        const targetDayIndex = dayNames.indexOf(dayName);
+        if (targetDayIndex === -1) return null;
+
+        // Check if deadline falls in this week (between weekStart and weekStart+6)
+        const wsDay = weekStart.getDay();
+        let daysOffset = targetDayIndex - wsDay;
+        if (daysOffset < 0) daysOffset = -1; // deadline already passed this week
+
+        const deadline = new Date(weekStart);
+        deadline.setDate(deadline.getDate() + daysOffset);
+        deadline.setHours(isNaN(hh) ? 18 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+
+        const diffMs = deadline - now;
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        // Warn if deadline is within the next 24 hours and hasn't passed yet
+        if (diffHours > 0 && diffHours <= 24) {
+            const hoursLeft = Math.floor(diffHours);
+            const minsLeft = Math.round((diffHours - hoursLeft) * 60);
+            return `Submission deadline in ${hoursLeft}h ${minsLeft}m — ${tsSettings.submissionDeadline}`;
+        }
+        return null;
+    }, [tsSettings, weekStart, isWeekFrozen, isWeekSubmitted])
+
+
+    const lockedDays = useMemo(() => {
+        const locked = Array(7).fill(false)
+        rows.forEach(row => {
+            if (row.dayMeta) {
+                row.dayMeta.forEach((meta, i) => {
+                    if (meta && meta.isFullDay) {
+                        locked[i] = true
+                    }
+                })
+            }
+        })
+        return locked
+    }, [rows])
+
+    const isSubjectToEnforcement = useMemo(() => {
+        const enforcementDate = tsSettings?.enforceMinHoursEnabledAt ? new Date(tsSettings.enforceMinHoursEnabledAt) : null;
+        const weekEndDate = weekDays[6];
+        return tsSettings?.enforceMinHoursOnSubmit && (!enforcementDate || weekEndDate >= enforcementDate);
+    }, [tsSettings, weekDays]);
+
+    const isAllWorkingDaysFilled = useMemo(() => {
+        const minHrs = tsSettings?.minHoursPerDay || 0;
+        const maxHrs = tsSettings?.maxHoursPerDay || 24;
+
+        return weekDays.every((day, i) => {
+            if (!isWorkingDay(day)) return true;
+            if (lockedDays[i]) return true;
+            const dateStr = format(day, 'yyyy-MM-dd');
+            if (holidays.has(dateStr)) return true;
+
+            const dayTotal = rows.reduce((acc, row) => {
+                const time = row.dayHours[i];
+                if (!time || time === '00:00' || time === '-8') return acc;
+                const [h, m] = time.split(':').map(Number);
+                return acc + h + (m / 60);
+            }, 0);
+
+            // Basic check: must have at least some time
+            if (dayTotal === 0) return false;
+
+            // Enforcement check: must meet threshold
+            if (isSubjectToEnforcement) {
+                if (minHrs > 0 && dayTotal < minHrs) return false;
+                if (maxHrs > 0 && dayTotal > maxHrs) return false;
+            }
+
+            return true;
+        });
+    }, [weekDays, isWorkingDay, rows, lockedDays, holidays, isSubjectToEnforcement, tsSettings]);
+
+    const isRowLocked = (row) => {
+        if (row.isLeaveRow) return true;
+        // Permission rows are NOT locked — hours are editable
+        const weekStr = format(weekStart, 'yyyy-MM-dd')
+        const currentWeekTs = existingTimesheets?.find(t => (typeof t.weekStartDate === 'string' ? t.weekStartDate.split('T')[0] : format(new Date(t.weekStartDate), 'yyyy-MM-dd')) === weekStr)
+        if (!currentWeekTs) return false;
+        return ['submitted', 'approved', 'frozen', 'admin_filled'].includes(currentWeekTs.status?.toLowerCase());
+
+    }
+
+    if (isLoading || isLoadingLeaves) return <div className="flex justify-center pt-20"><Spinner size="lg" /></div>
+
+    return (
+        <div className="space-y-6 fluid-container animate-fade-in pb-10">
+            <PageHeader title="Timesheet Entry" />
+
+            {isWeekFrozen && (
+                <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-lg shadow-sm flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="text-rose-500 mt-0.5" size={20} />
+                        <div>
+                            <h3 className="text-rose-800 font-bold text-sm">⛔ Timesheet Frozen</h3>
+                            <p className="text-rose-700 text-sm mt-1">
+                                This timesheet week has been frozen — the submission deadline has passed and no further edits are allowed.
+                                {tsSettings?.freezeTimesheet && (
+                                    <span className="ml-1 font-medium">(Auto-lock: {tsSettings.freezeTimesheet})</span>
+                                )}
+                                {' '}Please raise a Help &amp; Support ticket so the admin can assist you.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate('/incidents', { state: { autoOpen: true, type: 'frozen' } })}
+                        className="whitespace-nowrap bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                    >
+                        Raise Ticket
+                    </button>
+                </div>
+            )}
+
+            {!isWeekFrozen && deadlineWarning && (
+                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg shadow-sm flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <Clock className="text-amber-500 shrink-0" size={18} />
+                        <p className="text-amber-800 text-sm font-semibold">{deadlineWarning}</p>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-500 bg-amber-100 px-2 py-1 rounded-lg shrink-0">Submit Soon</span>
+                </div>
+            )}
+
+            {/* ── Smart Suggestions Panel ── */}
+            {suggestionsVisible && (
+                <div className="relative overflow-hidden rounded-2xl border border-primary-200 dark:border-primary-800/50 bg-gradient-to-r from-primary-50 via-violet-50 to-indigo-50 dark:from-primary-950/40 dark:via-violet-950/30 dark:to-indigo-950/30 shadow-md p-4">
+                    {/* Background shimmer */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer-sweep pointer-events-none" />
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        {/* Label */}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <div className="p-2 bg-primary-100 dark:bg-primary-900/60 rounded-xl">
+                                <Sparkles size={18} className="text-primary-600 dark:text-primary-400" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-primary-700 dark:text-primary-300">Quick Fill</p>
+                                <p className="text-[11px] text-primary-500 dark:text-primary-400 leading-tight">Fill your timesheet in seconds</p>
+                            </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex flex-wrap items-center gap-2 flex-1">
+                            {/* Repeat Last Week */}
+                            <button
+                                onClick={handleRepeatLastWeek}
+                                disabled={isRepeatLoading || isWeekSubmitted}
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-black/40 border border-primary-200 dark:border-primary-700 text-primary-700 dark:text-primary-300 text-xs font-semibold hover:bg-primary-50 dark:hover:bg-primary-900/40 transition-all active:scale-95 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isRepeatLoading ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                Repeat Last Week
+                            </button>
+
+                            {/* Fill Standard Hours */}
+                            <button
+                                onClick={handleFillStandardHours}
+                                disabled={isWeekSubmitted}
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-black/40 border border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300 text-xs font-semibold hover:bg-violet-50 dark:hover:bg-violet-900/40 transition-all active:scale-95 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Zap size={14} />
+                                Fill {workingHoursPerDay}h / Day
+                            </button>
+
+                            {/* Auto-fill from Attendance */}
+                            <button
+                                onClick={handleAutoFill}
+                                disabled={isWeekSubmitted}
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-black/40 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-50 dark:hover:bg-emerald-900/40 transition-all active:scale-95 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <CheckCheck size={14} />
+                                Fill from Attendance
+                            </button>
+                        </div>
+
+                        {/* Dismiss */}
+                        <button
+                            onClick={() => setShowSuggestions(false)}
+                            className="ml-auto p-1.5 rounded-lg text-primary-400 hover:text-primary-600 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors shrink-0"
+                            title="Dismiss suggestions"
+                        >
+                            <XIcon size={15} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Re-open suggestions when dismissed */}
+            {!suggestionsVisible && !isWeekSubmitted && !isWeekFrozen && (
+                <div className="flex justify-end">
+                    <button
+                        onClick={() => setShowSuggestions(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 border border-primary-200 dark:border-primary-800 transition-colors"
+                    >
+                        <Sparkles size={12} />
+                        Quick Fill
+                    </button>
+                </div>
+            )}
+
+            {/* Top Navigation Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-4 py-2">
+                <div className="flex items-center gap-4 bg-white dark:bg-black px-4 py-2 rounded-xl shadow-sm border border-slate-100 dark:border-white">
+                    <button
+                        onClick={() => handleWeekChange(-1)}
+                        className="p-1.5 hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-colors"
+                    >
+                        <ChevronLeft size={20} className="text-slate-600" />
+                    </button>
+                    <div className="flex items-center gap-2 px-2">
+                        <Calendar size={18} className="text-primary-500" />
+                        <span className="font-semibold text-slate-800 dark:text-white capitalize">
+                            {format(weekStart, 'MMMM yyyy')}
+                        </span>
+                        <span className="text-slate-400 mx-1">|</span>
+                        <span className="text-sm font-medium text-slate-500 italic">
+                            Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d')} (Week {getWeek(weekStart)})
+                        </span>
+                    </div>
+                    <button
+                        onClick={() => handleWeekChange(1)}
+                        disabled={isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn }))}
+                        className="p-1.5 hover:bg-slate-50 dark:hover:bg-white dark:hover:text-black rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                        <ChevronRight size={20} className="text-slate-600" />
+                    </button>
+                </div>
+
+                {tsSettings?.submissionDeadline && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl">
+                        <Clock size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Deadline:</span>
+                        <span className="text-xs font-bold text-slate-700 dark:text-white">{tsSettings.submissionDeadline}</span>
+                    </div>
+                )}
+
+                <button
+                    onClick={() => handleWeekChange(0)}
+                    className="flex items-center gap-2 px-4 py-2 btn-primary hover:opacity-90 rounded-lg font-medium shadow-md transition-all active:scale-95"
+                >
+                    <Calendar size={16} />
+                    CURRENT WEEK
+                </button>
+            </div>
+
+            <div className="bg-white dark:bg-black rounded-2xl shadow-xl overflow-hidden border border-slate-100 dark:border-white">
+                <div className="p-4 md:p-6 border-b border-slate-100 dark:border-white flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-slate-50/50 dark:bg-black/50">
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight shrink-0">Week Entry</h2>
+                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                        <button
+                            onClick={handleAddRow}
+                            disabled={isWeekSubmitted || rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && (r.projectId === '' || r.taskType === 'Select Task'))}
+                            title={isWeekSubmitted ? 'Timesheet already submitted' : rows.some(r => !r.isLeaveRow && !isPermissionRow(r.taskType) && (r.projectId === '' || r.taskType === 'Select Task')) ? 'Please complete the existing empty row first' : 'Add a new project row'}
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 btn-primary hover:opacity-90 rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
+                        >
+                            <Plus size={16} /> <span className="hidden sm:inline">ADD PROJECT</span><span className="sm:hidden">PROJECT</span>
+                        </button>
+                        <button
+                            onClick={handleAddPermission}
+                            disabled={isWeekSubmitted || rows.some(r => isPermissionRow(r.taskType))}
+                            title={
+                                isWeekSubmitted
+                                    ? 'Timesheet already submitted'
+                                    : rows.some(r => isPermissionRow(r.taskType))
+                                        ? 'Only one permission row allowed'
+                                        : `Add a permission row (Limit: ${tsSettings?.permissionMaxHoursPerDay || 4}h/day${tsSettings?.permissionMaxDaysPerWeek > 0 ? `, ${tsSettings.permissionMaxDaysPerWeek} days/week` : ''})`
+                            }
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 btn-primary hover:opacity-90 rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none flex-1 lg:flex-none justify-center"
+                        >
+                            <Plus size={16} /> <span className="hidden sm:inline">ADD PERMISSION</span><span className="sm:hidden">PERM</span>
+                        </button>
+                        <button
+                            onClick={() => bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))}
+                            disabled={bulkSaveMutation.isPending || isWeekSubmitted}
+                            className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs lg:text-sm font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-1 lg:flex-none justify-center"
+                        >
+                            {bulkSaveMutation.isPending ? <Spinner size="sm" /> : <Save size={16} />}
+                            <span className="hidden sm:inline">SAVE DRAFT</span><span className="sm:hidden">SAVE</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className={`overflow-x-auto${rows.length > 5 ? ' scroll-v-adaptive' : ''}`}>
+                    <table className="w-full border-collapse">
+                        <thead className="sticky top-0 z-10">
+                            <tr className="bg-slate-50 dark:bg-black border-b border-slate-200 dark:border-white text-slate-500 uppercase text-[11px] font-bold tracking-wider">
+                                <th className="px-4 py-4 text-left font-bold border-r border-slate-200 dark:border-white w-16">S.no</th>
+                                <th className="px-4 py-4 text-left font-bold border-r border-slate-200 dark:border-white min-w-[200px]">Project Name</th>
+                                <th className="px-4 py-4 text-left font-bold border-r border-slate-200 dark:border-white min-w-[240px]">Task / Leave Type</th>
+
+                                {weekDays.map((day, i) => {
+                                    const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
+                                    if (!isWorkingDay(day)) return null;
+
+                                    const hEvent = isHoliday ? globalHolidays?.find(e => {
+                                        const d = format(day, 'yyyy-MM-dd')
+                                        return format(new Date(e.startDate), 'yyyy-MM-dd') <= d && format(new Date(e.endDate), 'yyyy-MM-dd') >= d
+                                    }) : null
+                                    return (
+                                        <th key={i} className={clsx(
+                                            "px-2 py-3 border-r border-slate-200 dark:border-white text-center min-w-[110px] transition-colors relative",
+                                            isHoliday ? "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 shadow-inner" : ""
+                                        )}>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className="flex flex-col">
+                                                    <span>{format(day, 'EEE')}</span>
+                                                    <span className={clsx(
+                                                        "capitalize font-normal",
+                                                        isHoliday ? "text-orange-500/80 dark:text-orange-400" : "text-slate-400"
+                                                    )}>{format(day, 'MMM d')}</span>
+                                                </div>
+                                                {isHoliday && hEvent && (
+                                                    <span className="text-[9px] text-orange-500 font-bold uppercase tracking-tighter truncate max-w-[90px]" title={hEvent.title}>
+                                                        🎉 {hEvent.title}
+                                                    </span>
+                                                )}
+                                                {calculateDayTotal(i) < workingHoursPerDay && calculateDayTotal(i) > 0 && (
+                                                    <div className="mt-2 flex items-center justify-center gap-1 px-2 py-1 bg-amber-500 text-white rounded-lg shadow-lg shadow-amber-200 dark:shadow-none animate-bounce scale-110 ring-2 ring-white">
+                                                        <AlertTriangle size={12} strokeWidth={3} />
+                                                        <span className="text-[9px] font-black tracking-tighter uppercase whitespace-nowrap">Low Hours</span>
+                                                        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap shadow-xl hidden group-hover/warn:block">
+                                                            {formatHours(calculateDayTotal(i))} of {workingHoursPerDay}h
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {calculateDayTotal(i) > 24 && (
+                                                    <div className="mt-2 flex items-center justify-center gap-1 px-2 py-1 bg-red-600 text-white rounded-lg shadow-lg animate-pulse scale-110 ring-2 ring-white">
+                                                        <Clock size={12} strokeWidth={3} />
+                                                        <span className="text-[9px] font-black tracking-tighter uppercase">Exceeded</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </th>
+                                    )
+                                })}
+
+                                <th className="px-4 py-4 text-center font-bold border-l border-slate-200 dark:border-white w-24">Work Hours</th>
+                                <th className="px-4 py-4 text-center font-bold min-w-[100px] bg-slate-50 dark:bg-black/80">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-white">
+                            {rows.map((row, index) => {
+                                const isPermission = isPermissionRow(row.taskType)
+                                const isLeave = isLeaveTaskType(row.taskType, LEAVE_TASK_TYPES)
+                                return (
+                                    <tr key={row.id} className="group transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5">
+                                        <td className="px-4 py-4 text-center border-r border-slate-100 dark:border-white text-sm font-medium text-slate-600 dark:text-white">
+                                            {index + 1}
+                                        </td>
+                                        <td className="px-4 py-3 border-r border-slate-100 dark:border-white">
+                                            {isPermission ? (
+                                                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-white rounded-lg opacity-75 cursor-not-allowed">
+                                                    <span className="text-sm font-semibold text-slate-600 dark:text-white">Permission</span>
+                                                </div>
+                                            ) : row.isLeaveRow ? (
+                                                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 rounded-lg cursor-not-allowed">
+                                                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">System Leave</span>
+                                                </div>
+                                            ) : (
+                                                <select
+                                                    className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow disabled:bg-slate-50 disabled:text-slate-500"
+                                                    value={row.projectId}
+                                                    onChange={(e) => handleUpdateRow(row.id, 'projectId', e.target.value)}
+                                                    disabled={isRowLocked(row)}
+                                                >
+                                                    <option value="">Select Project</option>
+                                                    {projects?.map(p => <option key={p.id || p._id} value={p.id || p._id}>{p.name}</option>)}
+                                                </select>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 border-r border-slate-100 dark:border-white">
+                                            {isPermission ? (
+                                                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-white rounded-lg opacity-75 cursor-not-allowed">
+                                                    <span className="text-sm text-slate-500 dark:text-white">Permission</span>
+                                                </div>
+                                            ) : row.isLeaveRow ? (
+                                                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 rounded-lg cursor-not-allowed">
+                                                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200 capitalize">{row.taskType || 'Leave'}</span>
+                                                </div>
+                                            ) : (
+                                                <select
+                                                    className="w-full bg-white dark:bg-black border border-slate-200 dark:border-white rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow disabled:bg-slate-50 disabled:text-slate-500"
+                                                    value={row.taskType}
+                                                    onChange={(e) => handleUpdateRow(row.id, 'taskType', e.target.value)}
+                                                    disabled={isRowLocked(row)}
+                                                >
+                                                    <option value="Select Task">Select Task</option>
+                                                    {/* Project specific tasks - already filtered by assignment in the query */}
+                                                    {row.projectId && allTasks?.filter(t => (t.projectId?.id || t.projectId?._id || t.projectId || '').toString() === row.projectId?.toString()).map(t => (
+                                                        <option key={t.id || t._id} value={t.name}>{t.name}</option>
+                                                    ))}
+
+                                                    {/* Show global categories as fallback for admins or when project allows */}
+                                                    {(() => {
+                                                        const projectObj = projects?.find(p => (p.id || p._id) === row.projectId);
+                                                        const projectTasks = allTasks?.filter(t => {
+                                                            const tPid = (t.projectId?.id || t.projectId?._id || t.projectId || '').toString();
+                                                            return tPid === row.projectId?.toString();
+                                                        }) || [];
+
+                                                        const globalTasks = tsSettings?.taskCategories || DEFAULT_TASK_TYPES.filter(t => !['Select Task', 'Leave', 'Holiday'].includes(t));
+                                                        
+                                                        return globalTasks
+                                                            .filter(t => t !== 'Not Mapped' && !projectTasks.some(pt => pt.name === t)) // Don't duplicate and remove Not Mapped
+                                                            .map(t => (
+                                                                <option key={t} value={t}>{t}</option>
+                                                            ));
+                                                    })()}
+
+                                                </select>
+                                            )}
+                                        </td>
+
+                                        {row.dayHours.map((time, i) => {
+                                            const day = weekDays[i];
+                                            if (!isWorkingDay(day)) return null;
+
+                                            const isPendingCell = row.dayMeta?.[i]?.isPending;
+                                            const isApprovedCell = row.dayMeta?.[i]?.isApproved;
+                                            const cellLeaveType = row.dayMeta?.[i]?.type;
+                                            const isLeaveCell = isPendingCell || isApprovedCell;
+                                            const isLop = isLopType(cellLeaveType);
+
+                                            const isHoliday = holidays.has(format(day, 'yyyy-MM-dd'));
+                                            const isFutureDate = day.getTime() > new Date().setHours(23, 59, 59, 999);
+                                            const isProjectOrTaskNotSelected = !row.isLeaveRow && !isPermissionRow(row.taskType) && (!row.projectId || row.taskType === 'Select Task');
+
+                                            // Disable if the day is before the project's start date
+                                            const projectObj = !row.isLeaveRow && row.projectId
+                                                ? projects?.find(p => (p.id || p._id) === row.projectId)
+                                                : null;
+                                            const projectStartDate = projectObj?.startDate ? new Date(projectObj.startDate) : null;
+                                            if (projectStartDate) projectStartDate.setHours(0, 0, 0, 0);
+                                            const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+                                            const isBeforeProjectStart = !!(projectStartDate && dayStart < projectStartDate);
+
+                                            const isDisabledInput = isRowLocked(row) || isWeekSubmitted || lockedDays[i] || isHoliday || isFutureDate || isProjectOrTaskNotSelected || isBeforeProjectStart;
+
+                                            return (
+                                                <td key={i} className={`px-2 py-3 border-r border-slate-100 dark:border-white transition-colors ${isHoliday ? 'bg-blue-50/80 dark:bg-blue-900/20' : ''} ${isBeforeProjectStart ? 'bg-slate-100/60 dark:bg-slate-800/60' : ''}`}>
+                                                    <div className={`flex flex-col items-center justify-center p-1.5 transition-all ${!isDisabledInput ? 'focus-within:ring-1 focus-within:ring-indigo-500' : ''} ${isBeforeProjectStart ? 'opacity-30 cursor-not-allowed bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 border rounded-lg' :
+                                                        isLop && isPendingCell ? 'bg-rose-100/50 border-rose-200 dark:border-rose-900 border rounded-lg' :
+                                                            isLop && isApprovedCell ? 'bg-rose-100/30 border-rose-300 dark:border-rose-800 border rounded-lg' :
+                                                                isPendingCell ? 'bg-amber-100/30 border-amber-200 dark:border-amber-800 border rounded-lg' :
+                                                                    isApprovedCell ? 'bg-emerald-100/30 border-emerald-200 dark:border-emerald-800 border rounded-lg' :
+                                                                        isHoliday ? 'bg-blue-100/60 dark:bg-blue-800/40 border-blue-300 dark:border-blue-600 border rounded-lg' :
+                                                                            'bg-slate-50 dark:bg-black border-slate-200 dark:border-white border rounded-lg'
+                                                        } ${isDisabledInput && !row.isLeaveRow ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800' : ''}`}
+                                                        title={isBeforeProjectStart ? `Project starts on ${projectObj?.startDate ? format(new Date(projectObj.startDate), 'MMM d, yyyy') : ''}` : isProjectOrTaskNotSelected ? "Please select a project and task first" : isFutureDate ? "Cannot enter time for future dates" : ""}
+                                                    >
+                                                        <div className="flex items-center justify-center w-full">
+                                                            {isLop && isLeaveCell ? (
+                                                                <div className="flex items-center justify-center w-full relative group/lop">
+                                                                    <span className={`text-sm font-bold ${isPendingCell ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                                                                        } px-2`}>0</span>
+                                                                    <div className="hidden group-hover/lop:block absolute bottom-full mb-1 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap shadow-xl">
+                                                                        LOP Leave
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <>
+                                                                    <input
+                                                                        type="text"
+                                                                        maxLength={2}
+                                                                        placeholder="00"
+                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed selection:bg-primary-100"
+                                                                        value={time.split(':')[0]}
+                                                                        onFocus={(e) => e.target.select()}
+                                                                        onChange={(e) => {
+                                                                            const h = e.target.value.replace(/\D/g, '')
+                                                                            const m = time.split(':')[1] || '00'
+                                                                            handleUpdateHour(row.id, i, `${h}:${m}`)
+
+                                                                            // Auto-focus minutes if 2 digits entered
+                                                                            if (h.length === 2 && e.target.nextSibling?.nextSibling) {
+                                                                                e.target.nextSibling.nextSibling.focus()
+                                                                            }
+                                                                        }}
+                                                                        disabled={isDisabledInput}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <span className="text-slate-400 font-medium px-0.5">:</span>
+                                                                    <input
+                                                                        type="text"
+                                                                        maxLength={2}
+                                                                        placeholder="00"
+                                                                        className="w-6 bg-transparent text-center text-sm font-semibold outline-none disabled:opacity-60 disabled:cursor-not-allowed selection:bg-primary-100"
+                                                                        value={time.split(':')[1]}
+                                                                        onFocus={(e) => e.target.select()}
+                                                                        onChange={(e) => {
+                                                                            const m = e.target.value.replace(/\D/g, '')
+                                                                            const h = time.split(':')[0] || '00'
+                                                                            handleUpdateHour(row.id, i, `${h}:${m}`)
+                                                                        }}
+                                                                        disabled={isDisabledInput}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                                                            }
+                                                                        }}
+                                                                        onBlur={(e) => {
+                                                                            let m = parseInt(e.target.value, 10) || 0
+                                                                            if (m > 59) m = 59
+                                                                            const h = time.split(':')[0] || '00'
+                                                                            handleUpdateHour(row.id, i, `${h}:${String(m).padStart(2, '0')}`)
+                                                                        }}
+                                                                    />
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {isHoliday && !isLeaveCell && (() => {
+                                                        const hEvent = globalHolidays?.find(e => {
+                                                            const d = format(weekDays[i], 'yyyy-MM-dd')
+                                                            return format(new Date(e.startDate), 'yyyy-MM-dd') <= d && format(new Date(e.endDate), 'yyyy-MM-dd') >= d
+                                                        })
+                                                        return (
+                                                            <div className="mt-1 flex items-center justify-center gap-1">
+                                                                <span className="text-[9px] text-orange-500 font-bold uppercase tracking-tighter truncate max-w-[90px]" title={hEvent?.title}>
+                                                                    🎉 {hEvent?.title || 'Holiday'}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    })()}
+                                                    {isLeaveCell && cellLeaveType && (
+                                                        <div className={`text-[10px] text-center mt-1 font-semibold ${isLop && isPendingCell ? 'text-rose-600/80 dark:text-rose-400/80' :
+                                                            isLop && isApprovedCell ? 'text-rose-600/80 dark:text-rose-400/80' :
+                                                                isPendingCell ? 'text-amber-600/80 dark:text-amber-400/80' :
+                                                                    'text-emerald-600/80 dark:text-emerald-400/80'
+                                                            }`}>
+                                                            {cellLeaveType}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            )
+                                        })}
+
+                                        <td className={`px-4 py-4 border-r border-slate-100 dark:border-white text-center font-bold ${row.isLeaveRow ? 'text-emerald-600 dark:text-emerald-400' :
+                                            'text-emerald-600 dark:text-white'
+                                            }`}>
+                                            {formatHours(calculateRowTotal(row))}
+                                        </td>
+                                        <td className="px-4 py-4 text-center min-w-[100px]">
+                                            {row.isLeaveRow ? (
+                                                <div className="p-1.5 text-slate-300 flex justify-center">
+                                                    <span className="w-2 h-2 rounded-full opacity-50 bg-slate-300"></span>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleRemoveRow(row.id)}
+                                                    disabled={isWeekSubmitted}
+                                                    title={isWeekSubmitted ? "Submitted timesheets cannot be edited" : "Delete row"}
+                                                    className="p-2 text-rose-500/80 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 z-10 border-t-2 border-slate-100 dark:border-white">
+                            <tr className="bg-slate-50 dark:bg-black font-medium text-slate-700 dark:text-white border-t border-slate-100 dark:border-white">
+                                <td colSpan={3} className="px-6 py-4 text-sm font-bold border-r border-slate-100 dark:border-white">
+                                    <div className="flex items-center gap-2">
+                                        Office Presence (Swipe Hours)
+                                        <div className="group relative">
+                                            <Info size={14} className="text-slate-400 cursor-help" />
+                                            <div className="hidden group-hover:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 p-3 bg-slate-800 text-white text-[10px] rounded-xl shadow-2xl z-50 font-medium leading-relaxed">
+                                                Office swipe hours will be automatically captured once attendance integration is enabled by your organization.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                {weekDays.map((day, i) => {
+                                    if (!isWorkingDay(day)) return null;
+
+                                    const dayStr = format(day, 'yyyy-MM-dd');
+                                    const dayLogs = attendanceLogs?.filter(log => format(new Date(log.timestamp), 'yyyy-MM-dd') === dayStr) || [];
+                                    let swipeHours = 0;
+                                    if (dayLogs.length >= 2) {
+                                        // Calculate duration between first and last swipe of the day
+                                        const timestamps = dayLogs.map(log => new Date(log.timestamp).getTime());
+                                        const startTime = Math.min(...timestamps);
+                                        const endTime = Math.max(...timestamps);
+
+                                        // Duration in decimal hours (e.g., 8.5)
+                                        swipeHours = (endTime - startTime) / (1000 * 60 * 60);
+                                    }
+
+                                    return (
+                                        <td key={i} className="px-2 py-4 text-center text-sm font-bold text-slate-400">
+                                            {isAttendanceEnabled ? (swipeHours > 0 ? formatHours(swipeHours) : '0.00h') : '—'}
+                                        </td>
+                                    );
+                                })}
+                                <td className="px-4 py-4 text-center text-sm text-slate-400">—</td>
+                                <td className="px-4 py-4"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            {/* Attendance Integration Status */}
+            <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                        <ClipboardCheck size={16} className="text-primary" />
+                        Office Swipe Integration
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        {isAttendanceEnabled
+                            ? "Biometric attendance integration is active. Your swipe hours are automatically synced from the office gateway."
+                            : "Attendance device integration is not configured for this organization. Contact your administrator to enable real-time swipe tracking."
+                        }
+                    </p>
+                </div>
+                <div className={clsx(
+                    "px-4 py-2 border text-[10px] font-bold rounded-lg uppercase tracking-widest",
+                    isAttendanceEnabled
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                        : "bg-amber-50 border-amber-200 text-amber-700"
+                )}>
+                    Status: {isAttendanceEnabled ? 'Active' : 'Not Configured'}
+                </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-6 px-2 mt-4">
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                        <span>Daily Limit: <strong>{workingHoursPerDay} hrs</strong></span>
+                    </div>
+                    {tsSettings?.permissionMaxHoursPerDay > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium text-slate-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                            <span>Permission: <strong>{tsSettings.permissionMaxHoursPerDay} hrs/day</strong></span>
+                            {tsSettings.permissionMaxDaysPerWeek > 0 && (
+                                <span className="opacity-70 whitespace-nowrap">({tsSettings.permissionMaxDaysPerWeek} d/week max)</span>
+                            )}
+                            {tsSettings.permissionMaxDaysPerMonth > 0 && (
+                                <span className="opacity-70 whitespace-nowrap">/ ({tsSettings.permissionMaxDaysPerMonth} d/month max)</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <button
+                    onClick={() => submitWeekMutation.mutate()}
+                    disabled={submitWeekMutation.isPending || !submissionRestriction.allowed || !isAllWorkingDaysFilled || (totalWeekHours === 0 && holidays.size === 0 && !rows.some(r => r.isLeaveRow)) || isWeekSubmitted || isWeekFrozen}
+                    title={
+                        isWeekFrozen ? 'Timesheet is frozen'
+                            : isWeekSubmitted ? 'This week has already been submitted'
+                                : !submissionRestriction.allowed ? `Submission allowed starting ${submissionRestriction.dayName}`
+                                    : !isAllWorkingDaysFilled ? (isSubjectToEnforcement ? `All working days must have between ${tsSettings?.minHoursPerDay || 0}h and ${tsSettings?.maxHoursPerDay || 24}h` : 'Please fill time entries for all working days before submitting')
+                                        : ''
+                    }
+                    className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-4 btn-primary hover:opacity-90 rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:pointer-events-none"
+                >
+                    {submitWeekMutation.isPending ? (
+                        <Spinner size="sm" className="text-white" />
+                    ) : (
+                        <Send size={18} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                    )}
+                    {isWeekSubmitted ? '✓ WEEK SUBMITTED' : `SUBMIT WEEK (${formatHours(totalWeekHours)})`}
+                </button>
+            </div>
+
+            {/* Unsaved Changes Modal */}
+            {navIntent && createPortal(
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-8 pb-4 text-center">
+                            <div className="w-20 h-20 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-amber-50/50 dark:ring-amber-900/10">
+                                <AlertTriangle className="text-amber-500" size={40} />
+                            </div>
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">Unsaved Changes</h3>
+                            <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed text-sm">
+                                You have pending changes in your timesheet. Leaving now will result in data loss.
+                            </p>
+                        </div>
+
+                        <div className="p-6 pt-2 flex flex-col gap-2.5">
+                            <button
+                                onClick={() => {
+                                    // Save and proceed
+                                    bulkSaveMutation.mutate(rows.filter(r => !r.isLeaveRow))
+                                }}
+                                disabled={isWeekSubmitted || bulkSaveMutation.isPending}
+                                className="w-full h-12 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Save size={18} /> {isWeekSubmitted ? 'LOCKED' : 'SAVE DRAFT'}
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    const target = navIntent;
+                                    setIsDirty(false);
+                                    setUnsavedChanges(false);
+                                    setNavIntent(null);
+                                    navigate(target);
+                                }}
+                                className="w-full h-12 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white rounded-xl font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                            >
+                                <Trash2 size={18} className="text-rose-500" /> DON'T SAVE
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setNavIntent(null);
+                                }}
+                                className="w-full h-12 bg-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold transition-all text-xs tracking-widest uppercase"
+                            >
+                                CLOSE
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+        </div>
+    )
+}
+

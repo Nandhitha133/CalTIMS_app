@@ -149,6 +149,10 @@ if (process.env.NODE_ENV !== 'test') {
   // Payroll Scheduler
   const payrollScheduler = require('./modules/payroll/payroll.scheduler');
   payrollScheduler.start();
+
+  // Payroll Worker
+  const payrollWorker = require('./modules/payroll/payroll.worker');
+  payrollWorker.startWorker();
 }
 
 // ─── Error Handling ──────────────────────────────────────────────────────────

@@ -722,7 +722,7 @@ export default function OrganizationTab() {
               <ActivityIndicator color="white" />
             ) : (
               <View style={styles.saveButtonContent}>
-                <Save size={20} color="white" />
+                <Save size={20} color="white" style={{ marginRight: 8 }} />
                 <Text style={styles.saveButtonText}>Save Changes</Text>
               </View>
             )}
@@ -789,7 +789,7 @@ const CustomSelect = PickerSelect; // alias
 // ---------- Styles ----------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
-  scrollContent: { padding: moderateScale(16), paddingBottom: verticalScale(40) },
+  scrollContent: { padding: moderateScale(16), paddingBottom: verticalScale(120) },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
   loadingText: { marginTop: verticalScale(12), fontSize: moderateScale(14), color: '#6b7280' },
   header: { marginBottom: verticalScale(24) },
@@ -848,7 +848,7 @@ const styles = StyleSheet.create({
   impactItemDesc: { fontSize: moderateScale(12), color: '#166534', marginTop: verticalScale(2) },
   errorText: { fontSize: moderateScale(12), fontWeight: '600', color: '#ef4444', marginTop: verticalScale(4) },
   saveButton: { backgroundColor: '#6366f1', borderRadius: moderateScale(14), paddingVertical: verticalScale(16), alignItems: 'center', justifyContent: 'center', marginTop: verticalScale(8), shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
-  saveButtonContent: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8) },
+  saveButtonContent: { flexDirection: 'row', alignItems: 'center' },
   saveButtonText: { fontSize: moderateScale(14), fontWeight: '700', color: 'white', textTransform: 'uppercase' },
   pickerWrapper: {},
 });

@@ -25,11 +25,11 @@ interface StatementPreviewModalProps {
 
 const numberToWords = (num: number): string => {
   if (!num || num === 0) return 'Zero';
-  
+
   const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
   const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
   const n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
-  
+
   if (!n) return '';
   let str = '';
   str += (Number(n[1]) != 0) ? (a[Number(n[1])] || b[Number(n[1][0])] + ' ' + a[Number(n[1][1])]) + 'Crore ' : '';
@@ -48,11 +48,11 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
   const empId = payslip.employeeInfo?.employeeId || payslip.employeeId || 'N/A';
   const designation = payslip.employeeInfo?.designation || payslip.role || 'N/A';
   const department = payslip.employeeInfo?.department || 'N/A';
-  
+
   const bankName = payslip.bankDetails?.bankName || payslip.employeeInfo?.bankName || payslip.user?.bankName || 'N/A';
   const accNo = payslip.bankDetails?.accountNumber || payslip.employeeInfo?.accountNumber || payslip.user?.accountNumber || 'N/A';
   const maskedAcc = accNo.length > 4 ? '*'.repeat(accNo.length - 4) + accNo.slice(-4) : accNo;
-  
+
   const workingDays = payslip.breakdown?.workingDays || payslip.workingDays || 30;
   const payableDays = payslip.breakdown?.payableDays || payslip.payableDays || workingDays;
 
@@ -67,10 +67,10 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
 
   // Dynamic lists mapping (like the web view)
   const earningsList = (Array.isArray(payslip.breakdown?.earnings) ? payslip.breakdown.earnings : payslip.breakdown?.earnings?.components || [])
-      .filter((comp: any) => !comp.hidden && !comp.name?.includes('Metadata'));
+    .filter((comp: any) => !comp.hidden && !comp.name?.includes('Metadata'));
 
   const deductionsList = (Array.isArray(payslip.breakdown?.deductions) ? payslip.breakdown.deductions : payslip.breakdown?.deductions?.components || [])
-      .filter((comp: any) => !comp.hidden && !comp.name?.toLowerCase().includes('gratuity') && !comp.name?.includes('Metadata'));
+    .filter((comp: any) => !comp.hidden && !comp.name?.toLowerCase().includes('gratuity') && !comp.name?.includes('Metadata'));
 
   const hasLop = payslip.attendance?.lopDays > 0 && payslip.breakdown?.lopDeduction > 0;
   if (hasLop) {
@@ -106,7 +106,7 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             <View style={styles.paper}>
-              
+
               {/* Paper Header */}
               <View style={styles.paperHeaderRow}>
                 <View style={{ flex: 1, paddingRight: 10 }}>
@@ -129,7 +129,7 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
                   <View style={styles.detailRow}><Text style={styles.detailLbl}>Department</Text><Text style={styles.detailVal}>{department}</Text></View>
                   <View style={styles.detailRow}><Text style={styles.detailLbl}>Designation</Text><Text style={styles.detailVal}>{designation}</Text></View>
                 </View>
-                
+
                 <View style={styles.infoCol}>
                   <Text style={styles.sectionHeader}>FINANCIAL CONTEXT</Text>
                   <View style={styles.detailRow}><Text style={styles.detailLbl}>Working Days</Text><Text style={styles.detailVal}>{workingDays} Days</Text></View>
@@ -161,15 +161,15 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
                         {eComp ? eComp.name : addComp ? addComp.name + ' (Net Add)' : ''}
                       </Text>
                       <Text style={styles.tdRight}>
-                        {eComp ? currencySymbol + (eComp.value || eComp.calculatedValue || 0).toLocaleString(undefined, {minimumFractionDigits: 2}) 
-                         : addComp ? '+' + currencySymbol + (addComp.value || 0).toLocaleString(undefined, {minimumFractionDigits: 2}) : ''}
+                        {eComp ? currencySymbol + (eComp.value || eComp.calculatedValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
+                          : addComp ? '+' + currencySymbol + (addComp.value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
                       </Text>
-                      
+
                       <View style={styles.vDivider} />
-                      
+
                       <Text style={[styles.tdLeft, dComp?.isLop && { fontStyle: 'italic', color: '#f87171' }]}>{dComp ? dComp.name : ''}</Text>
                       <Text style={[styles.tdRight, { color: '#ef4444' }]}>
-                        {dComp ? '-' + currencySymbol + (dComp.value || dComp.calculatedValue || 0).toLocaleString(undefined, {minimumFractionDigits: 2}) : ''}
+                        {dComp ? '-' + currencySymbol + (dComp.value || dComp.calculatedValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
                       </Text>
                     </View>
                   );
@@ -178,10 +178,10 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
                 {/* Footer Row */}
                 <View style={[styles.tRow, { backgroundColor: '#f8fafc', borderBottomWidth: 0 }]}>
                   <Text style={[styles.tdLeft, { color: '#10b981', fontWeight: '800' }]}>Gross Earning</Text>
-                  <Text style={[styles.tdRight, { color: '#10b981', fontWeight: '800' }]}>{currencySymbol}{gross.toLocaleString(undefined, {minimumFractionDigits: 2})}</Text>
+                  <Text style={[styles.tdRight, { color: '#10b981', fontWeight: '800' }]}>{currencySymbol}{gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
                   <View style={styles.vDivider} />
                   <Text style={[styles.tdLeft, { color: '#ef4444', fontWeight: '800' }]}>Total Liability</Text>
-                  <Text style={[styles.tdRight, { color: '#ef4444', fontWeight: '800' }]}>-{currencySymbol}{totalDed.toLocaleString(undefined, {minimumFractionDigits: 2})}</Text>
+                  <Text style={[styles.tdRight, { color: '#ef4444', fontWeight: '800' }]}>-{currencySymbol}{totalDed.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
                 </View>
               </View>
 
@@ -189,7 +189,7 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
               <View style={styles.netBanner}>
                 <View>
                   <Text style={styles.netBannerLbl}>AUTHENTICATED NET DISBURSEMENT</Text>
-                  <Text style={styles.netBannerVal}>{currencySymbol}{net.toLocaleString(undefined, {minimumFractionDigits: 2})}</Text>
+                  <Text style={styles.netBannerVal}>{currencySymbol}{net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', flex: 1, paddingLeft: 16 }}>
                   <Text style={styles.amountWordsLbl}>AMOUNT IN WORDS</Text>
@@ -208,7 +208,7 @@ export default function StatementPreviewModal({ visible, onClose, onDownload, pa
                   <Text style={styles.footerLeft}>© {new Date().getFullYear()} {companyName.toUpperCase()}</Text>
                 </View>
               </View>
-              
+
             </View>
           </ScrollView>
         </View>
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   companyName: { fontSize: 20, fontWeight: '900', color: '#4f46e5', letterSpacing: -0.5 },
   docType: { fontSize: 10, fontWeight: '800', color: '#64748b', letterSpacing: 1, marginTop: 4 },
   docSub: { fontSize: 9, fontWeight: '700', color: '#94a3b8', letterSpacing: 1, marginTop: 2 },
-  
+
   periodValue: { fontSize: 18, fontWeight: '900', color: '#0f172a' },
   periodLabel: { fontSize: 9, fontWeight: '800', color: '#64748b', letterSpacing: 1, marginTop: 4 },
 

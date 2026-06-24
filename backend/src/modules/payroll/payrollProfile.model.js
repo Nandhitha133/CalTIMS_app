@@ -10,10 +10,10 @@ const salaryComponentSchema = new mongoose.Schema({
   },
   name: { type: String, required: true },
   value: { type: Number, default: 0 },
-  calculationType: { 
-    type: String, 
-    enum: ['Fixed', 'Percentage', 'Formula'], 
-    default: 'Fixed' 
+  calculationType: {
+    type: String,
+    enum: ['Fixed', 'Percentage', 'Formula'],
+    default: 'Fixed'
   },
   formula: { type: String, default: null }, // e.g., 'Basic * 0.12'
   config: { type: mongoose.Schema.Types.Mixed, default: {} },
@@ -106,7 +106,7 @@ const payrollProfileSchema = new mongoose.Schema(
 );
 
 // Auto-increment version on salary changes
-payrollProfileSchema.pre('save', function(next) {
+payrollProfileSchema.pre('save', function (next) {
   if (this.isModified('earnings') || this.isModified('deductions') || this.isModified('monthlyCTC')) {
     this.profileVersion += 1;
     this.lastUpdatedAt = Date.now();

@@ -18,9 +18,9 @@ const defaultPolicy = {
     pf: { enabled: true, employeeRate: 12, employerRate: 12, wageLimit: 15000 },
     pt: { enabled: true, slabs: [{ min: 0, max: 15000, amount: 0 }, { min: 15001, max: 99999999, amount: 200 }] },
     esi: { enabled: true, employeeRate: 0.75, employerRate: 3.25, wageLimit: 21000 },
-    tds: { 
-      enabled: true, 
-      regime: 'OLD', 
+    tds: {
+      enabled: true,
+      regime: 'OLD',
       threshold: 50000,
       slabs: [
         { min: 0, max: 250000, rate: 0 },
@@ -64,11 +64,11 @@ const migrateToUnifiedPolicy = async (organizationId = null) => {
   try {
     const settings = await Settings.findOne(organizationId ? { organizationId } : {}).lean();
     const orgPolicy = await OrganizationPolicy.findOne(organizationId ? { organizationId } : {}).lean();
-    
+
     if (!settings && !orgPolicy) return { ...defaultPolicy, organizationId };
 
     const legacyPayroll = settings?.payroll || {};
-    
+
     const migratedPolicy = {
       ...defaultPolicy,
       organizationId,
@@ -131,13 +131,13 @@ const getPolicy = async (organizationId = null) => {
   try {
     const query = { isActive: true };
     if (organizationId) query.organizationId = organizationId;
-    
+
     let policy = await PayrollPolicy.findOne(query).lean();
     if (!policy) {
       const migratedData = await migrateToUnifiedPolicy(organizationId);
       policy = await PayrollPolicy.create(migratedData);
     }
-    
+
     return policy;
   } catch (err) {
     logger.error(`Error fetching policy: ${err.message}`);
@@ -177,7 +177,7 @@ const updatePolicy = async (policyData, organizationId = null) => {
 
   // Update fields with a shallow merge for top level, but handle common nested objects
   const nestedKeys = ['compliance', 'attendance', 'statutory', 'leave', 'overtime'];
-  
+
   Object.keys(policyData).forEach(key => {
     if (nestedKeys.includes(key) && typeof policyData[key] === 'object' && policyData[key] !== null) {
       policy[key] = { ...policy[key], ...policyData[key] };

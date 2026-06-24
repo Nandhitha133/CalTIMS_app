@@ -1,9 +1,9 @@
 import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-import { 
-    Users, Landmark, Wallet, ShieldCheck, 
-    LayoutDashboard, Receipt, Printer, Download, X 
+import {
+    Users, Landmark, Wallet, ShieldCheck,
+    LayoutDashboard, Receipt, Printer, Download, X
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -21,7 +21,7 @@ const formatCurrency = (val) => {
     });
 };
 
-const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = () => {}, contentOnly = false }) => {
+const StatementPreview = ({ payslip, settings, onClose = () => { }, onDownload = () => { }, contentOnly = false }) => {
     const { payslipDesign } = useSettingsStore();
     const payslipRef = useRef(null);
     const [dynamicHtml, setDynamicHtml] = React.useState('');
@@ -64,17 +64,17 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
             const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             const link = document.createElement('a');
             link.href = url;
-            
+
             const empCode = payslip.employeeInfo?.employeeId || payslip.employee?.employeeCode || 'EMP';
             const filename = `Payslip_${empCode}_${monthName}_${payslip.year}.pdf`;
-            
+
             link.setAttribute('download', filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
-            
-            toast.success('Downloaded successfully!', { 
+
+            toast.success('Downloaded successfully!', {
                 id: toastId,
                 icon: '📄'
             });
@@ -91,7 +91,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
     const monthName = new Date(2024, payslip.month - 1).toLocaleString('default', { month: 'long' });
 
     const legacyContent = (
-        <div 
+        <div
             ref={payslipRef}
             className={clsx(
                 "bg-white dark:bg-[#1a1a1a] relative overflow-hidden",
@@ -100,7 +100,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
         >
             {/* Background Image Support */}
             {payslipDesign?.backgroundImageUrl && (
-                <div 
+                <div
                     className="absolute inset-0 opacity-20 pointer-events-none bg-cover bg-center z-0"
                     style={{ backgroundImage: `url(${payslipDesign.backgroundImageUrl})` }}
                 />
@@ -136,7 +136,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
             <div className="grid grid-cols-2 gap-16">
                 <div className="space-y-6">
                     <div className="flex items-center gap-2 border-b border-slate-50 dark:border-white/5 pb-2">
-                        <Users size={14} className="text-indigo-500"/>
+                        <Users size={14} className="text-indigo-500" />
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee Details</span>
                     </div>
                     <div className="grid grid-cols-2 gap-y-4 text-xs">
@@ -152,7 +152,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                 </div>
                 <div className="space-y-6">
                     <div className="flex items-center gap-2 border-b border-slate-50 dark:border-white/5 pb-2">
-                        <Landmark size={14} className="text-indigo-500"/>
+                        <Landmark size={14} className="text-indigo-500" />
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Financial Context</span>
                     </div>
                     <div className="grid grid-cols-2 gap-y-4 text-xs">
@@ -160,7 +160,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                         <span className="font-black text-slate-800 dark:text-white text-right">{payslip.breakdown?.workingDays || 30} Days</span>
                         <span className="font-bold text-slate-500 dark:text-slate-400">Payable Days</span>
                         <span className="font-black text-indigo-500 text-right">{payslip.breakdown?.payableDays || 0} Days</span>
-                        
+
                         <span className="font-bold text-slate-500 dark:text-slate-400">Bank Interface</span>
                         <span className="font-black text-slate-800 dark:text-white text-right">{payslip.bankDetails?.bankName || 'N/A'}</span>
                         <span className="font-bold text-slate-500 dark:text-slate-400">Account No.</span>
@@ -175,7 +175,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
             {Array.isArray(payslip.breakdown?.employerContributions) && payslip.breakdown.employerContributions.length > 0 && (
                 <div className="p-6 bg-slate-50/50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200/50 dark:border-white/10 pb-2">
-                        <ShieldCheck size={14} className="text-emerald-500"/>
+                        <ShieldCheck size={14} className="text-emerald-500" />
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employer Contributions (Provisioning)</span>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -196,11 +196,11 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                         {(Array.isArray(payslip.breakdown?.earnings) ? payslip.breakdown.earnings : payslip.breakdown?.earnings?.components || [])
                             .filter(comp => !comp.hidden && !comp.name?.includes('Metadata'))
                             .map((comp, idx) => (
-                            <div key={idx} className="flex justify-between text-xs font-bold border-b border-slate-50 dark:border-white/5 pb-3">
-                                <span className="text-slate-500 dark:text-slate-400">{comp.name}</span>
-                                <span className="text-slate-800 dark:text-white">{currencySymbol}{formatCurrency(comp.value || comp.calculatedValue)}</span>
-                            </div>
-                        ))}
+                                <div key={idx} className="flex justify-between text-xs font-bold border-b border-slate-50 dark:border-white/5 pb-3">
+                                    <span className="text-slate-500 dark:text-slate-400">{comp.name}</span>
+                                    <span className="text-slate-800 dark:text-white">{currencySymbol}{formatCurrency(comp.value || comp.calculatedValue)}</span>
+                                </div>
+                            ))}
                         <div className="flex justify-between items-center py-4 bg-emerald-50/50 dark:bg-emerald-500/10 px-4 rounded-xl border border-emerald-100/50 dark:border-emerald-500/20">
                             <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Gross Earning</span>
                             <span className="text-xl font-black text-emerald-700 dark:text-emerald-300">{currencySymbol}{formatCurrency(payslip.grossYield || payslip.breakdown?.earnings?.grossEarnings || payslip.breakdown?.grossPay)}</span>
@@ -224,11 +224,11 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                         {(Array.isArray(payslip.breakdown?.deductions) ? payslip.breakdown.deductions : payslip.breakdown?.deductions?.components || [])
                             .filter(comp => !comp.hidden && !comp.name?.toLowerCase().includes('gratuity') && !comp.name?.includes('Metadata'))
                             .map((comp, idx) => (
-                            <div key={idx} className="flex justify-between text-xs font-bold border-b border-slate-50 dark:border-white/5 pb-3">
-                                <span className="text-slate-500 dark:text-slate-400">{comp.name}</span>
-                                <span className="text-rose-500">{currencySymbol}{formatCurrency(comp.value || comp.calculatedValue)}</span>
-                            </div>
-                        ))}
+                                <div key={idx} className="flex justify-between text-xs font-bold border-b border-slate-50 dark:border-white/5 pb-3">
+                                    <span className="text-slate-500 dark:text-slate-400">{comp.name}</span>
+                                    <span className="text-rose-500">{currencySymbol}{formatCurrency(comp.value || comp.calculatedValue)}</span>
+                                </div>
+                            ))}
                         {payslip.attendance?.lopDays > 0 && payslip.breakdown?.lopDeduction > 0 && (
                             <div className="flex justify-between text-xs font-bold border-b border-rose-100 dark:border-rose-500/20 pb-3">
                                 <span className="text-rose-400 italic">Attendance Adjustment</span>
@@ -275,8 +275,8 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                     <p className="text-xs font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Securing Document...</p>
                 </div>
             ) : dynamicHtml ? (
-                <iframe 
-                    srcDoc={dynamicHtml} 
+                <iframe
+                    srcDoc={dynamicHtml}
                     className="w-full h-full min-h-[842px] border-none"
                     title="Dynamic Payslip"
                 />
@@ -290,7 +290,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
 
     return createPortal(
         <div className="fixed inset-0 z-[999] flex items-center justify-end bg-slate-900/60 dark:bg-black/80 backdrop-blur-md animate-in fade-in duration-300 no-print">
-            <motion.div 
+            <motion.div
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 className="w-full max-w-4xl h-full bg-white dark:bg-[#111111] shadow-2xl flex flex-col overflow-hidden"
@@ -314,7 +314,7 @@ const StatementPreview = ({ payslip, settings, onClose = () => {}, onDownload = 
                                 <Download size={20}/>
                             )}
                         </button> */}
-                        <button 
+                        <button
                             onClick={onClose}
                             className="p-2.5 bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-xl transition-all ml-2"
                         >

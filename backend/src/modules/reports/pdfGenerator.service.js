@@ -122,8 +122,8 @@ class PDFGeneratorService {
      * @param {Object} payroll - Processed payroll data
      * @returns {Promise<Buffer>}
      */
-    async generatePayslipBuffer(payroll, settings = {}) {
-        return this._renderHtmlToPdf(payroll, settings);
+    async generatePayslipBuffer(payroll, settings = {}, customHtml = null) {
+        return this._renderHtmlToPdf(payroll, settings, customHtml);
     }
 
     /**

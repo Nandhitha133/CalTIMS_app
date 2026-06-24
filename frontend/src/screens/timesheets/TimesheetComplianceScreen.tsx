@@ -211,7 +211,7 @@ const FillModal = ({
   const [pickerTitle, setPickerTitle] = useState('');
   const [pickerOptions, setPickerOptions] = useState<{ label: string; value: string }[]>([]);
   const [pickerValue, setPickerValue] = useState<string>('');
-  const [onPickerSelect, setOnPickerSelect] = useState<(val: string) => void>(() => {});
+  const [onPickerSelect, setOnPickerSelect] = useState<(val: string) => void>(() => { });
 
   useEffect(() => {
     if (visible) {
@@ -248,12 +248,12 @@ const FillModal = ({
   const handleUpdateHour = (rowId: string, dayIndex: number, value: string) => {
     // Only allow numeric input
     const hours = value.replace(/\D/g, '').slice(0, 2);
-    
+
     setRows(rows.map(r => {
       if (r.id !== rowId) return r;
       const newHours = [...r.dayHours];
       const currentM = r.dayHours[dayIndex].split(':')[1] || '00';
-      
+
       // Store exactly what they typed to allow empty strings/clearing
       newHours[dayIndex] = `${hours}:${currentM}`;
       return { ...r, dayHours: newHours };
@@ -414,14 +414,14 @@ const FillModal = ({
                       })}
 
                       <View style={[modalStyles.cell, modalStyles.actionCell]}>
-                        <TouchableOpacity 
-                          style={modalStyles.rowActionBtn} 
+                        <TouchableOpacity
+                          style={modalStyles.rowActionBtn}
                           onPress={() => handleFillRowStandardHours(row.id)}
                         >
                           <Zap size={14} color="#3b82f6" />
                         </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={modalStyles.rowActionBtn} 
+                        <TouchableOpacity
+                          style={modalStyles.rowActionBtn}
                           onPress={() => handleRemoveRow(row.id)}
                         >
                           <Trash2 size={14} color="#ef4444" />
@@ -463,9 +463,9 @@ const FillModal = ({
 
       {/* Picker Selector Modal */}
       <Modal visible={pickerVisible} transparent animationType="fade" onRequestClose={() => setPickerVisible(false)}>
-        <TouchableOpacity 
-          style={modalStyles.pickerOverlay} 
-          activeOpacity={1} 
+        <TouchableOpacity
+          style={modalStyles.pickerOverlay}
+          activeOpacity={1}
           onPress={() => setPickerVisible(false)}
         >
           <View style={[modalStyles.pickerContent, { backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff' }]}>
@@ -583,14 +583,14 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
   const filteredComplianceData = useMemo(() => {
     if (!searchQuery.trim()) return complianceData;
     const term = searchQuery.trim().toLowerCase();
-    
+
     return complianceData.filter(item => {
       const nameMatch = (item.user?.name || '').toLowerCase().includes(term);
       const emailMatch = (item.user?.email || '').toLowerCase().includes(term);
       const employeeIdMatch = (item.user?.employeeId || '').toLowerCase().includes(term);
       const departmentMatch = (item.user?.department || '').toLowerCase().includes(term);
       const statusMatch = (item.status || '').toLowerCase().includes(term);
-      
+
       return nameMatch || emailMatch || employeeIdMatch || departmentMatch || statusMatch;
     });
   }, [complianceData, searchQuery]);
@@ -790,7 +790,7 @@ export default function TimesheetComplianceScreen({ navigation }: { navigation: 
       >
         <View style={styles.container}>
           <View style={styles.content}>
-          
+
 
             {/* Week Navigation */}
             <View style={[styles.navContainer, {

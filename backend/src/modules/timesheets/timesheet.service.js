@@ -82,6 +82,42 @@ async function getFreezeInfo(weekStartDate, organizationId) {
   return { isFrozen, freezeDay, currentDay };
 }
 
+/**
+ * Internal helper to check if a week should be weekly locked (frozen)
+ */
+async function getWeeklyLockInfo(weekStartDate, organizationId) {
+  const settingsDoc = await Settings.findOne({ organizationId }).lean();
+  const timesheetSettings = settingsDoc?.timesheet || {};
+  const complianceSettings = settingsDoc?.compliance || {};
+  
+  const autoLockDeadlineStr = timesheetSettings.freezeTimesheet || complianceSettings.autoFreezeTimesheets || 'Monday 18:00';
+  const wsd = settingsDoc?.general?.weekStartDay || 'monday';
+  
+  const [dayName, timeStr] = autoLockDeadlineStr.trim().split(/\s+/);
+  const daysMap = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
+  const targetDayIndex = daysMap[dayName?.toLowerCase()] ?? 1;
+
+  const isMondayStart = wsd.toLowerCase() === 'monday';
+  let offset = isMondayStart ? (targetDayIndex === 0 ? 6 : targetDayIndex - 1) : targetDayIndex;
+
+  // If the lock day is Mon/Tue/Wed (offset <= 2), it refers to the NEXT week (add 7 days).
+  // Otherwise it's THIS week (offset).
+  const lockDaysOffset = offset <= 2 ? 7 + offset : offset;
+
+  const lockDate = new Date(weekStartDate);
+  lockDate.setDate(lockDate.getDate() + lockDaysOffset);
+
+  if (timeStr) {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    lockDate.setHours(hours || 0, minutes || 0, 0, 0);
+  } else {
+    lockDate.setHours(23, 59, 59, 999);
+  }
+
+  const isFrozen = new Date() > lockDate;
+  return { isFrozen, lockDate };
+}
+
 const timesheetService = {
   // ─── Core CRUD ──────────────────────────────────────────────────────────────
   async create(data, userId, organizationId) {
@@ -119,13 +155,18 @@ const timesheetService = {
     if (ts.userId.toString() !== userId.toString()) throw new AppError('Unauthorized', 403);
 
     const { isFrozen } = await getFreezeInfo(ts.weekStartDate, organizationId);
-    if (ts.status === TIMESHEET_STATUS.FROZEN || isFrozen) {
+    const { isFrozen: isWeeklyFrozen, lockDate } = await getWeeklyLockInfo(ts.weekStartDate, organizationId);
+
+    if (ts.status === TIMESHEET_STATUS.FROZEN || isFrozen || isWeeklyFrozen) {
       if (ts.status !== TIMESHEET_STATUS.FROZEN) {
         ts.status = TIMESHEET_STATUS.FROZEN;
         ts.frozenAt = new Date();
         await ts.save();
       }
-      throw new AppError('Timesheet is frozen and cannot be edited. Please raise a Help & Support ticket.', 400);
+      const message = isWeeklyFrozen
+        ? `Timesheet is frozen. The lock deadline (${lockDate.toLocaleString()}) has passed.`
+        : 'Timesheet is frozen and cannot be edited. Please raise a Help & Support ticket.';
+      throw new AppError(message, 400);
     }
     if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(ts.status)) {
       throw new AppError('Cannot edit submitted/approved timesheets', 400);
@@ -277,6 +318,7 @@ const timesheetService = {
       let timesheet = await Timesheet.findOne({ userId, weekStartDate: weekStart, organizationId });
 
       const { isFrozen } = await getFreezeInfo(weekStart, organizationId);
+      const { isFrozen: isWeeklyFrozen, lockDate } = await getWeeklyLockInfo(weekStart, organizationId);
 
       if (!timesheet) {
         timesheet = new Timesheet({
@@ -284,19 +326,22 @@ const timesheetService = {
           organizationId,
           weekStartDate: weekStart,
           weekEndDate: weekEnd,
-          status: isFrozen ? TIMESHEET_STATUS.FROZEN : TIMESHEET_STATUS.DRAFT,
+          status: (isFrozen || isWeeklyFrozen) ? TIMESHEET_STATUS.FROZEN : TIMESHEET_STATUS.DRAFT,
           rows: [],
-          frozenAt: isFrozen ? new Date() : null
+          frozenAt: (isFrozen || isWeeklyFrozen) ? new Date() : null
         });
       }
 
-      if (timesheet.status === TIMESHEET_STATUS.FROZEN || isFrozen) {
+      if (timesheet.status === TIMESHEET_STATUS.FROZEN || isFrozen || isWeeklyFrozen) {
         if (timesheet.status !== TIMESHEET_STATUS.FROZEN) {
           timesheet.status = TIMESHEET_STATUS.FROZEN;
           timesheet.frozenAt = new Date();
           await timesheet.save();
         }
-        throw new AppError(`Cannot update a frozen timesheet for week ${weekStart.toDateString()}. Please raise a Help & Support ticket.`, 400);
+        const message = isWeeklyFrozen
+          ? `Timesheet is frozen. The lock deadline (${lockDate.toLocaleString()}) has passed.`
+          : `Cannot update a frozen timesheet for week ${weekStart.toDateString()}. Please raise a Help & Support ticket.`;
+        throw new AppError(message, 400);
       }
       if (![TIMESHEET_STATUS.DRAFT, TIMESHEET_STATUS.REJECTED].includes(timesheet.status)) {
         throw new AppError(`Cannot update a ${timesheet.status} timesheet for week ${weekStart.toDateString()}`, 400);
@@ -585,9 +630,17 @@ const timesheetService = {
         throw new AppError(`Submission for the current week is restricted. Please submit on or after ${formattedDay}.`, 400);
       }
 
-      // Validate zero hours
+      const { isFrozen: isWeeklyFrozen, lockDate } = await getWeeklyLockInfo(ws, organizationId);
+      if (isWeeklyFrozen) {
+        throw new AppError(`This timesheet is frozen and cannot be submitted. The submission deadline (${lockDate.toLocaleString()}) has passed.`, 400);
+      }
+
+      // Validate zero hours and task selection
       const isSystemRow = !data.projectId || data.projectId === 'LEAVE-SYS' || data.category === 'Leave' || data.category === 'Holiday' || data.category === PERMISSION_MARKER;
       if (!isSystemRow) {
+        if (!data.category || data.category.trim() === '' || data.category === 'Select Task' || data.category === 'Not Mapped') {
+          throw new AppError('A valid task must be selected for all project rows.', 400);
+        }
         const totalHours = data.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
         if (totalHours === 0) {
           throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);
@@ -696,11 +749,19 @@ const timesheetService = {
       throw new AppError('You do not have permission to submit this timesheet', 403);
     }
 
-    // Validate zero hours
+    const { isFrozen: isWeeklyFrozen, lockDate } = await getWeeklyLockInfo(ts.weekStartDate, organizationId);
+    if (isWeeklyFrozen) {
+      throw new AppError(`This timesheet is frozen and cannot be submitted. The submission deadline (${lockDate.toLocaleString()}) has passed.`, 400);
+    }
+
+    // Validate zero hours and task selection
     for (const row of ts.rows) {
       const pId = row.projectId ? row.projectId.toString() : null;
       const isSystemRow = !pId || pId === 'LEAVE-SYS' || row.category === 'Leave' || row.category === 'Holiday' || row.category === PERMISSION_MARKER;
       if (!isSystemRow) {
+        if (!row.category || row.category.trim() === '' || row.category === 'Select Task' || row.category === 'Not Mapped') {
+          throw new AppError('A valid task must be selected for all project rows.', 400);
+        }
         const totalHours = row.entries?.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0) || 0;
         if (totalHours === 0) {
           throw new AppError('Cannot submit timesheet with a project having 0 working hours. Please remove it or add hours.', 400);

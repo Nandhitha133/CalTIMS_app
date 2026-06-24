@@ -26,13 +26,12 @@ exports.generatePayslipPdf = async (payrollId, organizationId) => {
     const orgSettings = await prisma.orgSettings.findUnique({ where: { organizationId: organizationId || payroll.organizationId } });
     const settings = orgSettings ? orgSettings.data : {};
 
-    // 1. Get the template
     let template;
     if (payroll.payslipTemplateId) {
-        template = await prisma.payslipTemplate.findUnique({ where: { id: payroll.payslipTemplateId } });
+        template = await prisma.payslipTemplate.findUnique({ where: { id: payroll.payslipTemplateId.toString() } });
     }
     if (!template) {
-        template = await payslipTemplateService.getDefaultTemplate(payroll.organizationId);
+        template = await payslipTemplateService.getDefaultTemplate(payroll.organizationId?.toString());
     }
 
     // 2. Determine HTML and Background
@@ -62,10 +61,10 @@ exports.generatePayslipBuffer = async (payroll, organizationId) => {
 
     let template;
     if (payroll.payslipTemplateId) {
-        template = await prisma.payslipTemplate.findUnique({ where: { id: payroll.payslipTemplateId } });
+        template = await prisma.payslipTemplate.findUnique({ where: { id: payroll.payslipTemplateId.toString() } });
     }
     if (!template) {
-        template = await payslipTemplateService.getDefaultTemplate(payroll.organizationId);
+        template = await payslipTemplateService.getDefaultTemplate(payroll.organizationId?.toString());
     }
 
     let templateHtml = template?.htmlContent;

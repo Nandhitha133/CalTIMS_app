@@ -105,9 +105,10 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
   const esiConfig = resolveStatutory('esi', policy?.profile, policy?.statutory);
   const ptConfig = resolveStatutory('pt', policy?.profile, policy?.statutory);
   const gratuityConfig = resolveStatutory('gratuity', policy?.profile, policy?.statutory);
+  const retirementConfig = resolveStatutory('retirement', policy?.profile, policy?.statutory);
 
   // ── 3. Base Gross (Full-Month, before proration) ──────────────────────────
-  const filteredEarnings = earnings.filter(e => !e.hidden && !e._isStatutoryConfig && !(e.name || '').includes('Metadata'));
+  const filteredEarnings = earnings.filter(e => !e.hidden && !e._isStatutoryConfig && !(e.name || '').toLowerCase().includes('metadata'));
 
   // Pass 1: CTC-based earnings
   filteredEarnings.filter(e => !e.basedOn || e.basedOn === 'CTC').forEach(comp => {
@@ -171,8 +172,16 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
 
   // Gratuity
   if (gratuityConfig.enabled && basicSalary > 0) {
-    const gratuityAmount = applyRounding((basicSalary * (15 / 26)) / 12);
+    const rate = gratuityConfig.employeePercent !== undefined ? gratuityConfig.employeePercent : (gratuityConfig.employeeRate !== undefined ? gratuityConfig.employeeRate : 4.86);
+    const gratuityAmount = applyRounding((basicSalary * rate) / 100);
     results.employerContributions.push({ name: 'Gratuity Provision', calculatedValue: gratuityAmount, source: gratuityConfig.source });
+  }
+
+  // Retirement
+  if (retirementConfig.enabled && basicSalary > 0) {
+    const rate = retirementConfig.employeePercent !== undefined ? retirementConfig.employeePercent : (retirementConfig.employeeRate !== undefined ? retirementConfig.employeeRate : 5.0);
+    const retirementAmount = applyRounding((basicSalary * rate) / 100);
+    results.employerContributions.push({ name: 'Retirement Provision', calculatedValue: retirementAmount, source: retirementConfig.source });
   }
 
   // ── 6. Profile Deductions (prorated) ─────────────────────────────────────

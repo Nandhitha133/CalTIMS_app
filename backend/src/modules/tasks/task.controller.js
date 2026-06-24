@@ -6,7 +6,7 @@ class TaskController {
   async getAll(req, res, next) {
     try {
       const organizationId = req.organizationId;
-      const { data, pagination } = await taskService.getAll(req.query, organizationId);
+      const { data, pagination } = await taskService.getAll(req.query, req.user, organizationId);
       res.status(200).json({ success: true, data, pagination });
     } catch (error) {
       next(error);

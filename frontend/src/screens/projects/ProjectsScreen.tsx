@@ -1458,7 +1458,7 @@ export default function ProjectsScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search projects..."
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#64748b"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 onSubmitEditing={fetchProjects}
@@ -1520,7 +1520,7 @@ export default function ProjectsScreen() {
                   <TextInput
                     style={styles.filterInput}
                     placeholder="Enter project code (e.g. PRJ-001)"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#64748b"
                     value={tempFilters.projectCode}
                     onChangeText={(val) => setTempFilters(prev => ({ ...prev, projectCode: val }))}
                   />
@@ -1705,7 +1705,7 @@ export default function ProjectsScreen() {
                   <TextInput
                     style={modalStyles.input}
                     placeholder="Enter project name"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#64748b"
                     value={formData.name}
                     onChangeText={(val) => setFormData(prev => ({ ...prev, name: val }))}
                   />
@@ -1716,7 +1716,7 @@ export default function ProjectsScreen() {
                   <TextInput
                     style={[modalStyles.input, { textTransform: 'uppercase' }]}
                     placeholder="e.g. PRJ-001"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#64748b"
                     value={formData.code}
                     onChangeText={(val) => setFormData(prev => ({ ...prev, code: val }))}
                     editable={!showEditModal}
@@ -1728,7 +1728,7 @@ export default function ProjectsScreen() {
                   <TextInput
                     style={modalStyles.input}
                     placeholder="Enter client name"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#64748b"
                     value={formData.clientName}
                     onChangeText={(val) => setFormData(prev => ({ ...prev, clientName: val }))}
                   />
@@ -1791,7 +1791,7 @@ export default function ProjectsScreen() {
                   <TextInput
                     style={modalStyles.input}
                     placeholder="Enter budget hours"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#64748b"
                     keyboardType="numeric"
                     value={String(formData.budgetHours || '')}
                     onChangeText={(val) => setFormData(prev => ({ ...prev, budgetHours: Number(val.replace(/\D/g, '')) }))}
@@ -1803,7 +1803,7 @@ export default function ProjectsScreen() {
                   <TextInput
                     style={[modalStyles.input, modalStyles.textArea]}
                     placeholder="Enter project description"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="#64748b"
                     multiline
                     numberOfLines={3}
                     value={formData.description}
@@ -1843,7 +1843,7 @@ export default function ProjectsScreen() {
                           <TextInput
                             style={modalStyles.smallInput}
                             placeholder="Role (e.g. Dev)"
-                            placeholderTextColor="#94a3b8"
+                            placeholderTextColor="#64748b"
                             value={emp.role}
                             onChangeText={(val) => updateTeamMember(idx, 'role', val)}
                           />
@@ -2078,10 +2078,10 @@ const styles = StyleSheet.create({
   statIcon: { width: scale(36), height: verticalScale(36), borderRadius: moderateScale(18), alignItems: 'center', justifyContent: 'center', marginBottom: verticalScale(12) },
   statValue: { fontSize: moderateScale(22), fontWeight: '800', color: '#1e293b' },
   statLabel: { fontSize: moderateScale(10), fontWeight: '700', color: '#64748b', marginTop: verticalScale(4), letterSpacing: 0.5 },
-  searchContainer: { flexDirection: 'row', gap: moderateScale(12), marginBottom: verticalScale(16) },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), minHeight: verticalScale(48), gap: moderateScale(8) },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(12), marginBottom: verticalScale(16) },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), height: verticalScale(48), gap: moderateScale(8) },
   searchInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b', paddingVertical: 0, height: '100%' },
-  filterButton: { width: scale(44), height: verticalScale(44), borderRadius: moderateScale(12), backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  filterButton: { width: scale(48), height: verticalScale(48), borderRadius: moderateScale(12), backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   filterBadge: { position: 'absolute', top: verticalScale(-4), right: scale(-4), backgroundColor: '#3b82f6', borderRadius: moderateScale(10), minWidth: scale(18), height: verticalScale(18), alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(4) },
   filterBadgeText: { color: 'white', fontSize: moderateScale(10), fontWeight: '700' },

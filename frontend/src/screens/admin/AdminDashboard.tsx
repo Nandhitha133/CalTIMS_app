@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
@@ -247,6 +247,7 @@ const OrganizationCard = ({ org }: { org: Organization }) => {
 // Main Component
 export default function AdminDashboard() {
   const navigation = useNavigation();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
@@ -581,15 +582,16 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -6,
+    gap: 12,
     marginBottom: 20,
   },
   metricCard: {
-    width: '46%', // Responsive width using percentage
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 140,
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 14,
-    marginHorizontal: '2%',
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',

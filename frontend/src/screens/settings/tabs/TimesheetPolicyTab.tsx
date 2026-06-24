@@ -549,8 +549,8 @@ export default function TimesheetPolicyTab() {
           scrollEnabled={scrollEnabled}
         >
           <PageHeader
-            title="Timesheet Governance"
-            subtitle="Configure entry rules, approval workflows, and limits"
+            title="Timesheet Policies"
+            subtitle="Control entry rules, approval workflows, and limits"
             icon={CalendarDays}
             iconColor="#6366f1"
             iconBgColor="#eef2ff"
@@ -843,9 +843,9 @@ export default function TimesheetPolicyTab() {
           {/* Enforce on Submit Toggle */}
           <View style={styles.toggleContainer}>
             <View style={styles.toggleHeader}>
-              <View>
-                <View style={styles.toggleTitleRow}>
-                  <Text style={styles.toggleTitle}>Hard Enforcement</Text>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <View style={[styles.toggleTitleRow, { gap: 0 }]}>
+                  <Text style={[styles.toggleTitle, { marginRight: 8 }]}>Hard Enforcement</Text>
                   <View style={[styles.enforcementBadge, policy.enforceMinHoursOnSubmit && styles.enforcementBadgeActive]}>
                     <Text style={[styles.enforcementBadgeText, policy.enforceMinHoursOnSubmit && styles.enforcementBadgeTextActive]}>
                       {policy.enforceMinHoursOnSubmit ? 'ACTIVE' : 'INACTIVE'}
@@ -864,11 +864,11 @@ export default function TimesheetPolicyTab() {
               />
             </View>
 
-            <View style={[styles.warningBox, policy.enforceMinHoursOnSubmit && styles.warningBoxActive]}>
+            <View style={[styles.warningBox, policy.enforceMinHoursOnSubmit && styles.warningBoxActive, { gap: 0 }]}>
               {policy.enforceMinHoursOnSubmit ? (
-                <Lock size={14} color="#ef4444" />
+                <Lock size={14} color="#ef4444" style={{ marginRight: 10, marginTop: 2 }} />
               ) : (
-                <Unlock size={14} color="#94a3b8" />
+                <Unlock size={14} color="#94a3b8" style={{ marginRight: 10, marginTop: 2 }} />
               )}
               <Text style={[styles.warningText, policy.enforceMinHoursOnSubmit && styles.warningTextActive]}>
                 {policy.enforceMinHoursOnSubmit ? (
@@ -899,7 +899,7 @@ export default function TimesheetPolicyTab() {
               <ActivityIndicator color="white" />
             ) : (
               <View style={styles.saveButtonContent}>
-                <Save size={20} color="white" />
+                <Save size={20} color="white" style={{ marginRight: 10 }} />
                 <Text style={styles.saveButtonText}>Save Policies</Text>
               </View>
             )}
@@ -938,14 +938,14 @@ export default function TimesheetPolicyTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   scrollView: { flex: 1 },
-  content: { padding: moderateScale(16), paddingBottom: verticalScale(32) },
+  content: { padding: moderateScale(16), paddingBottom: verticalScale(120) },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
   loadingText: { marginTop: verticalScale(12), fontSize: moderateScale(14), color: '#64748b' },
   description: { fontSize: moderateScale(13), color: '#64748b', marginTop: verticalScale(4) },
   saveButton: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(8), paddingHorizontal: scale(20), paddingVertical: verticalScale(10), backgroundColor: '#1e293b', borderRadius: moderateScale(14) },
   saveButtonDisabled: { opacity: 0.5 },
   bottomSaveButton: { backgroundColor: '#6366f1', borderRadius: moderateScale(16), paddingVertical: verticalScale(16), alignItems: 'center', justifyContent: 'center', marginTop: verticalScale(10), marginBottom: verticalScale(20), shadowColor: '#6366f1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
-  saveButtonContent: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(10) },
+  saveButtonContent: { flexDirection: 'row', alignItems: 'center' },
   saveButtonText: { fontSize: moderateScale(16), fontWeight: '700', color: '#fff' },
   sectionCard: { backgroundColor: '#fff', borderRadius: moderateScale(24), borderWidth: 1, borderColor: '#e2e8f0', marginBottom: verticalScale(20), overflow: 'hidden' },
   sectionHeader: { padding: moderateScale(16), borderBottomWidth: 1, borderBottomColor: '#f1f5f9', backgroundColor: '#f8fafc' },

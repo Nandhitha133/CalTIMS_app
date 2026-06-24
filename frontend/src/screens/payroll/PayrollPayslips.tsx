@@ -131,13 +131,18 @@ export default function PayrollPayslips() {
       const payslip = payslips.find(p => (p._id || p.id) === id);
       if (!payslip) throw new Error('Payslip data not found');
 
-      const base64Data = await payrollAPI.downloadPayslip(id);
       const fileName = `Payslip_${name.replace(/\\s+/g, '_')}_${months[month - 1]}_${year}.pdf`;
-      
-      if (base64Data) {
-        await exportFile(base64Data as string, fileName, 'application/pdf', true);
-      } else {
-        throw new Error('Failed to fetch the PDF data.');
+      const res = await payrollAPI.downloadPayslip(id);
+
+      const success = await exportFile(
+        res as unknown as string,
+        fileName,
+        'application/pdf',
+        true
+      );
+
+      if (!success) {
+        throw new Error('Failed to save the PDF data.');
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to download payslip');
@@ -368,7 +373,7 @@ export default function PayrollPayslips() {
               <Text style={styles.kpiLabel}>PAYROLL RECORDS</Text>
               <Users size={16} color="#64748b" />
             </View>
-            <Text style={styles.kpiValue}>{kpis.processed}</Text>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{kpis.processed}</Text>
             <Text style={styles.kpiSub}>Processed employees</Text>
           </View>
 
@@ -377,7 +382,7 @@ export default function PayrollPayslips() {
               <Text style={styles.kpiLabel}>GENERATED</Text>
               <FileText size={16} color="#3b82f6" />
             </View>
-            <Text style={styles.kpiValue}>{kpis.generated}</Text>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{kpis.generated}</Text>
             <Text style={styles.kpiSub}>Statements ready</Text>
           </View>
 
@@ -386,7 +391,7 @@ export default function PayrollPayslips() {
               <Text style={styles.kpiLabel}>MARKED AS PAID</Text>
               <CreditCard size={16} color="#10b981" />
             </View>
-            <Text style={styles.kpiValue}>{kpis.paid}</Text>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{kpis.paid}</Text>
             <Text style={styles.kpiSub}>Salary disbursed</Text>
           </View>
 
@@ -395,7 +400,7 @@ export default function PayrollPayslips() {
               <Text style={styles.kpiLabel}>SENT TO EMPLOYEES</Text>
               <Mail size={16} color="#8b5cf6" />
             </View>
-            <Text style={styles.kpiValue}>{kpis.sent}</Text>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{kpis.sent}</Text>
             <Text style={styles.kpiSub}>Emails dispatched</Text>
           </View>
         </ScrollView>
@@ -527,21 +532,23 @@ export default function PayrollPayslips() {
                   </View>
 
                   {/* Financials */}
-                  <View style={styles.financialGrid}>
-                    <View style={styles.finCol}>
-                      <Text style={styles.finLabel}>GROSS AMOUNT</Text>
-                      <Text style={styles.finValueDark}>{currencySymbol}{grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={[styles.financialGrid, { minWidth: scale(300) }]}>
+                      <View style={styles.finCol}>
+                        <Text style={styles.finLabel}>GROSS AMOUNT</Text>
+                        <Text style={styles.finValueDark}>{currencySymbol}{grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                      </View>
+                      <View style={styles.finCol}>
+                        <Text style={styles.finLabel}>DEDUCTIONS</Text>
+                        <Text style={[styles.finValueDark, { color: '#ef4444' }]}>-{currencySymbol}{deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                      </View>
+                      <View style={styles.finCol}>
+                        <Text style={styles.finLabel}>NET PAYOUT</Text>
+                        <Text style={[styles.finValueDark, { color: '#10b981', fontWeight: '800' }]}>{currencySymbol}{netPayout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                        {isPaid && <Text style={styles.finDate}>Paid {month}/{year}</Text>}
+                      </View>
                     </View>
-                    <View style={styles.finCol}>
-                      <Text style={styles.finLabel}>DEDUCTIONS</Text>
-                      <Text style={[styles.finValueDark, { color: '#ef4444' }]}>-{currencySymbol}{deductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
-                    </View>
-                    <View style={styles.finCol}>
-                      <Text style={styles.finLabel}>NET PAYOUT</Text>
-                      <Text style={[styles.finValueDark, { color: '#10b981', fontWeight: '800' }]}>{currencySymbol}{netPayout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
-                      {isPaid && <Text style={styles.finDate}>Paid {month}/{year}</Text>}
-                    </View>
-                  </View>
+                  </ScrollView>
 
                   {/* Actions */}
                   <View style={styles.actionsRow}>
@@ -673,7 +680,7 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: moderateScale(20), fontWeight: '800', color: '#0f172a' },
   pageSubtitle: { fontSize: moderateScale(12), color: '#64748b', marginTop: verticalScale(2), fontWeight: '500' },
 
-  headerActions: { flexDirection: 'row', gap: scale(12) },
+  headerActions: { flexDirection: 'row', flexWrap: 'wrap', gap: scale(12) },
   iconActionBtn: { width: scale(40), height: verticalScale(40), alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e0e7ff', borderRadius: scale(10), backgroundColor: '#fff' },
   outlineBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), paddingVertical: verticalScale(10), borderWidth: 1, borderColor: '#e0e7ff', borderRadius: scale(10), backgroundColor: '#fff' },
   outlineBtnText: { color: '#4f46e5', fontSize: moderateScale(13), fontWeight: '700' },

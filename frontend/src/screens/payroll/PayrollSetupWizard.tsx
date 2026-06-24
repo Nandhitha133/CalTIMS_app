@@ -110,7 +110,8 @@ export default function PayrollSetupWizard() {
     pf: { mode: 'default', enabled: true },
     esi: { mode: 'default', enabled: true },
     pt: { mode: 'default', enabled: true },
-    gratuity: { mode: 'default', enabled: true }
+    gratuity: { mode: 'default', enabled: true },
+    retirement: { mode: 'default', enabled: true }
   });
 
   const [attendanceConfig, setAttendanceConfig] = useState({
@@ -136,8 +137,8 @@ export default function PayrollSetupWizard() {
       if (existing) {
         setStructure({
           name: 'Payroll Profile',
-          earnings: existing.earnings || ROLE_TEMPLATES['employee'].earnings,
-          deductions: existing.deductions || ROLE_TEMPLATES['employee'].deductions
+          earnings: (existing.earnings || ROLE_TEMPLATES['employee'].earnings).filter((e: any) => !e.hidden && !(e.name || '').toLowerCase().includes('metadata')),
+          deductions: (existing.deductions || ROLE_TEMPLATES['employee'].deductions).filter((d: any) => !d.hidden && !(d.name || '').toLowerCase().includes('metadata'))
         });
         setCtcValue(existing.annualCTC ? existing.annualCTC.toString() : (existing.monthlyCTC ? (existing.monthlyCTC * 12).toString() : ''));
         setCtcType('annual');
@@ -649,6 +650,38 @@ export default function PayrollSetupWizard() {
                 {['default', 'enabled', 'disabled'].map(mode => (
                   <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.pt.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, pt: { mode, enabled: mode !== 'disabled' } })}>
                     <Text style={[styles.overrideToggleText, statutoryConfig.pt.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Gratuity */}
+            <View style={styles.overrideRow}>
+              <View style={styles.overrideIconWrap}><IndianRupee size={16} color="#64748b" /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.overrideTitle}>GRATUITY BENEFIT</Text>
+                <Text style={styles.overrideSub}>SOURCE: COMPANY POLICY</Text>
+              </View>
+              <View style={styles.overrideToggleGroup}>
+                {['default', 'enabled', 'disabled'].map(mode => (
+                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.gratuity.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, gratuity: { mode, enabled: mode !== 'disabled' } })}>
+                    <Text style={[styles.overrideToggleText, statutoryConfig.gratuity.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Retirement */}
+            <View style={styles.overrideRow}>
+              <View style={styles.overrideIconWrap}><Shield size={16} color="#64748b" /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.overrideTitle}>RETIREMENT BENEFIT</Text>
+                <Text style={styles.overrideSub}>SOURCE: COMPANY POLICY</Text>
+              </View>
+              <View style={styles.overrideToggleGroup}>
+                {['default', 'enabled', 'disabled'].map(mode => (
+                  <TouchableOpacity key={mode} style={[styles.overrideToggleBtn, statutoryConfig.retirement?.mode === mode && styles.overrideToggleBtnActive]} onPress={() => setStatutoryConfig({ ...statutoryConfig, retirement: { mode, enabled: mode !== 'disabled' } })}>
+                    <Text style={[styles.overrideToggleText, statutoryConfig.retirement?.mode === mode && styles.overrideToggleTextActive]}>{mode.toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

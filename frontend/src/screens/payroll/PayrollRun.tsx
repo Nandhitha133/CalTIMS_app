@@ -93,7 +93,9 @@ export default function PayrollRun() {
   const [monthPickerVisible, setMonthPickerVisible] = useState(false);
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
 
-  const years = [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  const years = [currentYear - 2, currentYear - 1, currentYear];
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -211,9 +213,24 @@ export default function PayrollRun() {
                 </TouchableOpacity>
               </View>
               
-              <AnimatedButton style={styles.primaryBtn} onPress={fetchReadiness} disabled={loading}>
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Initialize Engine</Text>}
-              </AnimatedButton>
+              {(() => {
+                const isFuture = year > new Date().getFullYear() || (year === new Date().getFullYear() && month > new Date().getMonth() + 1);
+                return (
+                  <AnimatedButton 
+                    style={[styles.primaryBtn, isFuture && { backgroundColor: '#94a3b8' }]} 
+                    onPress={() => {
+                      if (isFuture) {
+                        Alert.alert('Not Supported', 'Cannot run payroll for future months.');
+                      } else {
+                        fetchReadiness();
+                      }
+                    }} 
+                    disabled={loading || isFuture}
+                  >
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{isFuture ? 'Future Month Not Supported' : 'Initialize Engine'}</Text>}
+                  </AnimatedButton>
+                );
+              })()}
             </View>
           )}
 
@@ -418,15 +435,19 @@ export default function PayrollRun() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Month</Text>
             <ScrollView style={{ maxHeight: 300 }}>
-              {months.map((m, index) => (
-                <TouchableOpacity 
-                  key={index} 
-                  style={[styles.modalItem, month === index + 1 && styles.modalItemActive]}
-                  onPress={() => { setMonth(index + 1); setMonthPickerVisible(false); }}
-                >
-                  <Text style={[styles.modalItemText, month === index + 1 && styles.modalItemTextActive]}>{m}</Text>
-                </TouchableOpacity>
-              ))}
+              {months.map((m, index) => {
+                const isFutureMonth = year === currentYear && index + 1 > currentMonth;
+                if (isFutureMonth) return null;
+                return (
+                  <TouchableOpacity 
+                    key={index} 
+                    style={[styles.modalItem, month === index + 1 && styles.modalItemActive]}
+                    onPress={() => { setMonth(index + 1); setMonthPickerVisible(false); }}
+                  >
+                    <Text style={[styles.modalItemText, month === index + 1 && styles.modalItemTextActive]}>{m}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -442,7 +463,13 @@ export default function PayrollRun() {
                 <TouchableOpacity 
                   key={index} 
                   style={[styles.modalItem, year === y && styles.modalItemActive]}
-                  onPress={() => { setYear(y); setYearPickerVisible(false); }}
+                  onPress={() => { 
+                    setYear(y); 
+                    if (y === currentYear && month > currentMonth) {
+                      setMonth(currentMonth);
+                    }
+                    setYearPickerVisible(false); 
+                  }}
                 >
                   <Text style={[styles.modalItemText, year === y && styles.modalItemTextActive]}>{y}</Text>
                 </TouchableOpacity>

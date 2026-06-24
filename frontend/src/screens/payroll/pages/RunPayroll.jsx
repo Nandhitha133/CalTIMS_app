@@ -167,12 +167,18 @@ const RunPayroll = () => {
                                 </div>
 
                                 <div className="pt-8">
-                                    <button 
-                                        onClick={nextStep}
-                                        className="px-10 py-5 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-3xl text-lg font-black transition-all shadow-xl shadow-indigo-200 dark:shadow-none flex items-center gap-3 mx-auto group"
-                                    >
-                                        Continue to Readiness <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-                                    </button>
+                                    {(() => {
+                                        const isFuture = year > new Date().getFullYear() || (year === new Date().getFullYear() && month > new Date().getMonth() + 1);
+                                        return (
+                                            <button 
+                                                onClick={() => isFuture ? toast.error("Cannot run payroll for future months.") : nextStep()}
+                                                disabled={isFuture}
+                                                className={`px-10 py-5 ${isFuture ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600'} text-white rounded-3xl text-lg font-black transition-all shadow-xl shadow-indigo-200 dark:shadow-none flex items-center gap-3 mx-auto group`}
+                                            >
+                                                {isFuture ? 'Future Month Not Supported' : 'Continue to Readiness'} {!isFuture && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />}
+                                            </button>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </motion.div>

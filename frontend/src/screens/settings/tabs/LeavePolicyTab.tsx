@@ -633,7 +633,7 @@ export default function LeavePolicyTab() {
             <ActivityIndicator color="white" />
           ) : (
             <View style={styles.saveButtonContent}>
-              <Save size={20} color="white" />
+              <Save size={20} color="white" style={{ marginRight: 10 }} />
               <Text style={styles.saveButtonText}>Save Leave Policies</Text>
             </View>
           )}
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
@@ -765,8 +765,7 @@ const styles = StyleSheet.create({
   },
   saveButtonContent: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'center'
   },
   saveButtonText: {
     fontSize: 16,

@@ -94,10 +94,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  searchContainer: { flexDirection: 'row', gap: moderateScale(8), marginBottom: verticalScale(16), flexWrap: 'wrap' },
-  searchBox: { flex: 1, minWidth: scale(200), flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), minHeight: verticalScale(48), gap: moderateScale(8) },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', gap: moderateScale(12), marginBottom: verticalScale(16), flexWrap: 'wrap' },
+  searchBox: { flex: 1, minWidth: scale(200), flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: moderateScale(12), borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: scale(12), height: verticalScale(48), gap: moderateScale(8) },
   searchInput: { flex: 1, fontSize: moderateScale(14), color: '#1e293b', paddingVertical: 0, height: '100%' },
-  filterButton: { width: scale(44), height: verticalScale(44), borderRadius: moderateScale(12), backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  filterButton: { width: scale(48), height: verticalScale(48), borderRadius: moderateScale(12), backgroundColor: 'white', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   filterButtonActive: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   filterBadge: { position: 'absolute', top: verticalScale(-4), right: scale(-4), backgroundColor: '#3b82f6', borderRadius: moderateScale(10), minWidth: scale(18), height: verticalScale(18), alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(4) },
   filterBadgeText: { color: 'white', fontSize: moderateScale(10), fontWeight: '700' },
@@ -486,7 +486,7 @@ const TextInputField = memo(({ label, value, onChangeText, placeholder, required
       onChangeText={onChangeText}
       multiline={multiline}
       numberOfLines={numberOfLines}
-      placeholderTextColor="#94a3b8"
+      placeholderTextColor="#64748b"
     />
   </View>
 ));
@@ -1078,7 +1078,7 @@ export default function TasksScreen({ navigation }: { navigation: any }) {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search tasks..."
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#64748b"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 onSubmitEditing={() => fetchTasks(1)}

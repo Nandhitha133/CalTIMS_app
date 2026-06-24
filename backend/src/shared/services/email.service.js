@@ -562,12 +562,12 @@ const emailService = {
   /**
    * Send payslip email to employee
    */
-  async sendPayslipEmail(recipientEmail, payroll, companyName = 'CALTIMS') {
+  async sendPayslipEmail(recipientEmail, payroll, organizationId, companyName = 'CALTIMS') {
     const transporter = getTransporter();
     const payslipService = require('../../modules/payroll/payslip.service');
 
     try {
-      const buffer = await payslipService.generatePayslipBuffer(payroll);
+      const buffer = await payslipService.generatePayslipBuffer(payroll, organizationId);
       const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
       const fileName = `Payslip_${payroll.employeeInfo?.employeeId || 'NA'}_${monthName}_${payroll.year}.pdf`;
 

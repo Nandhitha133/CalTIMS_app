@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -507,13 +508,20 @@ export default function UsersAndRolesTab() {
   };
 
   const confirmAddRole = () => {
-    if (!newRoleName.trim()) {
+    const trimmedName = newRoleName.trim();
+    if (!trimmedName) {
       Alert.alert('Error', 'Role name is required');
       return;
     }
 
+    const isDuplicate = roles.some(r => r.name.toLowerCase() === trimmedName.toLowerCase());
+    if (isDuplicate) {
+      Alert.alert('Error', 'A role with this name already exists.');
+      return;
+    }
+
     const newRole: Role = {
-      name: newRoleName.trim(),
+      name: trimmedName,
       isSystem: false,
       templateType: 'Custom',
       permissions: {},
@@ -644,8 +652,12 @@ export default function UsersAndRolesTab() {
     }
   };
 
-  const selectAllRoles = () => {
-    setSelectedRoleIdxs(roles.map((_, i) => i));
+  const toggleSelectAll = () => {
+    if (selectedRoleIdxs.length === roles.length) {
+      setSelectedRoleIdxs([]);
+    } else {
+      setSelectedRoleIdxs(roles.map((_, i) => i));
+    }
   };
 
   const currentRole = roles[activeRoleIdx];
@@ -750,9 +762,11 @@ export default function UsersAndRolesTab() {
               </TouchableOpacity>
             ))}
 
-            {isBulkMode && selectedRoleIdxs.length > 0 && (
-              <TouchableOpacity style={styles.selectAllButton} onPress={selectAllRoles}>
-                <Text style={styles.selectAllText}>Select All ({roles.length})</Text>
+            {isBulkMode && (
+              <TouchableOpacity style={styles.selectAllButton} onPress={toggleSelectAll}>
+                <Text style={styles.selectAllText}>
+                  {selectedRoleIdxs.length === roles.length ? 'Deselect All' : `Select All (${roles.length})`}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -985,8 +999,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: scale(16),
+    paddingBottom: verticalScale(120),
   },
   loadingContainer: {
     flex: 1,
@@ -995,48 +1009,48 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
+    marginTop: verticalScale(12),
+    fontSize: moderateScale(14),
     color: '#64748b',
   },
   headerActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
     flexWrap: 'wrap',
-    gap: 12,
+    gap: scale(12),
   },
   titleContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '800',
     color: '#1e293b',
   },
   description: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     color: '#64748b',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 10,
+    gap: scale(10),
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: scale(8),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(10),
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: scale(14),
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   addButtonText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '700',
     color: '#64748b',
     textTransform: 'uppercase',
@@ -1045,44 +1059,44 @@ const styles = StyleSheet.create({
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    gap: scale(8),
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
     backgroundColor: '#1e293b',
-    borderRadius: 14,
+    borderRadius: scale(14),
   },
   saveButtonDisabled: {
     opacity: 0.5,
   },
   saveButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
   },
   headerAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#eef2ff',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    gap: 6,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: scale(10),
+    gap: scale(6),
     borderWidth: 1,
     borderColor: '#e0e7ff',
   },
   headerAddButtonText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
     color: '#6366f1',
   },
   mainContent: {
     flexDirection: 'column',
-    gap: 20,
+    gap: verticalScale(20),
   },
   roleListSection: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: scale(24),
+    padding: scale(16),
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
@@ -1090,11 +1104,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    marginBottom: verticalScale(12),
+    paddingHorizontal: scale(4),
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '700',
     color: '#94a3b8',
     textTransform: 'uppercase',
@@ -1102,11 +1116,11 @@ const styles = StyleSheet.create({
   },
   roleListActions: {
     flexDirection: 'row',
-    gap: 6,
+    gap: scale(6),
   },
   iconButton: {
-    padding: 6,
-    borderRadius: 8,
+    padding: scale(6),
+    borderRadius: scale(8),
   },
   iconButtonActive: {
     backgroundColor: '#6366f1',
@@ -1115,10 +1129,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 16,
-    marginBottom: 4,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(12),
+    borderRadius: scale(16),
+    marginBottom: verticalScale(4),
   },
   roleItemActive: {
     backgroundColor: '#6366f1',
@@ -1126,10 +1140,10 @@ const styles = StyleSheet.create({
   roleItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: scale(10),
   },
   roleName: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
     color: '#475569',
   },
@@ -1137,39 +1151,39 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   selectAllButton: {
-    marginTop: 12,
-    paddingVertical: 10,
+    marginTop: verticalScale(12),
+    paddingVertical: verticalScale(10),
     alignItems: 'center',
     backgroundColor: '#e0e7ff',
-    borderRadius: 12,
+    borderRadius: scale(12),
   },
   selectAllText: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '600',
     color: '#6366f1',
   },
   permissionSection: {
     backgroundColor: '#fff',
-    borderRadius: 24,
+    borderRadius: scale(24),
     borderWidth: 1,
     borderColor: '#e2e8f0',
     overflow: 'hidden',
   },
   permissionHeader: {
-    padding: 16,
+    padding: scale(16),
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
     backgroundColor: '#f8fafc',
-    gap: 12,
+    gap: scale(12),
   },
   permissionTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: scale(10),
     flexWrap: 'wrap',
   },
   permissionBadge: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '700',
     color: '#6366f1',
     textTransform: 'uppercase',
@@ -1177,21 +1191,21 @@ const styles = StyleSheet.create({
   },
   systemBadge: {
     backgroundColor: '#fef3c7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(2),
+    borderRadius: scale(8),
   },
   systemBadgeText: {
-    fontSize: 8,
+    fontSize: moderateScale(8),
     fontWeight: '700',
     color: '#d97706',
     textTransform: 'uppercase',
   },
   roleNameInput: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '800',
     color: '#1e293b',
-    paddingVertical: 6,
+    paddingVertical: verticalScale(6),
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
@@ -1199,99 +1213,99 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: scale(10),
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: scale(8),
     backgroundColor: '#f1f5f9',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: scale(12),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
   },
   searchInput: {
     flex: 1,
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '600',
     color: '#1e293b',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   deleteRoleButton: {
-    padding: 8,
-    borderRadius: 12,
+    padding: scale(8),
+    borderRadius: scale(12),
     backgroundColor: '#fee2e2',
   },
   previewButton: {
-    padding: 8,
-    borderRadius: 12,
+    padding: scale(8),
+    borderRadius: scale(12),
     backgroundColor: '#f1f5f9',
-    marginRight: 8,
+    marginRight: scale(8),
   },
   unsavedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 12,
+    gap: scale(8),
+    padding: scale(12),
     backgroundColor: '#e0e7ff',
-    borderRadius: 14,
+    borderRadius: scale(14),
   },
   unsavedDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: scale(6),
+    height: verticalScale(6),
+    borderRadius: scale(3),
     backgroundColor: '#6366f1',
   },
   unsavedText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '700',
     color: '#6366f1',
     textTransform: 'uppercase',
   },
   unsavedHint: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     color: '#6366f1',
     fontStyle: 'italic',
   },
   criticalAlert: {
     flexDirection: 'row',
-    gap: 10,
-    padding: 12,
+    gap: scale(10),
+    padding: scale(12),
     backgroundColor: '#fee2e2',
-    borderRadius: 14,
+    borderRadius: scale(14),
   },
   criticalTitle: {
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: '700',
     color: '#dc2626',
     textTransform: 'uppercase',
   },
   criticalText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: '#dc2626',
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
   templatesScroll: {
     flexDirection: 'row',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   templateCard: {
-    padding: 10,
+    padding: scale(10),
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: scale(14),
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    marginRight: 10,
-    minWidth: 100,
+    marginRight: scale(10),
+    minWidth: scale(100),
   },
   templateCardActive: {
     backgroundColor: '#e0e7ff',
     borderColor: '#6366f1',
   },
   templateName: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '700',
     color: '#64748b',
     textTransform: 'uppercase',
@@ -1300,31 +1314,31 @@ const styles = StyleSheet.create({
     color: '#6366f1',
   },
   templateDesc: {
-    fontSize: 8,
+    fontSize: moderateScale(8),
     color: '#94a3b8',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   treeContainer: {
-    padding: 12,
+    padding: scale(12),
   },
   treeNode: {
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   treeNodeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 10,
+    gap: scale(8),
+    paddingVertical: verticalScale(10),
+    borderRadius: scale(10),
   },
   expandButton: {
-    width: 24,
+    width: scale(24),
     alignItems: 'center',
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
+    width: scale(18),
+    height: verticalScale(18),
+    borderRadius: scale(5),
     borderWidth: 2,
     borderColor: '#cbd5e1',
     justifyContent: 'center',
@@ -1342,16 +1356,16 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   indeterminateLine: {
-    width: 10,
-    height: 2,
+    width: scale(10),
+    height: verticalScale(2),
     backgroundColor: '#6366f1',
-    borderRadius: 1,
+    borderRadius: scale(1),
   },
   moduleIcon: {
-    marginRight: 4,
+    marginRight: scale(4),
   },
   nodeLabel: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '500',
     color: '#475569',
   },
@@ -1359,26 +1373,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1e293b',
     textTransform: 'uppercase',
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
   treeNodeChildren: {
-    marginLeft: 24,
+    marginLeft: scale(24),
   },
   treeActionButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 6,
-    marginBottom: 8,
+    gap: scale(6),
+    marginTop: verticalScale(6),
+    marginBottom: verticalScale(8),
   },
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: scale(4),
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
     backgroundColor: '#f1f5f9',
-    borderRadius: 8,
+    borderRadius: scale(8),
   },
   actionChipActive: {
     backgroundColor: '#10b981',
@@ -1387,7 +1401,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   actionChipText: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     fontWeight: '700',
     color: '#64748b',
     textTransform: 'uppercase',
@@ -1397,29 +1411,29 @@ const styles = StyleSheet.create({
   },
   historySection: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: scale(24),
+    padding: scale(16),
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   sectionSubtitle: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: '#94a3b8',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   timelineContainer: {
-    gap: 12,
+    gap: scale(12),
   },
   timelineItem: {
     flexDirection: 'row',
-    gap: 12,
+    gap: scale(12),
   },
   timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: scale(8),
+    height: verticalScale(8),
+    borderRadius: scale(4),
     backgroundColor: '#6366f1',
-    marginTop: 4,
+    marginTop: verticalScale(4),
   },
   timelineContent: {
     flex: 1,
@@ -1428,33 +1442,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   timelineUser: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '700',
     color: '#1e293b',
   },
   timelineDate: {
-    fontSize: 8,
+    fontSize: moderateScale(8),
     fontWeight: '600',
     color: '#94a3b8',
   },
   timelineAction: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: '#64748b',
   },
   timelineLoading: {
-    padding: 20,
+    padding: scale(20),
     alignItems: 'center',
   },
   timelineEmpty: {
-    padding: 30,
+    padding: scale(30),
     alignItems: 'center',
-    gap: 8,
+    gap: scale(8),
   },
   timelineEmptyText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '700',
     color: '#cbd5e1',
     textTransform: 'uppercase',
@@ -1467,68 +1481,68 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: scale(24),
+    padding: scale(24),
     width: '80%',
-    maxWidth: 320,
+    maxWidth: scale(320),
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '700',
     color: '#1e293b',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   modalMessage: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: '#64748b',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   modalInput: {
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    marginBottom: 20,
+    borderRadius: scale(12),
+    padding: scale(12),
+    fontSize: moderateScale(14),
+    marginBottom: verticalScale(20),
     color: '#1e293b',
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: scale(12),
   },
   modalCancelButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     alignItems: 'center',
     backgroundColor: '#f1f5f9',
-    borderRadius: 12,
+    borderRadius: scale(12),
   },
   modalCancelText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#64748b',
   },
   modalDeleteButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     alignItems: 'center',
     backgroundColor: '#ef4444',
-    borderRadius: 12,
+    borderRadius: scale(12),
   },
   modalDeleteText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#fff',
   },
   modalConfirmButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: verticalScale(12),
     alignItems: 'center',
     backgroundColor: '#6366f1',
-    borderRadius: 12,
+    borderRadius: scale(12),
   },
   modalConfirmText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
     color: '#fff',
   },

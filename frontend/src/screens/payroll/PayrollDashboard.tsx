@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -24,7 +24,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
 import Layout from '../../components/common/Layout';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { scale, verticalScale, moderateScale } from '../../utils/responsive';
 
 const months = [
@@ -46,10 +46,12 @@ export default function PayrollDashboard() {
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
 
-  useEffect(() => {
-    loadUserData();
-    fetchData();
-  }, [selectedMonth, selectedYear]);
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+      fetchData();
+    }, [selectedMonth, selectedYear])
+  );
 
   const loadUserData = async () => {
     try {
@@ -93,7 +95,7 @@ export default function PayrollDashboard() {
       </View>
       <View style={styles.kpiContent}>
         <Text style={styles.kpiLabel}>{label}</Text>
-        <Text style={styles.kpiValue}>
+        <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>
           {isStatic ? value : `${currencySymbol}${value?.toLocaleString() || '0'}`}
         </Text>
       </View>
@@ -108,10 +110,10 @@ export default function PayrollDashboard() {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={styles.dateSelector} onPress={() => setShowMonthPicker(true)}>
               <Calendar size={18} color="#4f46e5" style={{ marginRight: 8 }} />
-              <Text style={styles.dateText}>{months[selectedMonth - 1].slice(0,3)}</Text>
+              <Text style={styles.dateText}>{months[selectedMonth - 1].slice(0, 3)}</Text>
               <ChevronDown size={16} color="#94a3b8" style={{ marginLeft: 4 }} />
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={styles.dateSelector} onPress={() => setShowYearPicker(true)}>
               <Text style={styles.dateText}>{selectedYear}</Text>
               <ChevronDown size={16} color="#94a3b8" style={{ marginLeft: 4 }} />
@@ -150,11 +152,11 @@ export default function PayrollDashboard() {
               <View style={styles.statsRow}>
                 <View style={styles.statBox}>
                   <Text style={styles.statLabel}>Processed</Text>
-                  <Text style={[styles.statValue, { color: '#4f46e5' }]}>{dash?.summary?.totalProcessed || 0}</Text>
+                  <Text style={[styles.statValue, { color: '#4f46e5' }]} numberOfLines={1} adjustsFontSizeToFit>{dash?.summary?.totalProcessed || 0}</Text>
                 </View>
                 <View style={[styles.statBox, { backgroundColor: '#ecfdf5', borderColor: '#d1fae5' }]}>
                   <Text style={[styles.statLabel, { color: '#10b981' }]}>Paid</Text>
-                  <Text style={[styles.statValue, { color: '#10b981' }]}>{dash?.summary?.totalPaid || 0}</Text>
+                  <Text style={[styles.statValue, { color: '#10b981' }]} numberOfLines={1} adjustsFontSizeToFit>{dash?.summary?.totalPaid || 0}</Text>
                 </View>
               </View>
             </View>
@@ -165,7 +167,7 @@ export default function PayrollDashboard() {
                 <AlertCircle size={18} color="#ef4444" />
                 <Text style={[styles.cardTitle, { marginLeft: 8 }]}>Critical Alerts</Text>
               </View>
-              <TouchableOpacity style={styles.alertRow} onPress={() => navigation.navigate('EmployeePayrollProfiles')}>
+              <TouchableOpacity style={styles.alertRow} onPress={() => navigation.navigate('PayrollProfiles')}>
                 <Text style={styles.alertLabel}>Missing Bank Details</Text>
                 <View style={[styles.alertCount, dash?.compliance?.missingBankDetails > 0 && styles.alertCountDanger]}>
                   <Text style={[styles.alertCountText, dash?.compliance?.missingBankDetails > 0 && styles.alertCountTextDanger]}>
@@ -173,7 +175,7 @@ export default function PayrollDashboard() {
                   </Text>
                 </View>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.alertRow} onPress={() => navigation.navigate('EmployeePayrollProfiles')}>
+              <TouchableOpacity style={styles.alertRow} onPress={() => navigation.navigate('PayrollProfiles')}>
                 <Text style={styles.alertLabel}>Pending Structures</Text>
                 <View style={[styles.alertCount, dash?.compliance?.missingSalaryStructure > 0 && styles.alertCountDanger]}>
                   <Text style={[styles.alertCountText, dash?.compliance?.missingSalaryStructure > 0 && styles.alertCountTextDanger]}>
@@ -193,8 +195,8 @@ export default function PayrollDashboard() {
                   analytics.departmentDistribution.map((dept: any, idx: number) => {
                     const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
                     const color = colors[idx % colors.length];
-                    const totalGross = dash?.summary?.totalGross || 1; // Prevent division by zero
-                    const percent = Math.min(100, (dept.value / totalGross) * 100);
+                    const totalNet = dash?.summary?.totalPayroll || 1; // Prevent division by zero
+                    const percent = Math.min(100, (dept.value / totalNet) * 100);
                     return (
                       <View key={idx} style={{ marginBottom: 12 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -258,8 +260,29 @@ export default function PayrollDashboard() {
                     <Text style={styles.batchCount}>{run.totalEmployees} employees</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.batchTotal}>{currencySymbol}{run.totalNet?.toLocaleString()}</Text>
-                    <Text style={styles.batchStatus}>{run.status}</Text>
+                    <Text style={[
+                      styles.batchTotal,
+                      run.status?.toLowerCase() === 'paid' ? { color: '#10b981' } :
+                        run.status?.toLowerCase() === 'completed' ? { color: '#3b82f6' } : {}
+                    ]}>
+                      {currencySymbol}{run.totalNet?.toLocaleString()}
+                    </Text>
+                    <View style={[
+                      styles.statusBadge,
+                      { marginTop: 4 },
+                      run.status?.toLowerCase() === 'paid' ? { backgroundColor: '#ecfdf5' } :
+                        run.status?.toLowerCase() === 'completed' ? { backgroundColor: '#eff6ff' } :
+                          run.status?.toLowerCase() === 'processing' ? { backgroundColor: '#eef2ff' } :
+                            { backgroundColor: '#fef2f2' }
+                    ]}>
+                      <Text style={[
+                        styles.statusBadgeText,
+                        run.status?.toLowerCase() === 'paid' ? { color: '#10b981' } :
+                          run.status?.toLowerCase() === 'completed' ? { color: '#3b82f6' } :
+                            run.status?.toLowerCase() === 'processing' ? { color: '#4f46e5' } :
+                              { color: '#ef4444' }
+                      ]}>{run.status}</Text>
+                    </View>
                   </View>
                 </View>
               )) : (
@@ -280,8 +303,8 @@ export default function PayrollDashboard() {
                 const m = i + 1;
                 const isSelected = m === selectedMonth;
                 return (
-                  <TouchableOpacity 
-                    key={i} 
+                  <TouchableOpacity
+                    key={i}
                     style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
                     onPress={() => { setSelectedMonth(m); setShowMonthPicker(false); }}
                   >
@@ -310,8 +333,8 @@ export default function PayrollDashboard() {
                 const y = new Date().getFullYear() - i;
                 const isSelected = y === selectedYear;
                 return (
-                  <TouchableOpacity 
-                    key={y} 
+                  <TouchableOpacity
+                    key={y}
                     style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
                     onPress={() => { setSelectedYear(y); setShowYearPicker(false); }}
                   >
