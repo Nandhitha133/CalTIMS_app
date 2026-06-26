@@ -19,6 +19,7 @@ import {
 } from 'react-native-safe-area-context';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
+import { navigationRef } from './src/navigation/NavigationService';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -86,6 +87,7 @@ function App() {
             backgroundColor={isDarkMode ? '#0f172a' : '#f8fafc'}
           />
           <NavigationContainer
+            ref={navigationRef}
             theme={isDarkMode ? CustomDarkTheme : LightTheme}
             linking={linking}
           >

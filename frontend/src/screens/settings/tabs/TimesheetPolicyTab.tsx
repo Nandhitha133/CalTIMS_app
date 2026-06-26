@@ -43,6 +43,8 @@ import { useSocketEvent } from '../../../services/socket';
 import { useAuthStore } from '../../../store/authStore';
 import Layout from '../../../components/common/Layout';
 import PageHeader from '../../../components/common/PageHeader';
+import DropdownModal from '../../../components/common/DropdownModal';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import Slider from '@react-native-community/slider';
 import { scale, verticalScale, moderateScale } from '../../../utils/responsive';
 
@@ -354,6 +356,51 @@ export default function TimesheetPolicyTab() {
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
+  // Picker States
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerTime, setPickerTime] = useState(new Date());
+  const [activePickerField, setActivePickerField] = useState<'submissionDeadline' | 'freezeTimesheet' | null>(null);
+
+  const handleDaySelect = (day: string) => {
+    if (activePickerField) {
+       const current = policy[activePickerField] || 'Friday 18:00';
+       const time = current.split(' ')[1] || '18:00';
+       updatePolicy(activePickerField, `${day} ${time}`);
+    }
+  };
+
+  const openTimePicker = (field: 'submissionDeadline' | 'freezeTimesheet') => {
+    setActivePickerField(field);
+    const current = policy[field] || 'Friday 18:00';
+    const timeStr = current.split(' ')[1] || '18:00';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const d = new Date();
+    d.setHours(hours || 0, minutes || 0, 0, 0);
+    setPickerTime(d);
+    setShowTimePicker(true);
+  };
+
+  const handleTimePickerChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
+    if (event.type === 'dismissed') {
+      setShowTimePicker(false);
+      return;
+    }
+    if (selectedDate && activePickerField) {
+      setPickerTime(selectedDate);
+      const h = selectedDate.getHours().toString().padStart(2, '0');
+      const m = selectedDate.getMinutes().toString().padStart(2, '0');
+      const timeStr = `${h}:${m}`;
+      
+      const current = policy[activePickerField] || 'Friday 18:00';
+      const day = current.split(' ')[0] || 'Friday';
+      updatePolicy(activePickerField, `${day} ${timeStr}`);
+    }
+  };
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
     queryFn: () => settingsAPI.getSettings().then((r: any) => r?.data?.data ?? r?.data ?? r ?? null),
@@ -575,23 +622,45 @@ export default function TimesheetPolicyTab() {
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Weekly Deadline</Text>
-              <TextInput
-                style={styles.input}
-                value={policy.submissionDeadline}
-                onChangeText={(text) => updatePolicy('submissionDeadline', text)}
-                placeholder="Friday 18:00"
-                placeholderTextColor="#94a3b8"
-              />
+              <View style={{ flexDirection: 'row', gap: scale(8) }}>
+                <TouchableOpacity 
+                  style={[styles.input, { flex: 1, justifyContent: 'center' }]} 
+                  onPress={() => { setActivePickerField('submissionDeadline'); setDayPickerVisible(true); }}
+                >
+                  <Text style={{ color: '#1e293b', fontSize: moderateScale(13) }} numberOfLines={1} adjustsFontSizeToFit>
+                    {policy.submissionDeadline?.split(' ')[0] || 'Day'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.input, { flex: 1, justifyContent: 'center' }]} 
+                  onPress={() => openTimePicker('submissionDeadline')}
+                >
+                  <Text style={{ color: '#1e293b', fontSize: moderateScale(13) }} numberOfLines={1} adjustsFontSizeToFit>
+                    {policy.submissionDeadline?.split(' ')[1] || 'Time'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Auto-Lock Schedule</Text>
-              <TextInput
-                style={styles.input}
-                value={policy.freezeTimesheet}
-                onChangeText={(text) => updatePolicy('freezeTimesheet', text)}
-                placeholder="Monday 10:00"
-                placeholderTextColor="#94a3b8"
-              />
+              <View style={{ flexDirection: 'row', gap: scale(8) }}>
+                <TouchableOpacity 
+                  style={[styles.input, { flex: 1, justifyContent: 'center' }]} 
+                  onPress={() => { setActivePickerField('freezeTimesheet'); setDayPickerVisible(true); }}
+                >
+                  <Text style={{ color: '#1e293b', fontSize: moderateScale(13) }} numberOfLines={1} adjustsFontSizeToFit>
+                    {policy.freezeTimesheet?.split(' ')[0] || 'Day'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.input, { flex: 1, justifyContent: 'center' }]} 
+                  onPress={() => openTimePicker('freezeTimesheet')}
+                >
+                  <Text style={{ color: '#1e293b', fontSize: moderateScale(13) }} numberOfLines={1} adjustsFontSizeToFit>
+                    {policy.freezeTimesheet?.split(' ')[1] || 'Time'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </SectionCard>
@@ -906,6 +975,52 @@ export default function TimesheetPolicyTab() {
           </TouchableOpacity>
          </ScrollView>
        </KeyboardAvoidingView>
+
+      <DropdownModal
+        visible={dayPickerVisible}
+        onClose={() => setDayPickerVisible(false)}
+        title="Select Day"
+        options={[
+          { value: 'Monday', label: 'Monday' },
+          { value: 'Tuesday', label: 'Tuesday' },
+          { value: 'Wednesday', label: 'Wednesday' },
+          { value: 'Thursday', label: 'Thursday' },
+          { value: 'Friday', label: 'Friday' },
+          { value: 'Saturday', label: 'Saturday' },
+          { value: 'Sunday', label: 'Sunday' },
+        ]}
+        selectedValue={activePickerField ? (policy[activePickerField]?.split(' ')[0] || '') : ''}
+        onSelect={handleDaySelect}
+      />
+      
+      {showTimePicker && (
+        Platform.OS === 'ios' ? (
+          <Modal transparent animationType="fade" visible={showTimePicker}>
+            <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+              <View style={{ backgroundColor: 'white', padding: scale(20), borderTopLeftRadius: scale(20), borderTopRightRadius: scale(20) }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: verticalScale(10) }}>
+                  <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                    <Text style={{ color: '#4f46e5', fontWeight: 'bold', fontSize: moderateScale(16) }}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={pickerTime}
+                  mode="time"
+                  display="spinner"
+                  onChange={handleTimePickerChange}
+                />
+              </View>
+            </View>
+          </Modal>
+        ) : (
+          <DateTimePicker
+            value={pickerTime}
+            mode="time"
+            display="default"
+            onChange={handleTimePickerChange}
+          />
+        )
+      )}
 
       {/* Delete Category Modal */}
       <Modal

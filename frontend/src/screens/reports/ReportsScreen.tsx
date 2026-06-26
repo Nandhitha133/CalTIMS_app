@@ -407,13 +407,17 @@ const FilterModal = ({ visible, onClose, filters, onApply, onReset, filterOption
               <View style={styles.filterField}>
                 <Text style={styles.filterLabel}>Year</Text>
                 <SafeSelector
-                  options={(filterOptions.years && filterOptions.years.length > 0
-                    ? filterOptions.years
-                    : [2024, 2025, 2026, 2027, 2028]
-                  ).map((year: number) => ({
-                    label: String(year),
-                    value: year,
-                  }))}
+                  options={(() => {
+                    const currentYear = new Date().getFullYear();
+                    const years = (filterOptions.years && filterOptions.years.length > 0
+                      ? filterOptions.years
+                      : [2024, 2025, 2026]
+                    ).filter((year: number) => year <= currentYear);
+                    return years.map((year: number) => ({
+                      label: String(year),
+                      value: year,
+                    }));
+                  })()}
                   selectedValue={tempFilters.year}
                   onValueChange={(value) => setTempFilters((prev: any) => ({ ...prev, year: value }))}
                   visible={activeSelector === 'year'}
@@ -1039,20 +1043,7 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
                 color="#3b82f6"
                 sub={selectedDepartment !== 'all' ? selectedDepartment : 'All departments'}
               />
-              <KpiCard
-                icon={TrendingUp}
-                label="Average Weekly Hours"
-                value={`${weeklyAvg}h`}
-                color="#8b5cf6"
-                sub="Per active employee"
-              />
-              <KpiCard
-                icon={CheckCircle}
-                label="Admin Resolved"
-                value={adminResolvedCount}
-                color="#6366f1"
-                sub="Timesheets filled by Admin"
-              />
+
             </View>
 
             {/* Smart Insights */}
@@ -1252,47 +1243,35 @@ export default function ReportsScreen({ navigation }: { navigation: any }) {
             {/* Department Workload Bar Chart */}
             <View style={styles.chartCard}>
               <SectionHeader icon={BarChart2} title="Department Workload" color="#8b5cf6" subtitle="Total productive hours per department" />
-              {deptData.length > 0 ? (
-                <View style={{ alignItems: 'flex-start' }}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <BarChart
-                      data={deptChartData}
-                      width={Math.max(CARD_INNER_WIDTH, deptData.length * 65)}
-                      height={300}
-                      chartConfig={{
-                        backgroundColor: '#ffffff',
-                        backgroundGradientFrom: '#ffffff',
-                        backgroundGradientTo: '#ffffff',
-                        decimalPlaces: 0,
-                        color: (opacity = 1, index = 0) => PALETTE[index % PALETTE.length],
-                        labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
-                        style: { borderRadius: 16 },
-                        barPercentage: 0.4, // Reduced bar width
-                        propsForLabels: {
-                          fontSize: 10, // Smaller font for rotated labels
-                        },
-                        propsForBackgroundLines: {
-                          strokeDasharray: '5, 5',
-                          strokeWidth: 1,
-                          stroke: '#e2e8f0',
-                        },
-                      }}
-                      verticalLabelRotation={45}
-                      style={{
-                        ...styles.chart,
-                        paddingRight: 0,
-                        paddingBottom: 20,
-                        marginLeft: -10, // Shift left slightly to balance Y-axis labels
-                      }}
-                      fromZero
-                      showValuesOnTopOfBars
-                      withCustomBarColorFromData
-                      yAxisLabel=""
-                      yAxisSuffix="h"
-                    />
-                  </ScrollView>
-                </View>
-              ) : (
+              {deptData.length > 0 ? (() => {
+                const maxHours = Math.max(...deptData.map(d => d.totalHours), 1);
+                return (
+                  <View style={styles.deptBarList}>
+                    {deptData.map((dept, idx) => {
+                      const fillPct = (dept.totalHours / maxHours) * 100;
+                      const color = PALETTE[idx % PALETTE.length];
+                      return (
+                        <View key={idx} style={styles.deptBarRow}>
+                          <Text style={styles.deptBarLabel} numberOfLines={2}>
+                            {dept.department || 'Unassigned'}
+                          </Text>
+                          <View style={styles.deptBarTrack}>
+                            <View
+                              style={[
+                                styles.deptBarFill,
+                                { width: `${fillPct}%` as any, backgroundColor: color },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.deptBarValue, { color }]}>
+                            {dept.totalHours.toFixed(1)}h
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })() : (
                 <EmptyChart message="No department data available" />
               )}
             </View>
@@ -1584,4 +1563,40 @@ const styles = StyleSheet.create({
 
   closeDetailButton: { marginTop: verticalScale(16), paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#f1f5f9', alignItems: 'center' },
   closeDetailButtonText: { fontSize: moderateScale(14), fontWeight: '600', color: '#64748b' },
+
+  // Department horizontal bar chart
+  deptBarList: { gap: verticalScale(10), paddingVertical: verticalScale(4) },
+  deptBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+    minHeight: verticalScale(36),
+  },
+  deptBarLabel: {
+    width: '28%',
+    fontSize: moderateScale(11),
+    fontWeight: '600',
+    color: '#334155',
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  deptBarTrack: {
+    flex: 1,
+    height: verticalScale(20),
+    backgroundColor: '#f1f5f9',
+    borderRadius: scale(10),
+    overflow: 'hidden',
+  },
+  deptBarFill: {
+    height: '100%',
+    borderRadius: scale(10),
+    minWidth: scale(4),
+  },
+  deptBarValue: {
+    width: scale(48),
+    fontSize: moderateScale(12),
+    fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 0,
+  },
 });

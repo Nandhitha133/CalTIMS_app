@@ -26,7 +26,7 @@ router.post('/reset-password/:token', validate(resetPasswordSchema), authControl
 router.get('/google', (req, res, next) => {
   const { platform } = req.query;
   const state = platform ? Buffer.from(JSON.stringify({ platform })).toString('base64') : undefined;
-  passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
+  passport.authenticate('google', { scope: ['profile', 'email'], state, prompt: 'select_account' })(req, res, next);
 });
 
 router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=oauth_failed` }), authController.googleCallback);

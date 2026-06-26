@@ -37,8 +37,9 @@ export default function PayrollPolicy() {
     try {
       setLoading(true);
       const res: any = await policyAPI.getPolicy();
-      if (res.data) {
-        setFormData(res.data);
+      const policyData = res?.data?.data || res?.data || res;
+      if (policyData) {
+        setFormData(policyData);
       }
     } catch (err) {
       console.error('Failed to load policy', err);

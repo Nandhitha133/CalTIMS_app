@@ -60,11 +60,11 @@ interface LeaveRequest {
 }
 
 // Leave Balance Card
-const BalanceCard = ({ title, value, color }: { title: string; value: number; color: string }) => (
+const BalanceCard = ({ title, value, color, label = 'days left' }: { title: string; value: number; color: string; label?: string }) => (
     <View style={[styles.balanceCard, { borderTopColor: color }]}>
         <Text style={[styles.balanceValue, { color }]}>{value}</Text>
         <Text style={styles.balanceTitle}>{title}</Text>
-        <Text style={styles.balanceLabel}>days left</Text>
+        <Text style={styles.balanceLabel}>{label}</Text>
     </View>
 );
 
@@ -380,7 +380,8 @@ const ApplyLeaveModal = ({
 
     const days = calculateDays();
     const currentBalance = balance[leaveType as keyof LeaveBalance] || 0;
-    const hasInsufficientBalance = days > currentBalance;
+    const isLop = leaveType.toLowerCase() === 'lop';
+    const hasInsufficientBalance = !isLop && days > currentBalance;
 
     const handleSubmit = () => {
         if (!reason.trim()) {
@@ -434,7 +435,7 @@ const ApplyLeaveModal = ({
                                     ))}
                                 </View>
                                 <Text style={styles.balanceText}>
-                                    Balance: <Text style={{ color: hasInsufficientBalance ? '#ef4444' : '#10b981' }}>{currentBalance} days</Text>
+                                    Balance: <Text style={{ color: hasInsufficientBalance ? '#ef4444' : '#10b981' }}>{isLop ? 'N/A' : `${currentBalance} days`}</Text>
                                 </Text>
                             </View>
 
@@ -583,7 +584,9 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
             const settings = extractData(response);
             const types = settings?.eligibleLeaveTypes;
             if (types && types.length > 0) {
-                setLeaveTypes(types);
+                const typesWithLop = [...types];
+                if (!typesWithLop.includes('lop')) typesWithLop.push('lop');
+                setLeaveTypes(typesWithLop);
             }
         } catch (error) {
             console.error('Error fetching leave types:', error);
@@ -802,7 +805,7 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
                 <View style={styles.content}>
                     {/* Balance Cards */}
                     <View style={styles.balanceContainer}>
-                        {leaveTypes.map((type) => {
+                        {leaveTypes.filter(t => t.toLowerCase() !== 'lop').map((type) => {
                             const label = type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                             const value = balance[type] || balance[type.toLowerCase()] || 0;
 
@@ -810,7 +813,6 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
                                 annual: '#10b981',
                                 casual: '#3b82f6',
                                 sick: '#f59e0b',
-                                lop: '#ef4444',
                                 medical: '#ec4899',
                                 default: '#6366f1'
                             };
@@ -826,6 +828,13 @@ export default function LeaveTrackerScreen({ navigation }: { navigation: any }) 
                                 />
                             );
                         })}
+                        {/* Always show LOP Taken */}
+                        <BalanceCard 
+                            title="LOP Taken" 
+                            value={balance.lop || balance.LOP || 0} 
+                            color="#ef4444" 
+                            label="days"
+                        />
                     </View>
 
                     {/* Leave Requests List */}

@@ -16,6 +16,7 @@ import {
   Users,
   Calculator,
   Landmark,
+  Banknote,
   Eye,
   Check,
   ChevronRight,
@@ -84,7 +85,7 @@ export default function PayrollSetupWizard() {
     queryKey: ['payrollPolicy'],
     queryFn: () => policyAPI.getPolicy()
   });
-  const globalPolicy = globalPolicyRes?.data;
+  const globalPolicy = globalPolicyRes?.data?.data || globalPolicyRes?.data || globalPolicyRes;
 
   // State
   const [selectedUser, setSelectedUser] = useState<any>(preSelectedUser || null);
@@ -140,8 +141,14 @@ export default function PayrollSetupWizard() {
           earnings: (existing.earnings || ROLE_TEMPLATES['employee'].earnings).filter((e: any) => !e.hidden && !(e.name || '').toLowerCase().includes('metadata')),
           deductions: (existing.deductions || ROLE_TEMPLATES['employee'].deductions).filter((d: any) => !d.hidden && !(d.name || '').toLowerCase().includes('metadata'))
         });
-        setCtcValue(existing.annualCTC ? existing.annualCTC.toString() : (existing.monthlyCTC ? (existing.monthlyCTC * 12).toString() : ''));
-        setCtcType('annual');
+        if (existing.payrollType?.toLowerCase() === 'monthly') {
+          const mCTC = existing.monthlyCTC || (existing.annualCTC ? existing.annualCTC / 12 : 0);
+          setCtcValue(mCTC ? mCTC.toString() : '');
+          setCtcType('monthly');
+        } else {
+          setCtcValue(existing.annualCTC ? existing.annualCTC.toString() : (existing.monthlyCTC ? (existing.monthlyCTC * 12).toString() : ''));
+          setCtcType('annual');
+        }
       }
     }
   }, [selectedUser, profiles]);
@@ -255,24 +262,33 @@ export default function PayrollSetupWizard() {
       const isPF = name.includes('provident fund') || name === 'pf';
       const isESI = name.includes('esi') || name.includes('state insurance');
       const isPT = name.includes('professional tax') || name === 'pt';
-      const isStatutoryCandidate = (isPF && globalPolicy?.statutory?.pf?.enabled) || 
-                                   (isESI && globalPolicy?.statutory?.esi?.enabled) || 
-                                   (isPT && globalPolicy?.statutory?.pt?.enabled);
-      return !isStatutoryCandidate;
+      const isGratuity = name.includes('gratuity');
+      const isRetirement = name.includes('retirement');
+      return !isPF && !isESI && !isPT && !isGratuity && !isRetirement;
     });
 
     const finalDeductions = [...cleanedDeductions];
     const gratuity = breakdown.statutoryDeductions?.find((d: any) => d.name === 'Gratuity');
-    if (gratuity && globalPolicy?.statutory?.gratuity?.includeInCTC) {
-      if (!finalDeductions.find(d => d.name === 'Gratuity')) {
+    const retirement = breakdown.statutoryDeductions?.find((d: any) => d.name === 'Retirement');
+    if (retirement && globalPolicy?.statutory?.retirement?.includeInCTC) {
+      if (!finalDeductions.find(d => d.name === 'Retirement')) {
         finalDeductions.push({ 
-          name: 'Gratuity', 
-          value: gratuity.calculatedValue, 
+          name: 'Retirement', 
+          value: retirement.calculatedValue, 
           calculationType: 'Fixed', 
           basedOn: 'Basic Salary', 
           isStatutory: true 
         } as any);
       }
+    }
+    if (gratuity && !finalDeductions.find(d => d.name === 'Gratuity')) {
+      finalDeductions.push({ 
+        name: 'Gratuity', 
+        value: gratuity.calculatedValue, 
+        calculationType: 'Fixed', 
+        basedOn: 'Basic Salary', 
+        isStatutory: true 
+      } as any);
     }
 
     const earningsWithMeta = [
@@ -291,6 +307,7 @@ export default function PayrollSetupWizard() {
       userId: selectedUser?.id || selectedUser?._id,
       employeeId: selectedUser?.employee?.id,
       annualCTC,
+      payrollType: ctcType,
       earnings: earningsWithMeta,
       deductions: finalDeductions,
       bankDetails
@@ -480,30 +497,102 @@ export default function PayrollSetupWizard() {
                 <Plus size={20} color="#4f46e5" />
               </TouchableOpacity>
             </View>
-            {structure.deductions.map((d, idx) => (
-              <View key={idx} style={styles.componentRow}>
-                <TextInput
-                  style={[styles.input, { flex: 2 }]}
-                  value={d.name}
-                  onChangeText={(v) => updateComponent('deductions', idx, 'name', v)}
-                  placeholder="Name"
-                />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  value={d.value.toString()}
-                  onChangeText={(v) => updateComponent('deductions', idx, 'value', v)}
-                  keyboardType="numeric"
-                  placeholder="Value"
-                />
-                <TouchableOpacity
-                  style={styles.typeToggle}
-                  onPress={() => updateComponent('deductions', idx, 'calculationType', d.calculationType === 'Fixed' ? 'Percentage' : 'Fixed')}
-                >
-                  <Text style={styles.typeToggleText}>{d.calculationType === 'Fixed' ? 'FIX' : '%'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => removeComponent('deductions', idx)}>
-                  <Trash2 size={20} color="#ef4444" />
-                </TouchableOpacity>
+            {structure.deductions.filter(d => {
+              const name = (d.name || '').toLowerCase();
+              if (d.hidden || d._isStatutoryConfig || name.includes('metadata')) return false;
+              if (name.includes('gratuity') || name.includes('retirement')) return false; // Provisions
+              const isPF = name.includes('provident fund') || name === 'pf';
+              const isESI = name.includes('esi') || name.includes('state insurance');
+              const isPT = name.includes('professional tax') || name === 'pt';
+      const isGratuity = name.includes('gratuity');
+      const isRetirement = name.includes('retirement');
+              return !isPF && !isESI && !isPT && !isGratuity && !isRetirement;
+            }).map((d, OriginalIdx) => {
+              const idx = structure.deductions.indexOf(d); // Maintain correct index for updates
+              const calcVal = breakdown?.deductions?.find((item: any) => item.name === d.name)?.calculatedValue || 0;
+              const isPercentage = d.calculationType === 'Percentage';
+              return (
+                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                  <View style={{ flex: 1.5, marginRight: 12 }}>
+                    <View style={{ backgroundColor: '#f8fafc', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 4 }}>
+                      <TextInput
+                        style={{ fontSize: 13, fontWeight: '800', color: '#0f172a', padding: 0 }}
+                        value={d.name}
+                        onChangeText={(v) => updateComponent('deductions', idx, 'name', v)}
+                        placeholder="Component Name"
+                        placeholderTextColor="#94a3b8"
+                      />
+                    </View>
+                    {isPercentage && (
+                      <TouchableOpacity 
+                        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}
+                        onPress={() => {
+                          const current = d.basedOn || 'CTC';
+                          const next = current === 'CTC' ? 'Basic Salary' : current === 'Basic Salary' ? 'Gross' : 'CTC';
+                          updateComponent('deductions', idx, 'basedOn', next);
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#64748b', letterSpacing: 0.5, marginRight: 4 }}>
+                          % OF {d.basedOn === 'Basic Salary' ? 'BASIC' : (d.basedOn === 'Gross' ? 'GROSS' : 'CTC')}
+                        </Text>
+                        <ChevronDown size={12} color="#64748b" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', backgroundColor: '#f8fafc', borderRadius: 20, padding: 2 }}>
+                      <TouchableOpacity
+                        style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: !isPercentage ? '#fff' : 'transparent', shadowColor: !isPercentage ? '#000' : 'transparent', shadowOffset: { width: 0, height: 1 }, shadowOpacity: !isPercentage ? 0.05 : 0, shadowRadius: 2, elevation: !isPercentage ? 1 : 0 }}
+                        onPress={() => updateComponent('deductions', idx, 'calculationType', 'Fixed')}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: !isPercentage ? '#4f46e5' : '#94a3b8' }}>FIX</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: isPercentage ? '#fff' : 'transparent', shadowColor: isPercentage ? '#000' : 'transparent', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isPercentage ? 0.05 : 0, shadowRadius: 2, elevation: isPercentage ? 1 : 0 }}
+                        onPress={() => updateComponent('deductions', idx, 'calculationType', 'Percentage')}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: isPercentage ? '#4f46e5' : '#94a3b8' }}>%</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12, paddingHorizontal: 12, height: 36, minWidth: 60 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#cbd5e1', marginRight: 4 }}>{isPercentage ? '%' : currencySymbol}</Text>
+                      <TextInput
+                        style={{ flex: 1, fontSize: 14, fontWeight: '800', color: '#0f172a', padding: 0, textAlign: 'center' }}
+                        value={d.value.toString()}
+                        onChangeText={(v) => updateComponent('deductions', idx, 'value', v)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', minWidth: 90, gap: 12 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: '#ef4444' }}>
+                      {currencySymbol}{Math.round(calcVal).toLocaleString()}
+                    </Text>
+                    <TouchableOpacity onPress={() => removeComponent('deductions', idx)}>
+                      <Trash2 size={16} color="#cbd5e1" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+
+            {/* Always show statutory items from results here with Policy styling */}
+            {breakdown.statutoryDeductions?.map((sd: any, idx: number) => (
+              <View key={'stat-' + idx} style={[styles.componentRow, { backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 }}>
+                  <Shield size={16} color="#4f46e5" />
+                  <View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b' }}>{sd.name}</Text>
+                    <Text style={{ fontSize: 9, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Company Policy</Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#475569' }}>
+                  {currencySymbol}{Math.round(sd.calculatedValue).toLocaleString()}
+                </Text>
               </View>
             ))}
 
@@ -657,7 +746,7 @@ export default function PayrollSetupWizard() {
 
             {/* Gratuity */}
             <View style={styles.overrideRow}>
-              <View style={styles.overrideIconWrap}><IndianRupee size={16} color="#64748b" /></View>
+              <View style={styles.overrideIconWrap}><Banknote size={16} color="#64748b" /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.overrideTitle}>GRATUITY BENEFIT</Text>
                 <Text style={styles.overrideSub}>SOURCE: COMPANY POLICY</Text>
@@ -895,6 +984,7 @@ export default function PayrollSetupWizard() {
               </View>
             </TouchableOpacity>
           </View>
+          <View style={{ height: 100 }} />
         </ScrollView>
       </ScrollView>
 

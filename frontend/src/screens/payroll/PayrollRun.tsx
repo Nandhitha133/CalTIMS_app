@@ -116,7 +116,7 @@ export default function PayrollRun() {
     ]).start();
   }, [step]);
 
-  const fetchReadiness = async () => {
+  const proceedToReadiness = async () => {
     try {
       setLoading(true);
       const res: any = await payrollAPI.getReadiness({ month, year });
@@ -129,6 +129,33 @@ export default function PayrollRun() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchReadiness = async () => {
+    try {
+      setLoading(true);
+      // First check if the payroll for this month has already been generated
+      const batchesRes: any = await payrollAPI.getBatches();
+      if (batchesRes?.success && batchesRes.data) {
+        const existingBatch = batchesRes.data.find((b: any) => b.month === month && b.year === year);
+        if (existingBatch) {
+          setLoading(false);
+          Alert.alert(
+            'Payroll Already Generated',
+            `This month's payroll is already generated. Do you want to run again on this month?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Run Again', onPress: proceedToReadiness }
+            ]
+          );
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch existing batches:', err);
+    }
+    
+    await proceedToReadiness();
   };
 
   const fetchPreview = async () => {
@@ -284,26 +311,7 @@ export default function PayrollRun() {
                   <Text style={[styles.cardTitle, { textAlign: 'left', marginBottom: 4 }]}>Preview Payroll</Text>
                   <Text style={[styles.cardSubtitle, { textAlign: 'left', paddingHorizontal: 0, marginBottom: 0 }]}>Aggregated calculation for valid employees.</Text>
                 </View>
-                <TouchableOpacity 
-                  style={styles.overtimeSwitchContainer}
-                  onPress={async () => {
-                    const newValue = !overtimeEnabled;
-                    setOvertimeEnabled(newValue);
-                    try {
-                      setLoading(true);
-                      const res: any = await payrollAPI.getPreview({ month, year, overtimeEnabled: newValue });
-                      if (res?.success) setPreviewData(res.data);
-                    } catch (err: any) {
-                      Alert.alert('Error', err.response?.data?.message || 'Failed to fetch preview');
-                      setOvertimeEnabled(overtimeEnabled); // revert on error
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                >
-                  <Text style={styles.overtimeSwitchLabel}>OVERTIME</Text>
-                  <Text style={[styles.overtimeSwitchValue, overtimeEnabled ? { color: '#6366f1' } : {}]}>{overtimeEnabled ? 'ENABLED' : 'DISABLED'}</Text>
-                </TouchableOpacity>
+
               </View>
 
               <View style={styles.topActionsRow}>
@@ -343,16 +351,14 @@ export default function PayrollRun() {
                 <Text style={styles.breakdownHeader}>EMPLOYEE BREAKDOWN</Text>
                 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={{ minWidth: scale(800) }}>
+                  <View style={{ minWidth: scale(680) }}>
                     <View style={styles.tableHeader}>
-                      <Text style={[styles.tableCol, { width: scale(180), flex: 0, textAlign: 'left' }]}>EMPLOYEE</Text>
-                      <Text style={[styles.tableCol, { width: scale(80), flex: 0 }]}>TOTAL DAYS</Text>
-                      <Text style={[styles.tableCol, { width: scale(90), flex: 0 }]}>ADJ. WORKING</Text>
-                      <Text style={[styles.tableCol, { width: scale(80), flex: 0 }]}>PRESENT</Text>
-                      <Text style={[styles.tableCol, { width: scale(60), flex: 0 }]}>LOP</Text>
-                      <Text style={[styles.tableCol, { width: scale(70), flex: 0 }]}>OT HRS</Text>
-                      <Text style={[styles.tableCol, { width: scale(110), flex: 0, textAlign: 'right' }]}>ADJUSTED GROSS</Text>
-                      <Text style={[styles.tableCol, { width: scale(100), flex: 0, textAlign: 'right', color: '#6366f1' }]}>FINAL NET</Text>
+                      <Text style={[styles.tableCol, { width: scale(180), flex: 0, textAlign: 'left' }]}>EMPLOYEE NAME</Text>
+                      <Text style={[styles.tableCol, { width: scale(110), flex: 0, textAlign: 'right' }]}>GROSS PAY</Text>
+                      <Text style={[styles.tableCol, { width: scale(100), flex: 0, textAlign: 'right' }]}>DEDUCTION</Text>
+                      <Text style={[styles.tableCol, { width: scale(80), flex: 0 }]}>LOP DAYS</Text>
+                      <Text style={[styles.tableCol, { width: scale(110), flex: 0, textAlign: 'right' }]}>LOP DEDUCTION</Text>
+                      <Text style={[styles.tableCol, { width: scale(100), flex: 0, textAlign: 'right', color: '#6366f1' }]}>NET SALARY</Text>
                     </View>
 
                     {previewData.breakdown && previewData.breakdown.map((row: any, idx: number) => (
@@ -368,18 +374,16 @@ export default function PayrollRun() {
                         </View>
                         
                         {row.status === 'ERROR' ? (
-                          <View style={{ width: scale(590), flex: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={{ width: scale(500), flex: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                              <AlertCircle size={14} color="#ef4444" style={{ marginRight: scale(6) }} />
                              <Text style={{ color: '#ef4444', fontSize: moderateScale(12), fontWeight: '700' }}>Calculation Failed: {row.error}</Text>
                           </View>
                         ) : (
                           <>
-                            <Text style={[styles.tableCell, { width: scale(80), flex: 0, color: '#64748b' }]}>{row.standardMonthlyDays || 0}</Text>
-                            <Text style={[styles.tableCell, { width: scale(90), flex: 0, color: '#4f46e5' }]}>{row.working || 0}</Text>
-                            <Text style={[styles.tableCell, { width: scale(80), flex: 0, color: '#059669' }]}>{row.present || 0}</Text>
-                            <Text style={[styles.tableCell, { width: scale(60), flex: 0, color: '#ef4444' }]}>{row.lop || 0}</Text>
-                            <Text style={[styles.tableCell, { width: scale(70), flex: 0, color: '#64748b' }]}>{row.overtimeHours || 0}</Text>
-                            <Text style={[styles.tableCell, { width: scale(110), flex: 0, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{row.adjustedGross?.toLocaleString() || '0.00'}</Text>
+                            <Text style={[styles.tableCell, { width: scale(110), flex: 0, textAlign: 'right', color: '#475569' }]}>{currencySymbol}{(row.ctc || row.baseGross || ((row.adjustedGross || 0) + (row.lopDeduction || 0))).toLocaleString()}</Text>
+                            <Text style={[styles.tableCell, { width: scale(100), flex: 0, textAlign: 'right', color: '#e11d48' }]}>{currencySymbol}{Math.max(0, (row.deductions || row.totalDeductions || 0) - (row.lopDeduction || 0)).toLocaleString()}</Text>
+                            <Text style={[styles.tableCell, { width: scale(80), flex: 0, color: '#64748b' }]}>{row.lop || 0}</Text>
+                            <Text style={[styles.tableCell, { width: scale(110), flex: 0, textAlign: 'right', color: '#e11d48' }]}>{currencySymbol}{(row.lopDeduction || 0).toLocaleString()}</Text>
                             <Text style={[styles.tableCell, { width: scale(100), flex: 0, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>{currencySymbol}{row.net?.toLocaleString() || '0.00'}</Text>
                           </>
                         )}

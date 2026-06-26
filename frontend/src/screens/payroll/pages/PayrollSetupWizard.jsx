@@ -371,24 +371,33 @@ const PayrollSetupWizard = () => {
        const isPF = name.includes('provident fund') || name === 'pf';
        const isESI = name.includes('esi') || name.includes('state insurance');
        const isPT = name.includes('professional tax') || name === 'pt';
-       const isStatutoryCandidate = (isPF && globalPolicy?.statutory?.pf?.enabled) || 
-                                    (isESI && globalPolicy?.statutory?.esi?.enabled) || 
-                                    (isPT && globalPolicy?.statutory?.pt?.enabled);
-       return !isStatutoryCandidate;
+			const isGratuity = name.includes('gratuity');
+			const isRetirement = name.includes('retirement');
+       return !isPF && !isESI && !isPT && !isGratuity && !isRetirement;
      });
 
      const finalDeductions = [...cleanedDeductions];
      const gratuity = breakdown.statutoryDeductions?.find(d => d.name === 'Gratuity');
-     if (gratuity && globalPolicy?.statutory?.gratuity?.includeInCTC) {
-       if (!finalDeductions.find(d => d.name === 'Gratuity')) {
-         finalDeductions.push({ 
-           name: 'Gratuity', 
-           value: gratuity.calculatedValue, 
-           calculationType: 'Fixed', 
-           basedOn: 'Basic Salary', 
-           isStatutory: true 
-         });
-       }
+      const retirement = breakdown.statutoryDeductions?.find(d => d.name === 'Retirement');
+      if (retirement && globalPolicy?.statutory?.retirement?.includeInCTC) {
+        if (!finalDeductions.find(d => d.name === 'Retirement')) {
+          finalDeductions.push({ 
+            name: 'Retirement', 
+            value: retirement.calculatedValue, 
+            calculationType: 'Fixed', 
+            basedOn: 'Basic Salary', 
+            isStatutory: true 
+          });
+        }
+      }
+     if (gratuity && !finalDeductions.find(d => d.name === 'Gratuity')) {
+       finalDeductions.push({ 
+         name: 'Gratuity', 
+         value: gratuity.calculatedValue, 
+         calculationType: 'Fixed', 
+         basedOn: 'Basic Salary', 
+         isStatutory: true 
+       });
      }
 
      // Inject hidden metadata for statutory & attendance toggles
@@ -613,23 +622,26 @@ const PayrollSetupWizard = () => {
                        <button onClick={() => addComponent('deductions')} className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 p-2 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors"><Plus size={16} /></button>
                      </div>
                      <div className="space-y-4">
-                       {/* Only show Manual Deductions that are NOT handled by policy and NOT hidden */}
-                       {structure.deductions.filter(d => {
-                         const name = (d.name || '').toLowerCase();
-                         if (d.hidden || d._isStatutoryConfig || name.includes('metadata')) return false;
-                         if (name.includes('gratuity')) return false; // Gratuity is handled as provision
-                         const isPF = name.includes('provident fund') || name === 'pf';
-                         const isESI = name.includes('esi') || name.includes('state insurance');
-                         const isPT = name.includes('professional tax') || name === 'pt';
-                         const isGratuity = name.includes('gratuity');
-                         const isStatutory = (isPF && globalPolicy?.statutory?.pf?.enabled) || 
-                                             (isESI && globalPolicy?.statutory?.esi?.enabled) || 
-                                             (isPT && globalPolicy?.statutory?.pt?.enabled) ||
-                                             (isGratuity && globalPolicy?.statutory?.gratuity?.enabled);
-                         return !isStatutory;
-                       }).map((d, OriginalIdx) => {
-                         const idx = structure.deductions.indexOf(d); // Maintain correct index for updates
-                         return (
+                        {/* Only show Manual Deductions that are NOT handled by policy and NOT hidden */}
+                        {structure.deductions.filter(d => {
+                          const name = (d.name || '').toLowerCase();
+                          if (d.hidden || d._isStatutoryConfig || name.includes('metadata')) return false;
+                          if (name.includes('gratuity') || name.includes('retirement')) return false; // Provisions
+                          const isPF = name.includes('provident fund') || name === 'pf';
+                          const isESI = name.includes('esi') || name.includes('state insurance');
+                          const isPT = name.includes('professional tax') || name === 'pt';
+			const isGratuity = name.includes('gratuity');
+			const isRetirement = name.includes('retirement');
+
+
+
+
+
+
+                          return !isPF && !isESI && !isPT && !isGratuity && !isRetirement;
+                        }).map((d, OriginalIdx) => {
+                          const idx = structure.deductions.indexOf(d); // Maintain correct index for updates
+                          return (
                            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} key={idx} className="flex gap-2 items-center">
                              <div className="flex-1 min-w-[120px] space-y-1">
                                <input value={d.name} onChange={(ev) => updateComponent('deductions', idx, 'name', ev.target.value)} placeholder="Provident Fund" className="w-full bg-slate-50 dark:bg-white/5 border-transparent focus:border-indigo-100 dark:focus:border-indigo-500 dark:text-white rounded-xl px-3 py-3 text-xs font-bold outline-none ring-4 ring-transparent focus:ring-indigo-500/5 transition-all" />

@@ -583,11 +583,32 @@ const leaveService = {
 
   async getBalance(userId, organizationId) {
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return { annual: 0, sick: 0, casual: 0 };
+      return { annual: 0, sick: 0, casual: 0, lop: 0 };
     }
     const user = await User.findOne({ _id: userId, organizationId }).select('leaveBalance name employeeId');
     if (!user) throw new AppError('User not found', 404);
-    return user.leaveBalance;
+    
+    // Dynamically calculate total LOP days taken
+    const lopLeaves = await Leave.find({
+      userId,
+      organizationId,
+      leaveType: 'lop',
+      status: 'approved'
+    });
+    const lopTaken = lopLeaves.reduce((acc, leave) => acc + (leave.totalDays || 0), 0);
+    
+    // Safely convert Mongoose Map to plain object
+    let balanceObj = {};
+    if (user.leaveBalance) {
+        balanceObj = typeof user.leaveBalance.toJSON === 'function' 
+            ? user.leaveBalance.toJSON() 
+            : Object.fromEntries(user.leaveBalance);
+    }
+    
+    // Create a new object to ensure it's not a mongoose document fragment
+    balanceObj = { ...balanceObj, lop: lopTaken };
+    
+    return balanceObj;
   },
 
   async getFilterOptions(organizationId) {

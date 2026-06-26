@@ -826,8 +826,8 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       const role = currentUser?.role || user?.role;
       const isAdmin = ['admin', 'super_admin', 'owner'].includes(role?.toLowerCase());
       const userId = currentUser?.id || user?.id;
-      const response = await projectAPI.getAll({ 
-        status: 'active', 
+      const response = await projectAPI.getAll({
+        status: 'active',
         assignedOnly: !isAdmin,
         userId: !isAdmin ? userId : undefined
       });
@@ -842,11 +842,11 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       const role = currentUser?.role || user?.role;
       const isAdmin = ['admin', 'super_admin', 'owner'].includes(role?.toLowerCase());
       const userId = currentUser?.id || user?.id;
-      const response = await taskAPI.getAll({ 
-        isActive: true, 
-        assignedOnly: !isAdmin, 
+      const response = await taskAPI.getAll({
+        isActive: true,
+        assignedOnly: !isAdmin,
         userId: !isAdmin ? userId : undefined,
-        limit: 5000 
+        limit: 5000
       });
       const data = extractData(response, []);
       setAllTasks(data);
@@ -1129,7 +1129,12 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
           return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
         })
       }));
-      if (payloads.length > 0) await timesheetAPI.bulkUpsert(payloads);
+      if (payloads.length > 0) {
+        const res: any = await timesheetAPI.bulkUpsert(payloads);
+        if (res && res.success === false) {
+          throw new Error(res.message || res.error || 'Failed to save');
+        }
+      }
       Alert.alert('Success', 'Timesheets saved successfully');
       setIsDirty(false);
       fetchExistingTimesheets();
@@ -1142,10 +1147,10 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
   const handleSubmitWeek = async () => {
     if (!submissionRestriction.allowed) {
-        Alert.alert('Validation Error', `Submission allowed starting ${submissionRestriction.dayName}.`);
-        return;
+      Alert.alert('Validation Error', `Submission allowed starting ${submissionRestriction.dayName}.`);
+      return;
     }
-    
+
     if (!isSubmitAllowed) {
       if (isTimesheetFrozen) {
         Alert.alert('Validation Error', 'This timesheet is frozen and cannot be submitted.');
@@ -1156,47 +1161,102 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
     }
 
     const hasIncompleteRow = rows.some(r => {
-        if (r.isLeaveRow || isPermissionRow(r.taskType) || r.projectId === 'LEAVE-SYS') return false;
-        
-        // If project or task type is not selected, the entry is incomplete
-        if (!r.projectId || !r.taskType || r.taskType === 'Select Task' || r.taskType.trim() === '') return true;
+      if (r.isLeaveRow || isPermissionRow(r.taskType) || r.projectId === 'LEAVE-SYS') return false;
 
-        const total = r.dayHours.reduce((acc, time) => {
-            if (!time || time === '-8' || time === '00:00') return acc;
-            const [h, m] = time.split(':').map(Number);
-            return acc + h + (m / 60);
-        }, 0);
+      // If project or task type is not selected, the entry is incomplete
+      if (!r.projectId || !r.taskType || r.taskType === 'Select Task' || r.taskType.trim() === '') return true;
 
-        return total === 0;
+      const total = r.dayHours.reduce((acc, time) => {
+        if (!time || time === '-8' || time === '00:00') return acc;
+        const [h, m] = time.split(':').map(Number);
+        return acc + h + (m / 60);
+      }, 0);
+
+      return total === 0;
     });
 
     if (hasIncompleteRow) {
-        Alert.alert('Validation Error', 'Please select a project and task for all rows, and ensure no row has 0 working hours before submitting.');
-        return;
+      Alert.alert('Validation Error', 'Please select a project and task for all rows, and ensure no row has 0 working hours before submitting.');
+      return;
     }
 
     // Organization Policy Enforcement
-    if (timesheetSettings?.enforceMinHoursOnSubmit) {
-      // 1. Check Daily Minimums
-      for (let i = 0; i < 7; i++) {
-        if (!isWorkingDay(weekDays[i])) continue;
-        if (holidays.has(format(weekDays[i], 'yyyy-MM-dd'))) continue;
+    let policyViolations: string[] = [];
 
-        const dayTotal = calculateDayTotal(i);
-        if (dayTotal > 0 && dayTotal < minHoursPerDay) {
-          Alert.alert(
-            'Policy Violation',
-            `Daily minimum not met for ${format(weekDays[i], 'EEEE')}. You have logged ${formatHours(dayTotal)} but organizational policy requires a minimum of ${minHoursPerDay} hours.`
-          );
-          return;
-        }
+    // 1. Check Daily Minimums
+    for (let i = 0; i < 7; i++) {
+      if (!isWorkingDay(weekDays[i])) continue;
+      if (holidays.has(format(weekDays[i], 'yyyy-MM-dd'))) continue;
+
+      const dayTotal = calculateDayTotal(i);
+      if (dayTotal > 0 && dayTotal < minHoursPerDay) {
+        policyViolations.push(`Daily minimum not met for ${format(weekDays[i], 'EEEE')}. Logged: ${formatHours(dayTotal)}, Required: ${minHoursPerDay}h.`);
       }
+    }
 
-      // 2. Check Weekly Maximum
-      if (totalWeekHours > maxHoursPerWeek) {
+    // 2. Check Weekly Maximum
+    if (totalWeekHours > maxHoursPerWeek) {
+      policyViolations.push(`Weekly maximum exceeded. Logged: ${formatHours(totalWeekHours)}, Limit: ${maxHoursPerWeek}h.`);
+    }
+
+    const proceedWithSubmission = async () => {
+      setIsSubmitting(true);
+      try {
+        const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS' && !isPermissionRow(r.taskType)).map(row => ({
+          projectId: row.projectId,
+          category: row.taskType,
+          weekStartDate: format(weekStart, 'yyyy-MM-dd'),
+          entries: weekDays.filter(day => isWorkingDay(day)).map((day) => {
+            const i = weekDays.indexOf(day);
+            const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
+            const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
+            let hoursWorked = 0;
+            if (!isFullDay) {
+              const [hStr, mStr] = row.dayHours[i].split(':');
+              const h = parseInt(hStr, 10) || 0;
+              const m = parseInt(mStr, 10) || 0;
+              hoursWorked = h + (m / 60);
+            }
+            return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
+          })
+        }));
+
+        const res: any = await timesheetAPI.bulkSubmit(payloads);
+        if (res && res.success === false) {
+          throw new Error(res.message || res.error || 'Backend validation failed.');
+        }
+
+        setTimeout(() => {
+          Alert.alert('Success', 'Week submitted for approval');
+        }, 500);
+        setIsDirty(false);
+        fetchExistingTimesheets();
+      } catch (error: any) {
+        setTimeout(() => {
+          Alert.alert('Error', error?.message || 'Failed to submit');
+        }, 500);
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    if (policyViolations.length > 0) {
+      const violationMessage = policyViolations.join('\n\n');
+      if (timesheetSettings?.enforceMinHoursOnSubmit) {
+        Alert.alert('Submission Blocked (Policy Violation)', violationMessage);
+        return;
+      } else {
         Alert.alert(
-          'Policy Violation',
-          `Weekly maximum exceeded. You have logged ${formatHours(totalWeekHours)} but organizational policy limits weekly entries to ${maxHoursPerWeek} hours.`
+          'Policy Warning',
+          violationMessage + '\n\nDo you still want to submit?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Submit Anyway',
+              style: 'destructive',
+              onPress: proceedWithSubmission
+            }
+          ]
         );
         return;
       }
@@ -1207,40 +1267,7 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       'Sure, we will submit the timesheet.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'OK',
-          onPress: async () => {
-            setIsSubmitting(true);
-            try {
-              const payloads = rows.filter(r => r.projectId && !r.isLeaveRow && r.projectId !== 'LEAVE-SYS' && !isPermissionRow(r.taskType)).map(row => ({
-                projectId: row.projectId,
-                category: row.taskType,
-                weekStartDate: format(weekStart, 'yyyy-MM-dd'),
-                entries: weekDays.filter(day => isWorkingDay(day)).map((day) => {
-                  const i = weekDays.indexOf(day);
-                  const isLeaveCell = row.dayMeta && (row.dayMeta[i]?.isPending || row.dayMeta[i]?.isApproved);
-                  const isFullDay = isLeaveCell && row.dayMeta[i]?.isFullDay;
-                  let hoursWorked = 0;
-                  if (!isFullDay) {
-                    const [hStr, mStr] = row.dayHours[i].split(':');
-                    const h = parseInt(hStr, 10) || 0;
-                    const m = parseInt(mStr, 10) || 0;
-                    hoursWorked = h + (m / 60);
-                  }
-                  return { date: format(day, 'yyyy-MM-dd'), hoursWorked };
-                })
-              }));
-              await timesheetAPI.bulkSubmit(payloads);
-              Alert.alert('Success', 'Week submitted for approval');
-              setIsDirty(false);
-              fetchExistingTimesheets();
-            } catch (error: any) {
-              Alert.alert('Error', error?.message || 'Failed to submit');
-            } finally {
-              setIsSubmitting(false);
-            }
-          }
-        }
+        { text: 'OK', onPress: proceedWithSubmission }
       ]
     );
   };
@@ -1297,13 +1324,12 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         Alert.alert('Policy Violation', `Permission hours cannot exceed ${permissionMaxHoursPerDay} hours per day.`);
         return;
       }
-      
       if (newEntryHours > 0) {
         let daysWithPermission = 0;
         targetRow.dayHours.forEach((time, idx) => {
           if (idx !== dayIndex && time && time !== '00:00') {
-             const [rh, rm] = time.split(':').map(Number);
-             if (rh > 0 || rm > 0) daysWithPermission++;
+            const [rh, rm] = time.split(':').map(Number);
+            if (rh > 0 || rm > 0) daysWithPermission++;
           }
         });
         if (daysWithPermission + 1 > permissionMaxDaysPerWeek) {
@@ -1349,11 +1375,11 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
         const tPid = (t.projectId?.id || t.projectId?._id || t.projectId || '').toString();
         return tPid === projectId.toString() && t.name !== 'Not Mapped';
       });
-      
+
       const globalTasks = (taskCategories as string[]).filter((t: string) => {
         return t !== 'Not Mapped' && !projectTasks.some((pt: any) => pt.name === t);
       });
-      
+
       const allTaskOptions = [
         ...projectTasks.map((t: any) => ({ value: t.name, label: t.name })),
         ...globalTasks.map((t: string) => ({ value: t, label: t }))
@@ -1374,11 +1400,11 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       const tPid = (t.projectId?.id || t.projectId?._id || t.projectId || '').toString();
       return tPid === projectId.toString() && t.name !== 'Not Mapped';
     });
-    
+
     const globalTasks = (taskCategories as string[]).filter((t: string) => {
       return t !== 'Not Mapped' && !projectTasks.some((pt: any) => pt.name === t);
     });
-    
+
     const options = [
       ...projectTasks.map((t: any) => ({ value: t.name, label: t.name })),
       ...globalTasks.map((t: string) => ({ value: t, label: t }))
@@ -1424,6 +1450,8 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
       return tsDate === weekStr;
     });
     if (currentWeekTs?.status?.toLowerCase() === 'frozen') return true;
+
+    if (complianceSettings?.allowBackdatedEntries) return false;
 
     const [dayName, timeStr] = autoLockDeadlineStr.trim().split(/\s+/);
     const daysMap: Record<string, number> = { 'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6 };
@@ -1483,7 +1511,24 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
   const isWorkingDay = (date: Date) => {
     const day = date.getDay();
-    return day !== 0 && day !== 6;
+    const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDayStr = daysMap[day];
+
+    let workWeek = generalSettings?.workWeek;
+    let enabledDays: string[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']; // default
+
+    if (workWeek) {
+      if (Array.isArray(workWeek)) {
+        enabledDays = workWeek;
+      } else if (typeof workWeek === 'string') {
+        if (workWeek === 'Mon-Fri') enabledDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+        else if (workWeek === 'Sun-Thu') enabledDays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+        else if (workWeek === 'Mon-Sat') enabledDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        else enabledDays = workWeek.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+      }
+    }
+
+    return enabledDays.includes(currentDayStr);
   };
 
   const calculateDayTotal = (dayIndex: number) => rows.reduce((acc, row) => {
@@ -1562,15 +1607,15 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
 
     const weekStartDay = fullSettings?.general?.weekStartDay || 'monday';
     if (weekStartDay.toLowerCase() === 'monday') {
-        if (currentDayIndex === 0) currentDayIndex = 7;
-        if (targetDayIndex === 0) targetDayIndex = 7;
+      if (currentDayIndex === 0) currentDayIndex = 7;
+      if (targetDayIndex === 0) targetDayIndex = 7;
     }
 
     if (currentDayIndex < targetDayIndex) {
-        return {
-            allowed: false,
-            dayName: targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1)
-        };
+      return {
+        allowed: false,
+        dayName: targetDayName.charAt(0).toUpperCase() + targetDayName.slice(1)
+      };
     }
     return { allowed: true };
   }, [weekStart, timesheetSettings, fullSettings]);
@@ -1650,7 +1695,9 @@ export default function TimesheetEntryScreen({ navigation }: { navigation: any }
                 <Calendar size={14} color="#6366f1" />
                 <Text style={styles.weekMonthText}>{format(weekStart, 'MMMM yyyy')}</Text>
                 <View style={styles.navDivider} />
-                <Text style={styles.weekSubTextItalic}>Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')} (Week {getWeek(weekStart)})</Text>
+                <Text style={styles.weekSubTextItalic} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  Week: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')} (Week {getWeek(weekStart)})
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={() => handleWeekChange(1)}
@@ -2107,10 +2154,10 @@ const styles = StyleSheet.create({
   },
   navButton: { padding: scale(6), borderRadius: scale(20), backgroundColor: '#f8fafc' },
   navButtonDisabled: { opacity: 0.5 },
-  weekInfo: { flexDirection: 'row', alignItems: 'center', marginHorizontal: scale(8), gap: scale(8) },
+  weekInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: scale(8), gap: scale(8) },
   weekMonthText: { fontSize: moderateScale(13), fontWeight: 'bold', color: '#1e293b' },
   navDivider: { width: scale(1), height: verticalScale(16), backgroundColor: '#cbd5e1' },
-  weekSubTextItalic: { fontSize: moderateScale(12), color: '#64748b', fontStyle: 'italic' },
+  weekSubTextItalic: { fontSize: moderateScale(12), color: '#64748b', fontStyle: 'italic', flexShrink: 1 },
 
   deadlineBadge: {
     flexDirection: 'row',

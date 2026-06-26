@@ -335,14 +335,12 @@ const RunPayroll = () => {
                                             <table className="w-full text-left">
                                                 <thead className="sticky top-0 bg-white z-10">
                                                     <tr className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                        <th className="px-8 py-4">Employee</th>
-                                                        <th className="px-2 py-4 text-center">Total Days</th>
-                                                        <th className="px-2 py-4 text-center">Adj. Working</th>
-                                                        <th className="px-2 py-4 text-center">Present</th>
-                                                        <th className="px-2 py-4 text-center">LOP</th>
-                                                        <th className="px-4 py-4 text-center">OT Hrs</th>
-                                                        <th className="px-6 py-4 text-right">Adjusted Gross</th>
-                                                        <th className="px-8 py-4 text-right text-indigo-600 font-bold">Final Net</th>
+                                                        <th className="px-8 py-4">Employee Name</th>
+                                                        <th className="px-6 py-4 text-right">Gross Pay</th>
+                                                        <th className="px-6 py-4 text-right">Deduction</th>
+                                                        <th className="px-4 py-4 text-center">LOP Days</th>
+                                                        <th className="px-6 py-4 text-right">LOP Deduction</th>
+                                                        <th className="px-8 py-4 text-right text-indigo-600 font-bold">Net Salary</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-50 dark:divide-[#333333] text-[11px]">
@@ -360,7 +358,7 @@ const RunPayroll = () => {
                                                                 </div>
                                                             </td>
                                                             {row.status === 'ERROR' ? (
-                                                                <td colSpan={8} className="px-8 py-4 text-rose-500 font-bold italic text-center">
+                                                                <td colSpan={5} className="px-8 py-4 text-rose-500 font-bold italic text-center">
                                                                     <div className="flex items-center justify-center gap-2">
                                                                         <AlertCircle size={14} />
                                                                         Calculation Failed: {row.error || 'Unknown Error'}
@@ -368,12 +366,10 @@ const RunPayroll = () => {
                                                                 </td>
                                                             ) : (
                                                                 <>
-                                                                    <td className="px-2 py-4 text-center font-bold text-slate-500 dark:text-gray-400">{row.standardMonthlyDays || 0}</td>
-                                                                    <td className="px-2 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400">{row.working || 0}</td>
-                                                                    <td className="px-2 py-4 text-center font-black text-emerald-600 dark:text-emerald-400">{row.present || 0}</td>
-                                                                    <td className="px-2 py-4 text-center font-bold text-rose-500 dark:text-rose-400">{row.lop || 0}</td>
-                                                                    <td className="px-4 py-4 text-center font-bold text-slate-600 dark:text-gray-400">{row.overtimeHours || 0}</td>
-                                                                    <td className="px-6 py-4 text-right font-bold text-slate-600 dark:text-gray-400">{currencySymbol}{formatCurrency(row.adjustedGross || 0)}</td>
+                                                                    <td className="px-6 py-4 text-right font-bold text-slate-600 dark:text-gray-400">{currencySymbol}{formatCurrency(row.ctc || row.baseGross || ((row.adjustedGross || 0) + (row.lopDeduction || 0)))}</td>
+                                                                    <td className="px-6 py-4 text-right font-bold text-rose-500 dark:text-rose-400">{currencySymbol}{formatCurrency(Math.max(0, (row.deductions || row.totalDeductions || 0) - (row.lopDeduction || 0)))}</td>
+                                                                    <td className="px-4 py-4 text-center font-bold text-slate-500 dark:text-gray-400">{row.lop || 0}</td>
+                                                                    <td className="px-6 py-4 text-right font-bold text-rose-500 dark:text-rose-400">{currencySymbol}{formatCurrency(row.lopDeduction || 0)}</td>
                                                                     <td className="px-8 py-4 text-right text-sm font-black text-slate-900 dark:text-white border-l border-slate-50 dark:border-white/5 bg-slate-50/30 dark:bg-white/5">{currencySymbol}{formatCurrency(row.net || 0)}</td>
                                                                 </>
                                                             )}

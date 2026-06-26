@@ -28,10 +28,13 @@ const PayrollPolicySchema = new mongoose.Schema({
       employeeRate: { type: Number, default: 12 },
       employerRate: { type: Number, default: 12 },
       wageLimit: { type: Number, default: 15000 },
+      restrictToCeiling: { type: Boolean, default: true },
       includeBonus: { type: Boolean, default: false }
     },
     pt: {
       enabled: { type: Boolean, default: true },
+      state: { type: String, default: 'TN' },
+      mode: { type: String, default: 'MONTHLY' },
       slabs: [{
         min: { type: Number },
         max: { type: Number },
@@ -42,7 +45,8 @@ const PayrollPolicySchema = new mongoose.Schema({
       enabled: { type: Boolean, default: true },
       employeeRate: { type: Number, default: 0.75 },
       employerRate: { type: Number, default: 3.25 },
-      wageLimit: { type: Number, default: 21000 }
+      wageLimit: { type: Number, default: 21000 },
+      threshold: { type: Number, default: 21000 }
     },
     tds: {
       enabled: { type: Boolean, default: true },
@@ -53,6 +57,22 @@ const PayrollPolicySchema = new mongoose.Schema({
         max: { type: Number },
         rate: { type: Number }
       }]
+    },
+    gratuity: {
+      enabled: { type: Boolean, default: false },
+      employeePercent: { type: Number, default: 4.86 },
+      employeeRate: { type: Number, default: 4.86 },
+      employerPercent: { type: Number, default: 4.86 },
+      employerRate: { type: Number, default: 4.86 },
+      includeInCTC: { type: Boolean, default: false }
+    },
+    retirement: {
+      enabled: { type: Boolean, default: false },
+      employeePercent: { type: Number, default: 5 },
+      employeeRate: { type: Number, default: 5 },
+      employerPercent: { type: Number, default: 5 },
+      employerRate: { type: Number, default: 5 },
+      includeInCTC: { type: Boolean, default: false }
     }
   },
 

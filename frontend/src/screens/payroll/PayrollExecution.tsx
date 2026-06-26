@@ -108,12 +108,13 @@ export default function PayrollExecution() {
   }, [records, searchTerm, statusFilter]);
 
   const kpis = useMemo(() => {
-    if (!records) return { total: 0, payable: 0, paid: 0, pending: 0, blockedCount: 0 };
+    if (!records) return { total: 0, payable: 0, paidCount: 0, pendingCount: 0, blockedCount: 0 };
     const total = records.length;
     const payable = records.reduce((acc, r) => acc + (r.netPay || 0), 0);
-    const paid = records.filter(r => r.isPaid || r.payslip?.status === 'PAID').reduce((acc, r) => acc + (r.netPay || 0), 0);
+    const paidCount = records.filter(r => r.isPaid || r.payslip?.status === 'PAID').length;
+    const pendingCount = total - paidCount;
     const blockedCount = records.filter(r => !r.isPaid && (!r.bankDetails?.accountNumber || !r.bankDetails?.ifscCode)).length;
-    return { total, payable, paid, pending: payable - paid, blockedCount };
+    return { total, payable, paidCount, pendingCount, blockedCount };
   }, [records]);
 
   const handleMarkAllPaid = () => {
@@ -223,13 +224,13 @@ export default function PayrollExecution() {
               </View>
               <View style={[styles.kpiCard, { backgroundColor: '#ecfdf5' }]}>
                 <CheckCircle2 size={20} color="#10b981" style={styles.kpiIcon} />
-                <Text style={styles.kpiLabel}>Paid Amount</Text>
-                <Text style={[styles.kpiValue, { color: '#059669' }]} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{kpis.paid.toLocaleString()}</Text>
+                <Text style={styles.kpiLabel}>Paid Count</Text>
+                <Text style={[styles.kpiValue, { color: '#059669' }]} numberOfLines={1} adjustsFontSizeToFit>{kpis.paidCount}</Text>
               </View>
               <View style={[styles.kpiCard, { backgroundColor: '#fffbeb' }]}>
                 <Clock size={20} color="#d97706" style={styles.kpiIcon} />
-                <Text style={styles.kpiLabel}>Pending Amount</Text>
-                <Text style={[styles.kpiValue, { color: '#d97706' }]} numberOfLines={1} adjustsFontSizeToFit>{currencySymbol}{kpis.pending.toLocaleString()}</Text>
+                <Text style={styles.kpiLabel}>Pending Count</Text>
+                <Text style={[styles.kpiValue, { color: '#d97706' }]} numberOfLines={1} adjustsFontSizeToFit>{kpis.pendingCount}</Text>
               </View>
             </ScrollView>
 
@@ -244,10 +245,10 @@ export default function PayrollExecution() {
               
               <View style={styles.progressRow}>
                 <Text style={styles.progressLabel}>Disbursement Progress</Text>
-                <Text style={styles.progressValue}>{Math.round((kpis.paid / (kpis.payable || 1)) * 100)}%</Text>
+                <Text style={styles.progressValue}>{Math.round((kpis.paidCount / (kpis.total || 1)) * 100)}%</Text>
               </View>
               <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${(kpis.paid / (kpis.payable || 1)) * 100}%` }]} />
+                <View style={[styles.progressBarFill, { width: `${(kpis.paidCount / (kpis.total || 1)) * 100}%` }]} />
               </View>
 
               <View style={styles.blocksRow}>

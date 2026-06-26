@@ -139,21 +139,16 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
   // ── 5. Statutory Deductions ──────────────────────────────────────────────
   // PF
   if (pfConfig.enabled) {
-    const pfThreshold = pfConfig.threshold || 15000;
-    const pfBase = pfConfig.restrictToCeiling ? Math.min(basicSalary, pfThreshold) : basicSalary;
+    const pfBase = basicSalary || 0;
     const pfAmount = applyRounding((pfBase * (pfConfig.employeePercent || 12)) / 100);
     results.statutoryDeductions.push({ name: 'Provident Fund (PF)', calculatedValue: pfAmount, isStatutory: true, source: pfConfig.source });
     results.totalDeductions += pfAmount;
-
-    if (pfConfig.employerPercent > 0) {
-       results.employerContributions.push({ name: 'Employer PF Share', calculatedValue: applyRounding((pfBase * pfConfig.employerPercent) / 100) });
-    }
   }
 
   // ESI
   if (esiConfig.enabled) {
-    if (adjustedGross <= (esiConfig.threshold || 21000)) {
-      const esiAmount = applyRounding((adjustedGross * (esiConfig.employeePercent || 0.75)) / 100);
+    if (results.grossPay <= (esiConfig.threshold || 21000)) {
+      const esiAmount = Math.ceil((results.grossPay * (esiConfig.employeePercent || 0.75)) / 100);
       results.statutoryDeductions.push({ name: 'ESI', calculatedValue: esiAmount, isStatutory: true, source: esiConfig.source });
       results.totalDeductions += esiAmount;
     }
@@ -161,9 +156,21 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
 
   // PT
   if (ptConfig.enabled) {
+    const grossSalary = results.grossPay || 0;
     const slabs = ptConfig.slabs || [];
-    const slab = slabs.find(s => adjustedGross >= s.min && adjustedGross <= (s.max || 999999999));
-    const ptAmount = slab ? (slab.amount || 0) : 0;
+    const slab = slabs.find(s => {
+      const min = parseFloat(s.min) || 0;
+      const max = s.max !== undefined && s.max !== null && s.max !== '' ? parseFloat(s.max) : null;
+      return grossSalary >= min && (max === null || max === 0 || grossSalary <= max);
+    });
+    let ptAmount = slab ? (parseFloat(slab.amount) || 0) : 0;
+    
+    // Legacy Maharashtra February Rule
+    const currentMonth = attendanceCtx?.month || (new Date().getMonth() + 1);
+    if (ptConfig.state === 'MH' && currentMonth === 2 && ptAmount === 200) {
+      ptAmount = 300;
+    }
+
     if (ptAmount > 0) {
       results.statutoryDeductions.push({ name: 'Professional Tax (PT)', calculatedValue: ptAmount, isStatutory: true, source: ptConfig.source });
       results.totalDeductions += ptAmount;
@@ -171,10 +178,20 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
   }
 
   // Gratuity
-  if (gratuityConfig.enabled && basicSalary > 0) {
-    const rate = gratuityConfig.employeePercent !== undefined ? gratuityConfig.employeePercent : (gratuityConfig.employeeRate !== undefined ? gratuityConfig.employeeRate : 4.86);
-    const gratuityAmount = applyRounding((basicSalary * rate) / 100);
-    results.employerContributions.push({ name: 'Gratuity Provision', calculatedValue: gratuityAmount, source: gratuityConfig.source });
+  if (gratuityConfig.enabled && (monthlyCTC > 0 || results.grossPay > 0)) {
+    const gratuityBase = monthlyCTC || results.grossPay || 0;
+    const rate = gratuityConfig?.employeePercent ?? gratuityConfig?.employeeRate ?? 4.81;
+    const gratuityAmount = applyRounding((gratuityBase * rate) / 100);
+    results.employerContributions.push({ name: 'Gratuity Provision', calculatedValue: gratuityAmount, source: 'Company Policy' });
+    
+    results.statutoryDeductions.push({
+      name: 'Gratuity',
+      calculatedValue: gratuityAmount,
+      isStatutory: true,
+      source: 'Company Policy',
+      includeInCTC: true
+    });
+    results.totalDeductions += gratuityAmount;
   }
 
   // Retirement
@@ -182,15 +199,28 @@ export const calculateSalaryBreakdown = (earnings = [], deductions = [], monthly
     const rate = retirementConfig.employeePercent !== undefined ? retirementConfig.employeePercent : (retirementConfig.employeeRate !== undefined ? retirementConfig.employeeRate : 5.0);
     const retirementAmount = applyRounding((basicSalary * rate) / 100);
     results.employerContributions.push({ name: 'Retirement Provision', calculatedValue: retirementAmount, source: retirementConfig.source });
+    if (retirementConfig.includeInCTC) {
+      results.statutoryDeductions.push({ 
+        name: 'Retirement', 
+        calculatedValue: retirementAmount, 
+        isStatutory: true, 
+        source: retirementConfig.source,
+        includeInCTC: true 
+      });
+      results.totalDeductions += retirementAmount;
+    }
   }
 
   // ── 6. Profile Deductions (prorated) ─────────────────────────────────────
   const filteredDeductions = deductions.filter(d => {
     const n = (d.name || '').toLowerCase();
     if (d.hidden || d._isStatutoryConfig || n.includes('metadata')) return false;
-    if ((n.includes('pf') || n.includes('provident')) && pfConfig.enabled) return false;
-    if (n.includes('esi') && esiConfig.enabled) return false;
-    if ((n.includes('pt') || n.includes('tax')) && ptConfig.enabled) return false;
+    const isPF = n.includes('provident') || n.includes('pf');
+    const isESI = n.includes('esi') || n.includes('state insurance');
+    const isPT = n.includes('professional tax') || n.includes('pt');
+    const isGratuity = n.includes('gratuity');
+    const isRetirement = n.includes('retirement');
+    if (isPF || isESI || isPT || isGratuity || isRetirement) return false;
     return true;
   });
 

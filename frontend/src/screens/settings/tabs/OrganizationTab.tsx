@@ -118,7 +118,7 @@ const getSelectedDays = (workWeek: any) => {
   if (workWeek === 'Mon-Sat')
     return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const arr = workWeek.split(',').map((d: string) => d.trim().toLowerCase());
-  return arr.length === 7 ? arr : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  return arr.length > 0 ? arr : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 };
 
 const daysToString = (days: string[]) => {
@@ -401,6 +401,10 @@ export default function OrganizationTab() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!form.companyName || form.companyName.trim() === '') {
+        throw new Error('Official Institution Name is mandatory.');
+      }
+
       if (form.fiscalYearStart === form.fiscalYearEnd) {
         throw new Error('Fiscal year start and end cannot be the same');
       }
@@ -685,7 +689,7 @@ export default function OrganizationTab() {
               <SliderWithDots
                 value={form.workingHoursPerDay}
                 min={1}
-                max={12}
+                max={24}
                 step={0.25}
                 onChange={(val) => setForm(prev => ({ ...prev, workingHoursPerDay: val }))}
                 label="Hours"

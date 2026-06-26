@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { arrayBufferToBase64 } from '../utils/base64';
+import { reset } from '../navigation/NavigationService';
 
 // Get base URL based on environment
 const getBaseUrl = () => {
@@ -256,6 +257,9 @@ class ApiService {
       logout();
       try {
         Alert.alert('Session Expired', 'Your session has expired. Please log in again.');
+      } catch (e) { }
+      try {
+        reset('Login');
       } catch (e) { }
     }
   }

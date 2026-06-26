@@ -3,35 +3,22 @@
  * Rules driven by Indian Government Statutory Norms
  */
 
-export const calculatePF = (basicSalary, daSalary = 0, policy) => {
+export const calculatePF = (ctc, daSalary = 0, policy) => {
   if (!policy?.enabled) return { employeePF: 0, employerEPF: 0, employerEPS: 0, totalEmployer: 0 };
 
-  const { employeeRate = 12, employerRate = 12, wageLimit = 15000, restrictToCeiling = true } = policy;
+  const { employeePercent, employeeRate = 12 } = policy;
   
-  const totalBase = (basicSalary || 0) + (daSalary || 0);
-
-  // Base for calculation
-  const effectiveBase = restrictToCeiling ? Math.min(totalBase, wageLimit) : totalBase;
+  const totalBase = (ctc || 0) + (daSalary || 0);
 
   // Employee Contribution
-  const employeePF = Math.round(effectiveBase * (employeeRate / 100));
-
-  // Employer Split (Standard Indian Rule)
-  // EPS is typically 8.33% of basic+da (capped at 15k ceiling)
-  const epsBase = Math.min(totalBase, 15000); 
-  const employerEPS = Math.round(epsBase * (8.33 / 100));
-  
-  // Total Employer is usually 12% of effective base
-  const totalEmployerProposal = Math.round(effectiveBase * (employerRate / 100));
-  
-  // EPF is the remainder
-  const employerEPF = Math.max(0, totalEmployerProposal - employerEPS);
+  const rate = employeePercent !== undefined ? employeePercent : employeeRate;
+  const employeePF = Math.round(totalBase * (rate / 100));
 
   return {
     employeePF,
-    employerEPF,
-    employerEPS,
-    totalEmployer: employerEPF + employerEPS
+    employerEPF: 0,
+    employerEPS: 0,
+    totalEmployer: 0
   };
 };
 
@@ -56,10 +43,11 @@ export const calculatePT = (grossSalary, policy, monthIndex = 0) => {
 
   const { slabs = [], state = "MH", mode = "MONTHLY" } = policy;
 
-  // Find the applicable slab
-  const slab = slabs.find(
-    (s) => grossSalary >= s.min && grossSalary <= (s.max || 999999999)
-  );
+  const slab = slabs.find((s) => {
+    const min = parseFloat(s.min) || 0;
+    const max = s.max !== undefined && s.max !== null && s.max !== '' ? parseFloat(s.max) : null;
+    return grossSalary >= min && (max === null || max === 0 || grossSalary <= max);
+  });
 
   if (!slab) return 0;
 
@@ -79,10 +67,10 @@ export const calculatePT = (grossSalary, policy, monthIndex = 0) => {
   return amount;
 };
 
-export const calculateGratuity = (basicSalary, policy) => {
+export const calculateGratuity = (ctc, policy) => {
   if (!policy?.enabled) return 0;
   const percent = policy.employeePercent !== undefined ? policy.employeePercent : (policy.employeeRate !== undefined ? policy.employeeRate : 4.86);
-  return Math.round(basicSalary * (percent / 100));
+  return Math.round(ctc * (percent / 100));
 };
 
 export const calculateRetirement = (basicSalary, policy) => {

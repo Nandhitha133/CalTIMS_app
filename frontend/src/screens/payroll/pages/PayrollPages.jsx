@@ -597,7 +597,14 @@ export const EmployeePayrollProfiles = () => {
          const profile = profiles?.find(p => (p.employee?.userId === userId) || (p.user === userId));
          if (!profile) return toast.error('No payroll configuration found for this user');
 
-         const breakdown = calculateSalaryBreakdown(profile.earnings, profile.deductions, profile.monthlyCTC, globalPolicy);
+         const statutoryItem = (profile.earnings || []).find(e => e._isStatutoryConfig);
+         const statutoryConfig = statutoryItem?._config || {};
+         const breakdown = calculateSalaryBreakdown(
+            profile.earnings,
+            profile.deductions,
+            profile.monthlyCTC || (profile.annualCTC / 12),
+            { ...globalPolicy, profile: statutoryConfig }
+         );
          setViewModal({ isOpen: true, data: { user, profile, breakdown } });
       } else {
          navigate(`/payroll/profile/${user.id || user._id}`, { state: { preSelectedUser: user } });
@@ -954,6 +961,30 @@ export const EmployeePayrollProfiles = () => {
                                  <div className="pt-4 mt-2 border-t border-slate-50 dark:border-white/5 flex justify-between items-center">
                                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Total Monthly Deductions</span>
                                     <span className="text-sm font-black text-rose-600 dark:text-rose-400">{currencySymbol}{formatCurrency(viewModal.data.breakdown.totalDeductions)}</span>
+                                 </div>
+                              </div>
+                           </div>
+
+                           {/* Employer Contributions & Provisions Section */}
+                           {viewModal.data.breakdown.employerContributions?.length > 0 && (
+                              <div className="space-y-4 pt-4">
+                                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-2 border-l-2 border-indigo-500">Employer Contributions & Provisions</p>
+                                 <div className="bg-white dark:bg-[#111111] border border-slate-100 dark:border-[#333333] rounded-3xl p-6 space-y-4 shadow-sm hover:border-indigo-500/20 transition-all">
+                                    {viewModal.data.breakdown.employerContributions.map((c, idx) => (
+                                       <div key={idx} className="flex justify-between items-center group/row">
+                                          <div className="flex items-center gap-2">
+                                             <Shield size={12} className="text-indigo-400" />
+                                             <span className="text-xs font-bold text-slate-600 dark:text-gray-400 group-hover/row:text-slate-900 dark:group-hover/row:text-white transition-colors">{c.name}</span>
+                                          </div>
+                                          <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">{currencySymbol}{formatCurrency(c.calculatedValue)}</span>
+                                       </div>
+                                    ))}
+                                 </div>
+                              </div>
+                           )}
+                           <div>
+                              <div>
+                                 <div>
                                  </div>
                               </div>
                            </div>

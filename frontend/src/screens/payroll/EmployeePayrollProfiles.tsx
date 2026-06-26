@@ -71,7 +71,10 @@ export default function EmployeePayrollProfiles() {
       if (uRes?.success) setUsers(uRes.data.filter((u: any) => u.role !== 'super_admin'));
       if (pRes?.success) setProfiles(pRes.data);
       if (sRes?.success) setSettings(sRes.data);
-      if (polRes?.success) setGlobalPolicy(polRes.data);
+      if (polRes) {
+        const polData = polRes.data?.data || polRes.data || polRes;
+        setGlobalPolicy(polData);
+      }
     } catch (err) {
       console.error('Failed to load payroll profiles data', err);
     } finally {
@@ -185,7 +188,14 @@ export default function EmployeePayrollProfiles() {
       Alert.alert("Notice", "No payroll configuration found for this user.");
       return;
     }
-    const breakdown = calculateSalaryBreakdown(emp.profile.earnings, emp.profile.deductions, emp.profile.monthlyCTC, globalPolicy);
+    const statutoryItem = (emp.profile.earnings || []).find((e: any) => e._isStatutoryConfig);
+    const statutoryConfig = statutoryItem?._config || {};
+    const breakdown = calculateSalaryBreakdown(
+      emp.profile.earnings,
+      emp.profile.deductions,
+      emp.profile.monthlyCTC || (emp.profile.annualCTC / 12),
+      { ...globalPolicy, profile: statutoryConfig }
+    );
     setViewModalData({ user: emp, profile: emp.profile, breakdown });
   };
 
@@ -445,6 +455,27 @@ export default function EmployeePayrollProfiles() {
                       <View style={styles.breakdownTotalRow}>
                         <Text style={styles.breakdownTotalLabel}>TOTAL MONTHLY DEDUCTIONS</Text>
                         <Text style={styles.breakdownTotalValueDeduct}>{currencySymbol}{Math.round(viewModalData.breakdown.totalDeductions).toLocaleString()}</Text>
+                      </View>
+                    </View>
+
+                    {viewModalData.breakdown.employerContributions?.length > 0 && (
+                      <View style={{ marginBottom: 32 }}>
+                        <Text style={[styles.subSectionTitleDeduction, { color: '#6366f1' }]}>EMPLOYER CONTRIBUTIONS & PROVISIONS</Text>
+                        <View style={styles.breakdownCard}>
+                          {viewModalData.breakdown.employerContributions.map((c: any, idx: number) => (
+                            <View key={idx} style={styles.breakdownRow}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Shield size={12} color="#818cf8" style={{ marginRight: 6 }} />
+                                <Text style={[styles.breakdownRowName, { fontStyle: 'italic', color: '#64748b' }]}>{c.name}</Text>
+                              </View>
+                              <Text style={[styles.breakdownRowValueDeduct, { color: '#6366f1' }]}>{currencySymbol}{Math.round(c.calculatedValue).toLocaleString()}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                    <View style={{ display: 'none' }}>
+                      <View>
                       </View>
                     </View>
                   </View>

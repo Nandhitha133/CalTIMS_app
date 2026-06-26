@@ -28,6 +28,22 @@ const defaultPolicy = {
         { min: 500001, max: 1000000, rate: 20 },
         { min: 1000001, max: 999999999, rate: 30 }
       ]
+    },
+    gratuity: {
+      enabled: false,
+      employeePercent: 4.86,
+      employeeRate: 4.86,
+      employerPercent: 4.86,
+      employerRate: 4.86,
+      includeInCTC: false
+    },
+    retirement: {
+      enabled: false,
+      employeePercent: 5,
+      employeeRate: 5,
+      employerPercent: 5,
+      employerRate: 5,
+      includeInCTC: false
     }
   },
   attendance: {

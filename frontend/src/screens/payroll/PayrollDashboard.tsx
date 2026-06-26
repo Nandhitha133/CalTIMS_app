@@ -7,8 +7,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Modal
+  Modal,
+  Dimensions
 } from 'react-native';
+import { PieChart, LineChart } from 'react-native-chart-kit';
 import {
   Wallet,
   CreditCard,
@@ -19,7 +21,8 @@ import {
   ExternalLink,
   Calendar,
   ChevronDown,
-  CheckCircle2
+  CheckCircle2,
+  X
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { payrollAPI, settingsAPI } from '../../services/endpoints';
@@ -46,12 +49,22 @@ export default function PayrollDashboard() {
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
 
+  const [fullHistory, setFullHistory] = useState<any[]>([]);
+  const [timeRange, setTimeRange] = useState(6);
+  const [chartType, setChartType] = useState<'line' | 'bar' | 'pie'>('line');
+  const [trendTooltip, setTrendTooltip] = useState<{ visible: boolean, x: number, y: number, index: number } | null>(null);
+  const [showRangeModal, setShowRangeModal] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       loadUserData();
       fetchData();
-    }, [selectedMonth, selectedYear])
+    }, [selectedMonth, selectedYear, timeRange])
   );
+
+  useEffect(() => {
+    setTrendTooltip(null);
+  }, [timeRange, chartType]);
 
   const loadUserData = async () => {
     try {
@@ -70,15 +83,17 @@ export default function PayrollDashboard() {
       const settRes: any = await settingsAPI.getSettings();
       if (settRes?.success) setSettings(settRes.data);
 
-      const [dashRes, histRes, analyticsRes]: any[] = await Promise.all([
+      const [dashRes, histRes, analyticsRes, fullHistRes]: any[] = await Promise.all([
         payrollAPI.getDashboard({ month: selectedMonth, year: selectedYear }),
         payrollAPI.getBatches(),
-        payrollAPI.getAnalytics({ month: selectedMonth, year: selectedYear, department: 'All' })
+        payrollAPI.getAnalytics({ month: selectedMonth, year: selectedYear, department: 'All' }),
+        payrollAPI.getHistory()
       ]);
 
       if (dashRes?.success) setDash(dashRes.data);
       if (histRes?.success) setHistory(histRes.data.slice(0, 5));
       if (analyticsRes?.success) setAnalytics(analyticsRes.data);
+      if (fullHistRes?.success) setFullHistory(fullHistRes.data);
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
@@ -87,6 +102,43 @@ export default function PayrollDashboard() {
   };
 
   const currencySymbol = settings?.payroll?.currencySymbol || '$';
+
+  const safe = (val: any) => Number(val || 0);
+
+  const processedTrends = useMemo(() => {
+    if (!fullHistory || fullHistory.length === 0) return [];
+
+    const monthMap: any = {};
+    const allMonths = [];
+    const now = new Date();
+    for (let i = 0; i < timeRange; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      allMonths.push({
+        key,
+        label: `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear().toString().slice(-2)}`,
+        month: d.getMonth() + 1,
+        year: d.getFullYear()
+      });
+    }
+    allMonths.reverse();
+
+    fullHistory.forEach((p: any) => {
+      const key = `${p.year}-${p.month}`;
+      if (!monthMap[key]) monthMap[key] = { grossPay: 0, netPay: 0 };
+      monthMap[key].grossPay += safe(p.grossYield || p.breakdown?.grossPay || p.breakdown?.earnings?.grossEarnings);
+      monthMap[key].netPay += safe(p.netPay || p.breakdown?.netPay);
+    });
+
+    return allMonths.map(m => {
+      const data = monthMap[m.key] || { grossPay: 0, netPay: 0 };
+      return {
+        name: m.label,
+        grossPay: data.grossPay,
+        netPay: data.netPay,
+      };
+    });
+  }, [fullHistory, timeRange]);
 
   const renderKpiCard = (label: string, value: number, Icon: any, color: string, bg: string, isStatic = false) => (
     <View style={styles.kpiCard}>
@@ -185,6 +237,171 @@ export default function PayrollDashboard() {
               </TouchableOpacity>
             </View>
 
+            {/* Financial Disbursement */}
+            <View style={styles.card}>
+              <View style={[styles.cardHeader, { marginBottom: verticalScale(12) }]}>
+                <Text style={styles.cardTitle}>Financial Disbursement</Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <View style={styles.chartTypeGroup}>
+                  {(['line', 'bar', 'pie'] as const).map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.chartTypeTab,
+                        chartType === type && styles.chartTypeTabActive
+                      ]}
+                      onPress={() => setChartType(type)}
+                    >
+                      <Text
+                        style={[
+                          styles.chartTypeTabText,
+                          chartType === type && styles.chartTypeTabTextActive
+                        ]}
+                      >
+                        {type.toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.timeRangeDropdown}
+                  onPress={() => setShowRangeModal(true)}
+                >
+                  <Text style={styles.timeRangeText}>{timeRange} MONTHS</Text>
+                  <ChevronDown size={14} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ alignItems: 'center', position: 'relative', width: '100%' }}>
+                {chartType === 'bar' ? (
+                  <View style={styles.chartContainer}>
+                    <View style={styles.barsWrapper}>
+                      {processedTrends.map((t: any, index: number) => {
+                        const val = t.netPay || 0;
+                        const maxVal = Math.max(...processedTrends.map((item: any) => item.netPay || 0), 1);
+                        const fillHeight = `${(val / maxVal) * 100}%` as any;
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            style={styles.barColumn}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              setTrendTooltip({
+                                visible: true,
+                                x: (Dimensions.get('window').width - 80) * (index + 0.5) / processedTrends.length,
+                                y: 100,
+                                index: index,
+                              });
+                            }}
+                          >
+                            <View style={styles.barTrack}>
+                              <View style={[styles.barFill, { height: fillHeight, backgroundColor: '#4f46e5' }]} />
+                            </View>
+                            <Text style={styles.barLabel}>{t.name.split(' ')[0]}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ) : chartType === 'pie' ? (
+                  <PieChart
+                    data={[
+                      {
+                        name: 'Gross',
+                        population: processedTrends.reduce((sum, t) => sum + t.grossPay, 0),
+                        color: '#6366f1',
+                        legendFontColor: '#334155',
+                        legendFontSize: 11
+                      },
+                      {
+                        name: 'Net Pay',
+                        population: processedTrends.reduce((sum, t) => sum + t.netPay, 0),
+                        color: '#10b981',
+                        legendFontColor: '#334155',
+                        legendFontSize: 11
+                      }
+                    ]}
+                    width={Dimensions.get('window').width - 72}
+                    height={200}
+                    chartConfig={{
+                      color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
+                    }}
+                    accessor="population"
+                    backgroundColor="transparent"
+                    paddingLeft="15"
+                    hasLegend={true}
+                    absolute={true}
+                  />
+                ) : (
+                  <LineChart
+                    data={{
+                      labels: processedTrends.map((t: any) => t.name.split(' ')[0]),
+                      datasets: [{ data: processedTrends.length ? processedTrends.map((t: any) => t.netPay || 0) : [0] }]
+                    }}
+                    width={Dimensions.get('window').width - 72}
+                    height={220}
+                    chartConfig={{
+                      backgroundColor: '#ffffff',
+                      backgroundGradientFrom: '#ffffff',
+                      backgroundGradientTo: '#ffffff',
+                      decimalPlaces: 0,
+                      color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
+                      labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+                      style: { borderRadius: 16 },
+                      propsForDots: { r: '4', strokeWidth: '2', stroke: '#4f46e5' },
+                      propsForBackgroundLines: { strokeDasharray: '', stroke: '#f1f5f9' },
+                    }}
+                    bezier={false}
+                    style={{ borderRadius: 16 }}
+                    withHorizontalLabels={false}
+                    onDataPointClick={(clickData) => {
+                      setTrendTooltip({
+                        visible: true,
+                        x: clickData.x,
+                        y: clickData.y,
+                        index: clickData.index,
+                      });
+                    }}
+                  />
+                )}
+                {trendTooltip?.visible && processedTrends[trendTooltip.index] && (
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setTrendTooltip(null)}
+                    style={{
+                      position: 'absolute',
+                      left: Math.max(10, Math.min(trendTooltip.x - 60, Dimensions.get('window').width - 80 - 130)),
+                      top: Math.max(10, trendTooltip.y - 80),
+                      backgroundColor: 'white',
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderRadius: 24,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 8,
+                      elevation: 5,
+                      borderWidth: 1,
+                      borderColor: '#f1f5f9',
+                      zIndex: 100,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#1e293b', marginBottom: 4 }}>
+                      {processedTrends[trendTooltip.index].name}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#4f46e5', fontWeight: '800' }}>
+                      Net Pay: {currencySymbol}{processedTrends[trendTooltip.index].netPay.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
             {/* Analytics Section */}
             {analytics && (
               <View style={styles.card}>
@@ -192,58 +409,54 @@ export default function PayrollDashboard() {
                   <Text style={styles.cardTitle}>Cost by Department</Text>
                 </View>
                 {analytics.departmentDistribution?.length > 0 ? (
-                  analytics.departmentDistribution.map((dept: any, idx: number) => {
-                    const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
-                    const color = colors[idx % colors.length];
-                    const totalNet = dash?.summary?.totalPayroll || 1; // Prevent division by zero
-                    const percent = Math.min(100, (dept.value / totalNet) * 100);
-                    return (
-                      <View key={idx} style={{ marginBottom: 12 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <Text style={{ fontSize: 12, fontWeight: '600', color: '#334155' }}>{dept.name}</Text>
-                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>{currencySymbol}{Math.round(dept.value).toLocaleString()}</Text>
-                        </View>
-                        <View style={{ height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
-                          <View style={{ width: `${percent}%`, height: '100%', backgroundColor: color, borderRadius: 4 }} />
-                        </View>
-                      </View>
-                    );
-                  })
+                  <View style={{ position: 'relative', height: 200, width: '100%', justifyContent: 'center' }}>
+                    <PieChart
+                      data={analytics.departmentDistribution.map((dept: any, idx: number) => {
+                        const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+                        return {
+                          name: dept.name,
+                          population: dept.value,
+                          color: colors[idx % colors.length],
+                          legendFontColor: '#334155',
+                          legendFontSize: 11
+                        };
+                      })}
+                      width={Dimensions.get('window').width - 72}
+                      height={200}
+                      chartConfig={{ color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})` }}
+                      accessor={"population"}
+                      backgroundColor={"transparent"}
+                      paddingLeft={"10"}
+                      hasLegend={true}
+                    />
+                    <View style={{
+                      position: 'absolute',
+                      left: ((Dimensions.get('window').width - 72) / 4) + 10 - 35,
+                      top: 100 - 35,
+                      width: 70,
+                      height: 70,
+                      borderRadius: 35,
+                      backgroundColor: '#ffffff',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                      elevation: 3
+                    }}>
+                      <Text style={{ fontSize: 8, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>TOTAL</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '900', color: '#0f172a', marginTop: 1 }}>
+                        {currencySymbol}{Math.round(dash?.summary?.totalPayroll || 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
                 ) : (
                   <Text style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 16 }}>No department data</Text>
                 )}
               </View>
             )}
 
-            {/* Payroll Component Breakdown Section */}
-            {analytics && (
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Payroll Component Breakdown</Text>
-                </View>
-                {analytics.breakdown?.length > 0 ? (
-                  analytics.breakdown.sort((a: any, b: any) => b.value - a.value).slice(0, 8).map((comp: any, idx: number) => {
-                    const colors = ['#3b82f6', '#14b8a6', '#f97316', '#a855f7', '#ec4899', '#6366f1', '#10b981', '#f43f5e'];
-                    const color = colors[idx % colors.length];
-                    const isDeduction = comp.type === 'deduction';
-                    return (
-                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
-                        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color, marginRight: 12 }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a' }}>{comp.name}</Text>
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>{comp.type}</Text>
-                        </View>
-                        <Text style={{ fontSize: 14, fontWeight: '800', color: isDeduction ? '#ef4444' : '#10b981' }}>
-                          {isDeduction ? '-' : '+'}{currencySymbol}{Math.round(comp.value).toLocaleString()}
-                        </Text>
-                      </View>
-                    );
-                  })
-                ) : (
-                  <Text style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: 16 }}>No component data</Text>
-                )}
-              </View>
-            )}
 
             {/* Recent Batches */}
             <View style={styles.card}>
@@ -352,6 +565,44 @@ export default function PayrollDashboard() {
           </View>
         </View>
       </Modal>
+      {/* Range Picker Modal */}
+      <Modal visible={showRangeModal} transparent animationType="fade" onRequestClose={() => setShowRangeModal(false)}>
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowRangeModal(false)}>
+          <View style={styles.pickerContent}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitleText}>Select Time Range</Text>
+              <TouchableOpacity onPress={() => setShowRangeModal(false)}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            {[
+              { label: '3 Months', value: 3 },
+              { label: '6 Months', value: 6 },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.pickerOption,
+                  timeRange === option.value && styles.pickerOptionActive
+                ]}
+                onPress={() => {
+                  setTimeRange(option.value);
+                  setShowRangeModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.pickerOptionText,
+                    timeRange === option.value && styles.pickerOptionTextActive
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Layout>
   );
 }
@@ -393,5 +644,28 @@ const styles = StyleSheet.create({
   batchCount: { fontSize: moderateScale(12), color: '#64748b', marginTop: verticalScale(2) },
   batchTotal: { fontSize: moderateScale(14), fontWeight: '700', color: '#0f172a' },
   batchStatus: { fontSize: moderateScale(11), fontWeight: '600', color: '#64748b', marginTop: verticalScale(2) },
-  emptyText: { textAlign: 'center', color: '#94a3b8', paddingVertical: verticalScale(20) }
+  emptyText: { textAlign: 'center', color: '#94a3b8', paddingVertical: verticalScale(20) },
+
+  chartTypeGroup: { flexDirection: 'row', backgroundColor: '#e2e8f0', borderRadius: scale(20), padding: scale(3) },
+  chartTypeTab: { paddingHorizontal: scale(16), paddingVertical: verticalScale(6), borderRadius: scale(18) },
+  chartTypeTabActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: verticalScale(1) }, shadowOpacity: 0.1, shadowRadius: scale(2), elevation: 2 },
+  chartTypeTabText: { fontSize: moderateScale(11), fontWeight: '700', color: '#64748b' },
+  chartTypeTabTextActive: { color: '#0f172a' },
+  timeRangeDropdown: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: scale(16), paddingVertical: verticalScale(8), borderRadius: scale(20), borderWidth: 1, borderColor: '#e2e8f0', gap: scale(6) },
+  timeRangeText: { fontSize: moderateScale(11), fontWeight: '800', color: '#64748b' },
+  chartContainer: { height: verticalScale(200), width: '100%', marginTop: verticalScale(8) },
+  barsWrapper: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingTop: verticalScale(20) },
+  barColumn: { alignItems: 'center', width: `${100 / 6}%` },
+  barTrack: { height: verticalScale(140), width: scale(24), backgroundColor: '#f1f5f9', borderRadius: scale(12), justifyContent: 'flex-end', overflow: 'hidden' },
+  barFill: { width: '100%', borderRadius: scale(12) },
+  barLabel: { fontSize: moderateScale(10), fontWeight: '700', color: '#64748b', marginTop: verticalScale(12), textTransform: 'uppercase' },
+
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'flex-end' },
+  pickerContent: { backgroundColor: '#fff', borderTopLeftRadius: scale(24), borderTopRightRadius: scale(24), padding: scale(20), paddingBottom: verticalScale(30) },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(20), borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: verticalScale(12) },
+  pickerTitleText: { fontSize: moderateScale(16), fontWeight: '800', color: '#0f172a' },
+  pickerOption: { paddingVertical: verticalScale(14), paddingHorizontal: scale(16), borderRadius: scale(12), marginBottom: verticalScale(8), flexDirection: 'row', alignItems: 'center' },
+  pickerOptionActive: { backgroundColor: '#f1f5f9' },
+  pickerOptionText: { fontSize: moderateScale(14), fontWeight: '700', color: '#475569' },
+  pickerOptionTextActive: { color: '#4f46e5', fontWeight: '800' }
 });

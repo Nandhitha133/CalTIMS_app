@@ -168,12 +168,39 @@ const calculateAttendance = async (user, month, year, policy, effectivePayrollTy
   return { totalHours, payableDays, lopDays, workedDays, approvedHours, payableWeeks, overtimeHours, workingDays, hoursPerDay };
 };
 
+const resolveStatutoryOverride = (policy, profile) => {
+  const statutoryItem = (profile?.earnings || []).find(e => e._isStatutoryConfig) || (profile?.deductions || []).find(d => d._isStatutoryConfig);
+  const profileCfg = statutoryItem?._config || {};
+  const policyCfg = policy?.statutory || {};
+
+  const resolve = (type) => {
+    const cfg = profileCfg[type] || { mode: 'default' };
+    const mode = cfg.mode || 'default';
+    if (mode === 'enabled') {
+      return { ...policyCfg[type], ...cfg, enabled: true };
+    } else if (mode === 'disabled') {
+      return { enabled: false };
+    } else {
+      return { ...policyCfg[type] };
+    }
+  };
+
+  return {
+    pf: resolve('pf'),
+    esi: resolve('esi'),
+    pt: resolve('pt'),
+    gratuity: resolve('gratuity'),
+    retirement: resolve('retirement')
+  };
+};
+
 /**
  * Pipeline Step 2: Calculate Salary
  * Returns earnings, deductions, grossEarnings, totalDeductions, netPay, lopDeduction
  */
 const calculateSalary = (policy, profile, attendance, contextData, salaryStructure = null) => {
   const { userCTC, effectivePayrollType, totalDaysInMonth, startDate } = contextData;
+  const month = startDate.getMonth() + 1;
   const { totalHours, payableDays, lopDays, overtimeHours, workingDays, hoursPerDay } = attendance;
 
   let overtimePay = 0;
@@ -187,6 +214,7 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
     earnings: { components: [], grossEarnings: 0 },
     deductions: { components: [], totalDeductions: 0 },
     grossEarnings: 0,
+    baseGross: 0,
     totalDeductions: 0,
     netPay: 0,
     lopDeduction: 0,
@@ -235,6 +263,7 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
 
       breakdown.grossEarnings += proratedVal;
       breakdown.earnings.grossEarnings += proratedVal;
+      breakdown.baseGross += val;
 
       breakdown.executionLog.push({
         component: comp.name,
@@ -250,8 +279,10 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
 
     // 2. LOP Deduction
     if (lopDays > 0 && policy.attendance?.lopCalculation) {
-      const basic = context['Basic Salary'] || context['Basic'] || context['basic salary'] || context.BASIC || 0;
-      const hra = context['House Rent Allowance (HRA)'] || context['HRA'] || context['hra'] || 0;
+      const basicKey = Object.keys(context).find(k => k.toLowerCase().includes('basic'));
+      const basic = basicKey ? context[basicKey] : (context.gross || 0) * 0.5;
+      const hraKey = Object.keys(context).find(k => k.toLowerCase().includes('hra') || k.toLowerCase().includes('house rent'));
+      const hra = hraKey ? context[hraKey] : 0;
       const baseForLop = basic + hra;
 
       let lopVal = 0;
@@ -268,14 +299,15 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
       breakdown.totalDeductions += breakdown.lopDeduction;
     }
 
-    // 3. Dynamic Statutory Logic
-    const statutory = policy.statutory || {};
+    // 3. Dynamic Statutory Logic with Profile Overrides
+    const statutory = resolveStatutoryOverride(policy, profile);
 
     // PF Calculation
     if (statutory.pf?.enabled) {
-      const basic = context.BASIC || context.gross * 0.4;
-      const pfBase = Math.min(basic, statutory.pf.wageLimit || 15000);
-      const pfVal = (pfBase * (statutory.pf.employeeRate || 12)) / 100;
+      const basicKey = Object.keys(context).find(k => k.toLowerCase().includes('basic'));
+      const basicSalary = basicKey ? context[basicKey] : (context.gross || 0) * 0.5;
+      const pfBase = basicSalary || 0;
+      const pfVal = (pfBase * (statutory.pf.employeePercent || statutory.pf.employeeRate || 12)) / 100;
       breakdown.deductions.components.push({ name: 'PF', value: pfVal });
       breakdown.totalDeductions += pfVal;
       breakdown.deductions.totalDeductions += pfVal;
@@ -283,8 +315,10 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
     }
 
     // ESI Calculation
-    if (statutory.esi?.enabled && breakdown.grossEarnings <= (statutory.esi.wageLimit || 21000)) {
-      const esiVal = (breakdown.grossEarnings * (statutory.esi.employeeRate || 0.75)) / 100;
+    const esiLimit = statutory.esi.threshold !== undefined ? statutory.esi.threshold : (statutory.esi.wageLimit || 21000);
+    if (statutory.esi?.enabled && breakdown.grossEarnings <= esiLimit) {
+      const rawEsiVal = (breakdown.grossEarnings * (statutory.esi.employeeRate || 0.75)) / 100;
+      const esiVal = Math.ceil(rawEsiVal);
       breakdown.deductions.components.push({ name: 'ESI', value: esiVal });
       breakdown.totalDeductions += esiVal;
       breakdown.deductions.totalDeductions += esiVal;
@@ -293,13 +327,49 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
 
     // PT Calculation
     if (statutory.pt?.enabled) {
-      const slab = statutory.pt.slabs.find(s => breakdown.grossEarnings >= s.min && (breakdown.grossEarnings <= s.max || !s.max));
-      const ptVal = slab ? slab.amount : 0;
+      const grossSalary = breakdown.grossEarnings || 0;
+      const slabs = statutory.pt.slabs || [];
+      const slab = slabs.find(s => {
+        const min = parseFloat(s.min) || 0;
+        const max = s.max !== undefined && s.max !== null && s.max !== '' ? parseFloat(s.max) : null;
+        return grossSalary >= min && (max === null || max === 0 || grossSalary <= max);
+      });
+      let ptVal = slab ? (parseFloat(slab.amount) || 0) : 0;
+      
+      // Legacy Maharashtra February Rule
+      if (statutory.pt.state === 'MH' && month === 2 && ptVal === 200) {
+        ptVal = 300;
+      }
+
       if (ptVal > 0) {
         breakdown.deductions.components.push({ name: 'Professional Tax', value: ptVal });
         breakdown.totalDeductions += ptVal;
         breakdown.deductions.totalDeductions += ptVal;
         context.PT = ptVal;
+      }
+    }
+
+    // Gratuity Calculation
+    if (statutory.gratuity?.enabled) {
+      const gratuityBase = context.CTC || context.gross || 0;
+      const rate = statutory.gratuity.employeePercent !== undefined ? statutory.gratuity.employeePercent : (statutory.gratuity.employeeRate !== undefined ? statutory.gratuity.employeeRate : 4.86);
+      const gratuityVal = (gratuityBase * rate) / 100;
+      breakdown.deductions.components.push({ name: 'Gratuity', value: gratuityVal });
+      breakdown.totalDeductions += gratuityVal;
+      breakdown.deductions.totalDeductions += gratuityVal;
+      context.Gratuity = gratuityVal;
+    }
+
+    // Retirement Calculation
+    if (statutory.retirement?.enabled) {
+      const basic = context.BASIC || context.gross * 0.4;
+      const rate = statutory.retirement.employeePercent !== undefined ? statutory.retirement.employeePercent : (statutory.retirement.employeeRate !== undefined ? statutory.retirement.employeeRate : 5.0);
+      const retirementVal = (basic * rate) / 100;
+      if (statutory.retirement.includeInCTC) {
+        breakdown.deductions.components.push({ name: 'Retirement', value: retirementVal });
+        breakdown.totalDeductions += retirementVal;
+        breakdown.deductions.totalDeductions += retirementVal;
+        context.Retirement = retirementVal;
       }
     }
 
@@ -321,11 +391,20 @@ const calculateSalary = (policy, profile, attendance, contextData, salaryStructu
     }
 
     // 4. Other Deductions from Profile/Policy/Structure
-    const structuralDeductions = (profile?.deductions?.length > 0)
+    const structuralDeductions = ((profile?.deductions?.length > 0)
       ? profile.deductions
       : (salaryStructure?.deductions?.length > 0)
         ? salaryStructure.deductions
-        : policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory);
+        : policy.salaryComponents.filter(c => c.type === 'DEDUCTION' && !c.isStatutory)
+    ).filter(d => {
+      const name = (d.name || '').toLowerCase();
+      const isPF = name.includes('provident') || name === 'pf';
+      const isESI = name.includes('esi') || name.includes('state insurance');
+      const isPT = name.includes('professional tax') || name === 'pt';
+      const isGratuity = name.includes('gratuity');
+      const isRetirement = name.includes('retirement');
+      return !isPF && !isESI && !isPT && !isGratuity && !isRetirement;
+    });
 
     structuralDeductions.forEach(comp => {
       if (!comp.type) comp.type = 'DEDUCTION';
@@ -484,7 +563,10 @@ const simulateUserPayroll = async (userId, month, year, organizationId) => {
       totalHours: attendance.totalHours,
       payableDays: attendance.payableDays
     },
-    breakdown
+    breakdown: {
+      ...breakdown,
+      ctc: calcMonthlyCTC
+    }
   };
 };
 
@@ -1204,9 +1286,47 @@ const getPayrollAnalytics = async (filters) => {
  * Used by the History / Run Archive page instead of raw ProcessedPayroll.
  */
 const getPayrollBatches = async (organizationId) => {
-  return await PayrollBatch.find({ organizationId })
+  const batches = await PayrollBatch.find({ organizationId })
     .sort({ year: -1, month: -1 })
     .lean();
+
+  const batchesWithPaidCount = await Promise.all(batches.map(async (batch) => {
+    // Fetch all active processed payrolls for this batch using Prisma to include payslip status
+    const allRecords = await prisma.processedPayroll.findMany({
+      where: {
+        organizationId: organizationId.toString(),
+        month: batch.month,
+        year: batch.year,
+        isDeleted: false
+      },
+      include: {
+        payslip: { select: { status: true } }
+      }
+    });
+
+    const paidRecords = allRecords.filter(r => r.isPaid || r.payslip?.status === 'PAID');
+    
+    const paidCount = paidRecords.length;
+    const paidAmount = paidRecords.reduce((sum, record) => sum + (record.netPay || 0), 0);
+    
+    const actualTotalEmployees = allRecords.length;
+    const activeTotalNet = allRecords.reduce((sum, record) => sum + (record.netPay || 0), 0);
+    const activeTotalGross = allRecords.reduce((sum, record) => sum + (record.grossYield || 0), 0);
+
+    const isFullyPaid = actualTotalEmployees > 0 && paidCount === actualTotalEmployees;
+
+    return { 
+      ...batch, 
+      totalEmployees: actualTotalEmployees > 0 ? actualTotalEmployees : batch.totalEmployees,
+      totalNet: actualTotalEmployees > 0 ? activeTotalNet : batch.totalNet,
+      totalGross: actualTotalEmployees > 0 ? activeTotalGross : batch.totalGross,
+      paidCount, 
+      paidAmount,
+      isPaid: batch.isPaid || isFullyPaid
+    };
+  }));
+
+  return batchesWithPaidCount;
 };
 
 /**
@@ -1365,6 +1485,43 @@ const markAsPaid = async ({ month, year, ids, organizationId, processedBy, versi
   return batch;
 };
 
+const markPayslipAsPaid = async (id, organizationId, processedBy) => {
+  const payslip = await prisma.payslip.findUnique({ where: { id } });
+  if (!payslip) throw new AppError('Payslip not found', 404);
+
+  await prisma.payslip.update({
+    where: { id },
+    data: { status: 'PAID', paidAt: new Date(), paidBy: processedBy }
+  });
+
+  await ProcessedPayroll.updateOne(
+    { _id: payslip.processedPayrollId },
+    { $set: { isPaid: true, paidAt: new Date(), paidBy: processedBy } }
+  );
+
+  return { id };
+};
+
+const bulkMarkPayslipsAsPaid = async (ids, organizationId, processedBy) => {
+  const payslips = await prisma.payslip.findMany({ where: { id: { in: ids }, organizationId } });
+  if (payslips.length === 0) return { success: 0, failed: ids.length };
+
+  await prisma.payslip.updateMany({
+    where: { id: { in: ids }, organizationId },
+    data: { status: 'PAID', paidAt: new Date(), paidBy: processedBy }
+  });
+
+  const payrollIds = payslips.map(p => p.processedPayrollId);
+  await ProcessedPayroll.updateMany(
+    { _id: { $in: payrollIds } },
+    { $set: { isPaid: true, paidAt: new Date(), paidBy: processedBy } }
+  );
+
+  return { success: payslips.length, failed: ids.length - payslips.length };
+};
+
+
+
 const deleteBatch = async (batchId, organizationId, processedBy) => {
   const batch = await PayrollBatch.findOne({ _id: batchId, organizationId });
   if (!batch) {
@@ -1418,5 +1575,11 @@ module.exports = {
   getPayrollBatches,
   calculateAttendance,
   calculateSalary,
-  formatProfile
+  formatProfile,
+  markPayslipAsPaid,
+  bulkMarkPayslipsAsPaid,
+  formatProcessedPayroll: (payroll) => {
+    // Basic fallback to prevent crashes if this was accidentally deleted
+    return payroll;
+  }
 };

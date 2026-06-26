@@ -51,7 +51,7 @@ export default function PayrollReports() {
   const [timeRange, setTimeRange] = useState(6);
   const [selectedMetric, setSelectedMetric] = useState<'grossPay' | 'netPay' | 'employees'>('netPay');
   const [tableFilter, setTableFilter] = useState('All');
-  const [chartType, setChartType] = useState<'line' | 'bar' | 'area'>('line');
+  const [chartType, setChartType] = useState<'line' | 'bar' | 'area' | 'pie'>('line');
   const [trendTooltip, setTrendTooltip] = useState<{ visible: boolean, x: number, y: number, index: number } | null>(null);
   const [showRangeModal, setShowRangeModal] = useState(false);
 
@@ -121,7 +121,11 @@ export default function PayrollReports() {
       };
     });
 
-    const depts: any = history.reduce((acc: any, p: any) => {
+    // Only include records within the selected time range (same window as trend chart)
+    const validMonthKeys = new Set(allMonths.map((m: any) => m.key));
+    const rangedHistory = history.filter((p: any) => validMonthKeys.has(`${p.year}-${p.month}`));
+
+    const depts: any = rangedHistory.reduce((acc: any, p: any) => {
       const d = p.employeeInfo?.department || p.employee?.department?.name || p.user?.department || 'Operations';
       acc[d] = (acc[d] || 0) + safe(p.grossYield || p.breakdown?.grossPay || p.breakdown?.earnings?.grossEarnings);
       return acc;
@@ -318,7 +322,7 @@ export default function PayrollReports() {
                 {processedData.trends.map((t: any, index: number) => {
                   const val = t.value || 0;
                   const maxVal = Math.max(...processedData.trends.map((item: any) => item.value || 0), 1);
-                  const fillHeight = `${(val / maxVal) * 100}%`;
+                  const fillHeight = `${(val / maxVal) * 100}%` as any;
                   return (
                     <TouchableOpacity
                       key={index}
@@ -341,6 +345,35 @@ export default function PayrollReports() {
                   );
                 })}
               </View>
+            </View>
+          ) : chartType === 'pie' ? (
+            <View style={{ justifyContent: 'center', alignItems: 'center', height: 220 }}>
+              <PieChart
+                data={[
+                  {
+                    name: 'Gross',
+                    population: processedData.trends.reduce((sum: number, t: any) => sum + (t.grossPay || 0), 0),
+                    color: '#6366f1',
+                    legendFontColor: '#334155',
+                    legendFontSize: 11
+                  },
+                  {
+                    name: 'Net Pay',
+                    population: processedData.trends.reduce((sum: number, t: any) => sum + (t.netPay || 0), 0),
+                    color: '#10b981',
+                    legendFontColor: '#334155',
+                    legendFontSize: 11
+                  }
+                ]}
+                width={width - 40}
+                height={220}
+                chartConfig={chartConfig}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                hasLegend={true}
+                absolute={true}
+              />
             </View>
           ) : (
             <LineChart
@@ -414,13 +447,7 @@ export default function PayrollReports() {
     }));
 
     const formatAmount = (num: number) => {
-      if (num >= 1000000) {
-        return `${currencySymbol}${(num / 1000000).toFixed(1)}M`;
-      }
-      if (num >= 1000) {
-        return `${currencySymbol}${(num / 1000).toFixed(1)}k`;
-      }
-      return `${currencySymbol}${num.toFixed(0)}`;
+      return `${currencySymbol}${Math.round(num).toLocaleString('en-IN')}`;
     };
 
     const chartWidth = width - 72;
@@ -561,11 +588,11 @@ export default function PayrollReports() {
 
         {/* Controls Section */}
         <View style={{ gap: scale(12), marginBottom: verticalScale(16) }}>
-          
+
           {/* Row 1: Chart Type (Left) & Time Range (Right) */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View style={styles.chartTypeGroup}>
-              {(['line', 'bar', 'area'] as const).map((type) => (
+              {(['line', 'bar'] as const).map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[

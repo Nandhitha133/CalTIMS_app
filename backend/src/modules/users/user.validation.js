@@ -17,21 +17,21 @@ const createUserSchema = Joi.object({
   }),
   employeeId: Joi.string().trim().max(50).allow(null, ''),
   joinDate: Joi.date().iso().allow(null, ''),
-  bankName: Joi.string().trim().required(),
-  accountNumber: Joi.string().trim().pattern(/^\d+$/).required().messages({
+  bankName: Joi.string().trim().allow(null, ''),
+  accountNumber: Joi.string().trim().pattern(/^\d+$/).allow(null, '').messages({
     'string.pattern.base': 'Account number must be numeric',
   }),
-  branchName: Joi.string().trim().required(),
-  ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required().messages({
+  branchName: Joi.string().trim().allow(null, ''),
+  ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).allow(null, '').messages({
     'string.pattern.base': 'Invalid IFSC code format',
   }),
-  uan: Joi.string().trim().pattern(/^\d{12}$/).required().messages({
+  uan: Joi.string().trim().pattern(/^\d{12}$/).allow(null, '').messages({
     'string.pattern.base': 'UAN number must be exactly 12 digits',
   }),
-  pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).required().messages({
+  pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).allow(null, '').messages({
     'string.pattern.base': 'Invalid PAN number format',
   }),
-  aadhaar: Joi.string().trim().pattern(/^\d{12}$/).required().messages({
+  aadhaar: Joi.string().trim().pattern(/^\d{12}$/).allow(null, '').messages({
     'string.pattern.base': 'Aadhaar number must be 12 digits',
   }),
 });
@@ -52,15 +52,15 @@ const updateUserSchema = Joi.object({
     sick: Joi.number().min(0),
     casual: Joi.number().min(0),
   }),
-  bankName: Joi.string().trim(),
-  accountNumber: Joi.string().trim().pattern(/^\d+$/),
-  branchName: Joi.string().trim(),
-  ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/),
-  uan: Joi.string().trim().pattern(/^\d{12}$/).messages({
+  bankName: Joi.string().trim().allow(null, ''),
+  accountNumber: Joi.string().trim().pattern(/^\d+$/).allow(null, ''),
+  branchName: Joi.string().trim().allow(null, ''),
+  ifscCode: Joi.string().trim().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).allow(null, ''),
+  uan: Joi.string().trim().pattern(/^\d{12}$/).allow(null, '').messages({
     'string.pattern.base': 'UAN number must be exactly 12 digits',
   }),
-  pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/),
-  aadhaar: Joi.string().trim().pattern(/^\d{12}$/),
+  pan: Joi.string().trim().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).allow(null, ''),
+  aadhaar: Joi.string().trim().pattern(/^\d{12}$/).allow(null, ''),
 }).min(1).unknown(true);
 
 const changeRoleSchema = Joi.object({

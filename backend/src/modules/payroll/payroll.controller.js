@@ -260,12 +260,46 @@ exports.deleteProfile = async (req, res, next) => {
 
 exports.setupFullProfile = async (req, res, next) => {
   try {
-    const result = await payrollService.upsertFullPayrollProfile(
-      req.body,
-      req.organizationId,
-      req.user?.id
-    );
-    res.status(200).json({ success: true, data: result, message: 'Payroll Profile successfully configured.' });
+    const { employeeId, userId, annualCTC, payrollType, earnings, deductions, bankDetails } = req.body;
+    if (!employeeId) return res.status(400).json({ success: false, message: 'Employee ID is required' });
+
+    const monthlyCTC = annualCTC ? annualCTC / 12 : 0;
+
+    const prismaData = {
+      user: userId,
+      annualCTC,
+      monthlyCTC,
+      payrollType,
+      earnings,
+      deductions,
+      bankDetails,
+    };
+
+    let profile;
+    let before = await require('../../config/database').prisma.payrollProfile.findUnique({ where: { employeeId } });
+    
+    profile = await require('../../config/database').prisma.payrollProfile.upsert({
+      where: { employeeId },
+      update: prismaData,
+      create: { employeeId, organizationId: req.organizationId, ...prismaData },
+    });
+
+    try {
+      const PayrollProfile = require('./payrollProfile.model');
+      await PayrollProfile.findOneAndUpdate(
+        { $or: [{ employeeId: employeeId }, { user: userId }] },
+        { $set: { ...prismaData, employeeId, organizationId: req.organizationId } },
+        { upsert: true, new: true }
+      );
+    } catch (mongooseErr) {
+      console.error('[Mongoose Error]:', mongooseErr);
+    }
+
+    await require('../audit/audit.service').log(
+      req.user?.id, 'PAYROLL_PROFILE_SETUP', 'PayrollProfile', profile.id, { before, after: profile }, 'SUCCESS', req.ip, req.organizationId
+    ).catch(() => {});
+
+    res.status(200).json({ success: true, data: profile, message: 'Payroll Profile successfully configured.' });
   } catch (err) { next(err); }
 };
 

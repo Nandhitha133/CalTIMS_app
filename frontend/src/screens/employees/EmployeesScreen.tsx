@@ -569,26 +569,19 @@ export default function EmployeesScreen({ navigation }: { navigation: any }) {
     if (!data.joinDate) errors.joinDate = 'Joining date is required';
     else if (new Date(data.joinDate) > new Date()) errors.joinDate = 'Joining date cannot be in the future';
 
-    if (!data.bankName?.trim()) errors.bankName = 'Bank name is required';
-    else if (/\d/.test(data.bankName)) errors.bankName = 'Bank name cannot contain numbers';
+    if (data.bankName?.trim() && /\d/.test(data.bankName)) errors.bankName = 'Bank name cannot contain numbers';
     
-    if (!data.accountNumber?.trim()) errors.accountNumber = 'Account number is required';
-    else if (data.accountNumber.length < 10 || data.accountNumber.length > 17) errors.accountNumber = 'Account number must be 10 to 17 digits';
+    if (data.accountNumber?.trim() && (data.accountNumber.length < 10 || data.accountNumber.length > 17)) errors.accountNumber = 'Account number must be 10 to 17 digits';
 
-    if (!data.branchName?.trim()) errors.branchName = 'Branch name is required';
-    else if (/\d/.test(data.branchName)) errors.branchName = 'Branch name cannot contain numbers';
+    if (data.branchName?.trim() && /\d/.test(data.branchName)) errors.branchName = 'Branch name cannot contain numbers';
     
-    if (!data.ifscCode?.trim()) errors.ifscCode = 'IFSC code is required';
-    else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.ifscCode)) errors.ifscCode = 'Invalid IFSC code format';
+    if (data.ifscCode?.trim() && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(data.ifscCode)) errors.ifscCode = 'Invalid IFSC code format';
 
-    if (!data.uan?.trim()) errors.uan = 'UAN is required';
-    else if (data.uan.length !== 12) errors.uan = 'UAN must be exactly 12 digits';
+    if (data.uan?.trim() && data.uan.length !== 12) errors.uan = 'UAN must be exactly 12 digits';
 
-    if (!data.pan?.trim()) errors.pan = 'PAN is required';
-    else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan)) errors.pan = 'Invalid PAN format';
+    if (data.pan?.trim() && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(data.pan)) errors.pan = 'Invalid PAN format';
 
-    if (!data.aadhaar?.trim()) errors.aadhaar = 'Aadhaar is required';
-    else if (data.aadhaar.length !== 12) errors.aadhaar = 'Aadhaar must be exactly 12 digits';
+    if (data.aadhaar?.trim() && data.aadhaar.length !== 12) errors.aadhaar = 'Aadhaar must be exactly 12 digits';
 
     return errors;
   };

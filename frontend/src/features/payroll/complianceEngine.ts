@@ -1,28 +1,21 @@
 // src/features/payroll/complianceEngine.ts
 
 export const complianceEngine = {
-  calculatePF: (basic: number, da: number, config: any) => {
+  calculatePF: (ctc: number, da: number, config: any) => {
     if (!config || !config.enabled) {
       return { employeePF: 0, employerEPS: 0, employerEPF: 0, totalEmployer: 0 };
     }
 
-    const wage = basic + da;
-    const ceiling = 15000;
-    const pfWage = config.restrictToCeiling ? Math.min(wage, ceiling) : wage;
+    const wage = ctc + da;
+    const pfWage = wage;
 
-    const employeePF = Math.round(pfWage * (config.employeePercent / 100));
-
-    // Employer split: 8.33% to EPS (capped at ceiling), rest to EPF
-    const epsWage = Math.min(wage, ceiling);
-    const employerEPS = Math.round(epsWage * (8.33 / 100));
-    const totalEmployer = Math.round(pfWage * (config.employerPercent / 100));
-    const employerEPF = Math.max(0, totalEmployer - employerEPS);
+    const employeePF = Math.round(pfWage * ((config.employeePercent || config.employeeRate || 12) / 100));
 
     return {
       employeePF,
-      employerEPS,
-      employerEPF,
-      totalEmployer
+      employerEPS: 0,
+      employerEPF: 0,
+      totalEmployer: 0
     };
   },
 
@@ -36,7 +29,6 @@ export const complianceEngine = {
 
     return { employeeESI, employerESI };
   },
-
   calculatePT: (salary: number, config: any, monthIndex?: number) => {
     if (!config || !config.enabled || !config.slabs || config.slabs.length === 0) {
       return 0;
@@ -47,16 +39,20 @@ export const complianceEngine = {
       return 300;
     }
 
-    const slab = config.slabs.find((s: any) => salary >= s.min && salary <= s.max);
+    const slab = config.slabs.find((s: any) => {
+      const min = parseFloat(s.min) || 0;
+      const max = s.max !== undefined && s.max !== null && s.max !== '' ? parseFloat(s.max) : null;
+      return salary >= min && (max === null || max === 0 || salary <= max);
+    });
     return slab ? slab.amount : 0;
   },
 
-  calculateGratuity: (basic: number, config: any) => {
+  calculateGratuity: (ctc: number, config: any) => {
     if (!config || !config.enabled) {
       return 0;
     }
     const percent = config.employeePercent !== undefined ? config.employeePercent : (config.employeeRate !== undefined ? config.employeeRate : 4.86);
-    return Math.round(basic * (percent / 100));
+    return Math.round(ctc * (percent / 100));
   },
 
   calculateRetirement: (basic: number, config: any) => {
